@@ -2711,11 +2711,16 @@ def export_project_nvidia_scene_plan(project_id: str, _payload: dict[str, Any] |
     exports["nvidia_scene_plans"] = nvidia_exports[-20:]
     proj.meta["exports"] = exports
     store.save(proj)
+    response_export = {
+        **export_entry,
+        "absolute_path": str(out_path.resolve()),
+        "metadata_absolute_path": str(metadata_path.resolve()),
+    }
 
     return {
         "ok": True,
         "project_id": project_id,
-        "export": export_entry,
+        "export": response_export,
     }
 
 
@@ -2832,11 +2837,23 @@ def create_project_nvidia_render_job(project_id: str, payload: dict[str, Any] | 
     exports["nvidia_render_jobs"] = render_jobs[-20:]
     proj.meta["exports"] = exports
     store.save(proj)
+    outputs_absolute = {
+        str(key): str(safe_join(pdir, value))
+        for key, value in job_outputs.items()
+        if isinstance(key, str) and isinstance(value, str) and value.strip()
+    }
+    response_job = {**job}
+    if outputs_absolute:
+        response_job["outputs_absolute"] = outputs_absolute
+    response_export = {
+        **export_entry,
+        "absolute_path": str(out_path.resolve()),
+    }
     return {
         "ok": True,
         "project_id": project_id,
-        "job": job,
-        "export": export_entry,
+        "job": response_job,
+        "export": response_export,
     }
 
 
@@ -2860,7 +2877,13 @@ def report_project_nvidia_render_job_result(project_id: str, payload: dict[str, 
     try:
         job_path = safe_join(pdir, job_rel)
         jobs_root = (pdir / "outputs" / "nvidia" / "render_jobs").resolve()
-        if job_path.suffix.lower() != ".json" or jobs_root not in job_path.resolve().parents:
+        job_name = job_path.name.lower()
+        if (
+            job_path.suffix.lower() != ".json"
+            or job_name.endswith(".result.json")
+            or job_name.endswith(".json.json")
+            or jobs_root not in job_path.resolve().parents
+        ):
             raise ValueError("job_path must point to outputs/nvidia/render_jobs/*.json")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

@@ -418,6 +418,8 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert exported["export"]["path"].startswith("outputs/nvidia/")
     assert exported["export"]["path"].endswith(".usda")
     assert (project_store.project_dir(project.id) / exported["export"]["path"]).exists()
+    assert exported["export"]["absolute_path"] == str((project_store.project_dir(project.id) / exported["export"]["path"]).resolve())
+    assert exported["export"]["metadata_absolute_path"] == str((project_store.project_dir(project.id) / exported["export"]["metadata_path"]).resolve())
     exported_text = (project_store.project_dir(project.id) / exported["export"]["path"]).read_text(encoding="utf-8")
     assert 'def Scope "AudioTimeline"' in exported_text
     assert "double3 xformOp:translate.timeSamples" in exported_text
@@ -427,10 +429,21 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert render_job["job"]["renderer"]["resolution"] == {"width": 1280, "height": 720}
     assert render_job["job"]["outputs"]["movie"].startswith("outputs/nvidia/renders/project_scoped_nvidia_")
     assert render_job["job"]["outputs"]["movie"].endswith(".mp4")
+    assert render_job["job"]["outputs_absolute"]["movie"] == str((project_store.project_dir(project.id) / render_job["job"]["outputs"]["movie"]).resolve())
     assert render_job["job"]["timeline"][0]["prompt"] == "project route scene"
     assert " " not in render_job["job"]["timeline"][0]["output"]["sequence_dir"]
     assert render_job["export"]["path"].startswith("outputs/nvidia/render_jobs/")
+    assert render_job["export"]["absolute_path"] == str((project_store.project_dir(project.id) / render_job["export"]["path"]).resolve())
     assert (project_store.project_dir(project.id) / render_job["export"]["path"]).exists()
+    with pytest.raises(HTTPException) as sidecar_exc:
+        backend_app.report_project_nvidia_render_job_result(
+            project.id,
+            {
+                "job_path": f"{render_job['export']['path']}.json",
+                "status": "completed",
+            },
+        )
+    assert sidecar_exc.value.status_code == 400
     result = backend_app.report_project_nvidia_render_job_result(
         project.id,
         {
