@@ -226,6 +226,33 @@ export default function Settings(props: PageProps) {
     () => backendSettingsFingerprint(backendDraft) !== backendSettingsFingerprint(studioBackendSettings),
     [backendDraft, studioBackendSettings]
   );
+  const optionalNvidiaServices = useMemo(() => {
+    const diagnosticServices = nvidiaDiagnostics?.nvidia?.services || {};
+    const profileServices = nvidiaStatus?.nvidia?.services || {};
+    const services = { ...profileServices, ...diagnosticServices };
+    return [
+      ["omniverse", "Omniverse"],
+      ["nemo", "NeMo"],
+      ["triton", "Triton"],
+      ["audio2face", "Audio2Face"],
+      ["ace", "ACE"],
+      ["cosmos", "Cosmos"],
+    ].map(([id, label]) => {
+      const service = services?.[id] || {};
+      const probe = service?.probe || {};
+      const configured = Boolean(service?.configured);
+      const reachable = Boolean(probe?.reachable);
+      const state = !configured
+        ? "not configured"
+        : probe?.skipped
+          ? "configured"
+          : reachable
+            ? "reachable"
+            : "not reachable";
+      const detail = String(service?.model || service?.base_url || probe?.error || "").trim();
+      return { id, label, state, configured, reachable, detail };
+    });
+  }, [nvidiaDiagnostics, nvidiaStatus]);
 
   async function refreshPage() {
     try {
@@ -934,6 +961,18 @@ export default function Settings(props: PageProps) {
                 <div className="small" style={{ marginTop: 6, opacity: 0.86 }}>
                   NIM endpoint: <b>{nvidiaDiagnostics.nvidia.services?.nim?.probe?.reachable ? "reachable" : "not reachable"}</b>
                   {nvidiaDiagnostics.nvidia.services?.nim?.probe?.models_url ? <> • <code>{nvidiaDiagnostics.nvidia.services.nim.probe.models_url}</code></> : null}
+                </div>
+                <div style={{ fontWeight: 800, marginTop: 10 }}>Optional NVIDIA services</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
+                  {optionalNvidiaServices.map((service) => (
+                    <div key={service.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>
+                      <div className="small" style={{ fontWeight: 800 }}>{service.label}</div>
+                      <div className="small" style={{ marginTop: 4, opacity: 0.84 }}>
+                        <b>{service.state}</b>
+                        {service.detail ? <><br /><code>{service.detail}</code></> : null}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </>
             ) : null}

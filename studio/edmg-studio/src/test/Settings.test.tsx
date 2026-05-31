@@ -44,6 +44,8 @@ describe("Settings page", () => {
             nim: { configured: true, base_url: "http://127.0.0.1:8000/v1", model: "nvidia/model" },
             riva: { configured: true, base_url: "http://127.0.0.1:50051" },
             omniverse: { configured: false, base_url: "" },
+            triton: { configured: true, base_url: "http://127.0.0.1:8002", model: "edmg_ensemble" },
+            audio2face: { configured: false, base_url: "" },
           },
         },
       },
@@ -60,6 +62,28 @@ describe("Settings page", () => {
                 reachable: true,
                 models_url: "http://127.0.0.1:8000/v1/models",
               },
+            },
+            triton: {
+              configured: true,
+              base_url: "http://127.0.0.1:8002",
+              model: "edmg_ensemble",
+              probe: { reachable: true },
+            },
+            audio2face: {
+              configured: false,
+              base_url: "",
+              probe: { configured: false, skipped: true },
+            },
+            ace: {
+              configured: false,
+              base_url: "",
+              probe: { configured: false, skipped: true },
+            },
+            cosmos: {
+              configured: true,
+              base_url: "http://127.0.0.1:8010",
+              model: "cosmos-test",
+              probe: { reachable: false, error: "offline" },
             },
           },
         },
@@ -135,6 +159,10 @@ describe("Settings page", () => {
     expect(await screen.findByText(/Saved\. Restart Studio so it relaunches against the selected backend target\./)).toBeTruthy();
     expect(await screen.findByText("NVIDIA service profile")).toBeTruthy();
     expect(await screen.findByText("NVIDIA runtime diagnostics")).toBeTruthy();
+    expect(await screen.findByText("Optional NVIDIA services")).toBeTruthy();
+    expect(await screen.findByText("Audio2Face")).toBeTruthy();
+    expect(await screen.findByText("Triton")).toBeTruthy();
+    expect(await screen.findByText("edmg_ensemble")).toBeTruthy();
     expect((await screen.findAllByText(/Test RTX/)).length).toBeGreaterThan(0);
   });
 });
