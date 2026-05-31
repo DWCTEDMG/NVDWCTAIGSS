@@ -173,6 +173,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
 ```
 
 - `login_ngc.ps1` logs Docker into `nvcr.io` with `$oauthtoken` and a masked
@@ -191,6 +192,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
   into one local runtime command. It waits for `/health`, prints NVIDIA
   diagnostics readiness, detects FFmpeg, and launches Kit with
   `-AutoRunRenderWorker`.
+- `stage_nvidia_kit_app.ps1` creates a local distributable source bundle for
+  the EDMG NVIDIA Kit app under `dist/nvidia-kit-app/`, including app config,
+  extensions, tools, deployment helpers, a manifest, and a generated launch
+  script. It does not copy the Kit SDK unless you explicitly pass
+  `-IncludeKitSdk` after confirming the selected SDK can be redistributed.
+
+Known-good staging command for this workstation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -Clean
+```
 
 ## First validation target
 

@@ -69,6 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
 ```
 
 The NGC login helper reads `NGC_API_KEY` from the shell or ignored `.env.local`
@@ -94,6 +95,22 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -StopExistingKit
+```
+
+The Kit app staging helper creates a repeatable local bundle at
+`dist/nvidia-kit-app/edmg-nvidia-kit` and a zip beside it. It includes the Kit
+app config, EDMG extensions, tools, deployment helpers, `bundle-manifest.json`,
+and `Start-EDMG-NVIDIA-Kit.ps1`. It intentionally does not copy the Kit SDK
+unless `-IncludeKitSdk` is supplied after confirming redistribution terms for
+the selected SDK. Known-good staging command:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -Clean
 ```
 
 ## 4. Start the NVIDIA-aware stack
@@ -338,8 +355,10 @@ On this Windows workstation, the local NVIDIA lane has been validated end to
 end: backend health, NVIDIA diagnostics readiness, NIM/OpenAI-compatible
 planning, project-scoped USDA export, Kit queue consumption, RTX viewport frame
 capture, FFmpeg MP4 assembly, and backend result reporting. The repeatable smoke
-command is `deployment/nvidia/smoke_nvidia_kit_render_job.ps1`.
+command is `deployment/nvidia/smoke_nvidia_kit_render_job.ps1`. A repeatable
+Kit source bundle can now be staged with
+`deployment/nvidia/stage_nvidia_kit_app.ps1`.
 
-The remaining build work is packaging/distribution hardening, richer USD scene
-authoring, and optional live integrations for Riva, Audio2Face/ACE, Triton,
-Cosmos, and remote GPU service profiles.
+The remaining build work is Windows installer/runtime redistribution decisions,
+richer USD scene authoring, and optional live integrations for Riva,
+Audio2Face/ACE, Triton, Cosmos, and remote GPU service profiles.

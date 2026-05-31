@@ -44,9 +44,12 @@ work:
   launched with `-AutoRunRenderWorker`, the extension stays alive as a queue
   consumer and picks up new jobs on the configured poll interval.
 
-A full Kit App Template checkout, launcher scripts, and redistributable runtime
-packaging should be added only after selecting and verifying a specific
-Omniverse Kit SDK/App Template version on the target Windows build machine.
+A full Kit App Template checkout and redistributable runtime packaging should be
+added only after selecting and verifying a specific Omniverse Kit SDK/App
+Template version on the target Windows build machine. For local handoff builds,
+`deployment/nvidia/stage_nvidia_kit_app.ps1` stages this Kit app, its EDMG
+extensions, tools, deployment helpers, a generated launch script, and a manifest
+into `dist/nvidia-kit-app/`.
 
 ## Starter Sample
 
@@ -105,6 +108,21 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -KitSdkRoot "C:\path\to\kit-sdk-public" `
   -ListExtensions
 ```
+
+Stage a local Kit app bundle with this workstation's verified paths:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -Clean
+```
+
+The staged `Start-EDMG-NVIDIA-Kit.ps1` can launch the bundle against that SDK.
+Only pass `-IncludeKitSdk` when the selected Kit SDK can be copied into the
+bundle for the intended distribution.
 
 Export the starter scene plan into a generated USDA file with:
 

@@ -173,6 +173,10 @@ Current local lane status:
 - `deployment/nvidia/smoke_nvidia_kit_render_job.ps1` validates the real local
   RTX handoff by exporting USDA, creating a render-job JSON contract, waiting
   for Kit completion, and probing the MP4 result.
+- `deployment/nvidia/stage_nvidia_kit_app.ps1` stages the Kit app config,
+  extensions, tools, deployment helpers, generated launch script, and manifest
+  into `dist/nvidia-kit-app/` for local distribution testing. It only copies a
+  Kit SDK when explicitly requested with `-IncludeKitSdk`.
 
 ## First milestone
 
@@ -206,8 +210,9 @@ studio/nvidia-kit/
 
 This branch now has a verified local workstation path for AI Director, Timeline,
 Render Queue execution, RTX frame capture, FFmpeg MP4 assembly, and backend
-result reporting. Runtime packaging still depends on choosing the exact Kit
-SDK/template version and verifying Windows installer/distribution locally.
+result reporting. A local Kit source bundle can be staged from the repo, but
+runtime packaging still depends on choosing the exact Kit SDK/template version
+and verifying Windows installer/distribution locally.
 
 ## Risks to settle early
 
