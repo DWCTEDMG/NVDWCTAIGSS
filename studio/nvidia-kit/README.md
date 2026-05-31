@@ -36,7 +36,10 @@ work:
 - `edmg.timeline` opens a scene timeline panel from the configured starter
   scene-plan JSON and summarizes the OpenUSD cue boundaries.
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio
-  worker status plus NVIDIA diagnostics/readiness.
+  worker status plus NVIDIA diagnostics/readiness, scans the Studio
+  `outputs/nvidia/render_jobs/*.json` handoff files, opens the referenced USDA
+  stage, captures RTX viewport frames, and reports the result back to the
+  backend.
 
 A full Kit App Template checkout, launcher scripts, and redistributable runtime
 packaging should be added only after selecting and verifying a specific
@@ -80,7 +83,8 @@ Launch against a local Kit SDK by passing the SDK root that contains `kit.exe`:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
-  -KitSdkRoot "C:\path\to\kit-sdk-public"
+  -KitSdkRoot "C:\path\to\kit-sdk-public" `
+  -ProjectsRoot "C:\NVDWCTAIGSS\studio\edmg-studio\python_backend\data\projects"
 ```
 
 To check extension resolution without opening the UI:
@@ -109,6 +113,7 @@ Kit UI panel for the first API contracts:
 - `GET /v1/projects/{project_id}/nvidia/scene-plan`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan/export`
+- `POST /v1/projects/{project_id}/nvidia/render-job/result`
 
 Smoke those contracts from the Kit workspace with:
 

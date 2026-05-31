@@ -106,6 +106,53 @@ def test_render_queue_panel_client_and_summary():
         thread.join(timeout=5)
 
 
+def test_render_queue_discovers_pending_rtx_jobs(tmp_path):
+    panel = _import_extension_module("edmg.render_queue", "render_queue", "panel")
+    project_root = tmp_path / "project-one"
+    render_jobs = project_root / "outputs" / "nvidia" / "render_jobs"
+    render_jobs.mkdir(parents=True)
+    stage = project_root / "outputs" / "nvidia" / "project.usda"
+    stage.parent.mkdir(parents=True, exist_ok=True)
+    stage.write_text("#usda 1.0\n", encoding="utf-8")
+    job_path = render_jobs / "project_job.json"
+    job_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "edmg.nvidia.render_job.v1",
+                "kind": "nvidia_rtx_render_job",
+                "project": {"id": "project-one", "title": "Project One"},
+                "renderer": {"fps": 24, "resolution": {"width": 1280, "height": 720}, "output_format": "mp4"},
+                "inputs": {"usda_path": "outputs/nvidia/project.usda"},
+                "timeline": [
+                    {
+                        "id": "scene-1",
+                        "start_frame": 0,
+                        "output": {
+                            "sequence_dir": "outputs/nvidia/renders/001_scene-1",
+                            "movie": "outputs/nvidia/renders/001_scene-1.mp4",
+                        },
+                    }
+                ],
+                "status": "ready_for_kit_worker",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records = panel.discover_render_jobs(tmp_path)
+    result_payload = panel.build_render_job_result_payload(records[0], status="completed", outputs={"frames": ["a.png"]})
+
+    assert len(records) == 1
+    assert records[0].project_id == "project-one"
+    assert records[0].job_relpath == "outputs/nvidia/render_jobs/project_job.json"
+    assert records[0].stage_path == stage
+    assert records[0].still_relpath == "outputs/nvidia/renders/001_scene-1/preview_0001.png"
+    assert "Project One" in panel.summarize_render_jobs(records)
+    assert result_payload["job_path"] == "outputs/nvidia/render_jobs/project_job.json"
+    assert result_payload["outputs"]["stage"] == "outputs/nvidia/project.usda"
+    assert result_payload["outputs"]["frames"] == ["a.png"]
+
+
 def test_render_queue_extension_starts_headless_with_fake_backend(monkeypatch):
     extension = _import_extension_module("edmg.render_queue", "render_queue", "extension")
 

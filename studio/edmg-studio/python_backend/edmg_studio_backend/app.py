@@ -2790,6 +2790,101 @@ def create_project_nvidia_render_job(project_id: str, payload: dict[str, Any] | 
     }
 
 
+@app.post("/v1/projects/{project_id}/nvidia/render-job/result")
+def report_project_nvidia_render_job_result(project_id: str, payload: dict[str, Any] | None = None):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    body = payload if isinstance(payload, dict) else {}
+    job_rel = str(body.get("job_path") or body.get("path") or "").strip().replace("\\", "/")
+    if not job_rel:
+        raise HTTPException(400, "job_path is required")
+
+    allowed_statuses = {"queued", "running", "completed", "failed", "canceled"}
+    status = str(body.get("status") or "").strip().lower()
+    if status not in allowed_statuses:
+        raise HTTPException(400, f"status must be one of: {', '.join(sorted(allowed_statuses))}")
+
+    pdir = store.project_dir(project_id)
+    try:
+        job_path = safe_join(pdir, job_rel)
+        jobs_root = (pdir / "outputs" / "nvidia" / "render_jobs").resolve()
+        if job_path.suffix.lower() != ".json" or jobs_root not in job_path.resolve().parents:
+            raise ValueError("job_path must point to outputs/nvidia/render_jobs/*.json")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not job_path.exists() or not job_path.is_file():
+        raise HTTPException(404, "Render job not found")
+
+    try:
+        job = json.loads(job_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(400, "Render job JSON is invalid") from exc
+    if not isinstance(job, dict):
+        raise HTTPException(400, "Render job JSON must be an object")
+
+    reported_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    raw_outputs = body.get("outputs")
+    outputs = raw_outputs if isinstance(raw_outputs, dict) else {}
+    result = {
+        "schema_version": "edmg.nvidia.render_result.v1",
+        "kind": "nvidia_rtx_render_result",
+        "project_id": project_id,
+        "job_path": job_path.relative_to(pdir).as_posix(),
+        "status": status,
+        "message": str(body.get("message") or ""),
+        "outputs": outputs,
+        "metrics": body.get("metrics") if isinstance(body.get("metrics"), dict) else {},
+        "worker": body.get("worker") if isinstance(body.get("worker"), dict) else {},
+        "reported_at": reported_at,
+    }
+    started_at = str(body.get("started_at") or "").strip()
+    completed_at = str(body.get("completed_at") or "").strip()
+    if started_at:
+        result["started_at"] = started_at
+    if completed_at:
+        result["completed_at"] = completed_at
+
+    result_path = job_path.with_name(f"{job_path.stem}.result.json")
+    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+    job["status"] = status
+    job["result"] = result
+    job["updated_at"] = reported_at
+    if status in {"completed", "failed", "canceled"}:
+        job["completed_at"] = completed_at or reported_at
+    job_path.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+    metadata_path = _output_metadata_path(job_path)
+    metadata_path.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+    exports = proj.meta.get("exports") if isinstance(proj.meta.get("exports"), dict) else {}
+    render_jobs = exports.get("nvidia_render_jobs") if isinstance(exports.get("nvidia_render_jobs"), list) else []
+    for entry in render_jobs:
+        if isinstance(entry, dict) and str(entry.get("path") or "").replace("\\", "/") == job_rel:
+            entry["status"] = status
+            entry["result_path"] = result_path.relative_to(pdir).as_posix()
+            entry["metadata_path"] = metadata_path.relative_to(pdir).as_posix()
+            entry["updated_at"] = reported_at
+            if outputs:
+                entry["outputs"] = outputs
+            break
+    exports["nvidia_render_jobs"] = render_jobs[-20:] if isinstance(render_jobs, list) else []
+    proj.meta["exports"] = exports
+    proj.meta["last_nvidia_render_result"] = result
+    store.save(proj)
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "job_path": job_path.relative_to(pdir).as_posix(),
+        "result_path": result_path.relative_to(pdir).as_posix(),
+        "metadata_path": metadata_path.relative_to(pdir).as_posix(),
+        "result": result,
+    }
+
+
 @app.get("/v1/projects/{project_id}/visual_dna")
 def get_project_visual_dna(project_id: str):
     proj = store.get(project_id)
@@ -9028,7 +9123,24 @@ def list_outputs(project_id: str):
     for p in sorted((pdir / "outputs" / "nvidia").glob("*.usda"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         nvidia_exports.append(_file_entry(p))
     for p in sorted((pdir / "outputs" / "nvidia" / "render_jobs").glob("*.json"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
-        nvidia_render_jobs.append(_file_entry(p))
+        if p.name.endswith(".result.json"):
+            continue
+        entry = _file_entry(p)
+        if "metadata" not in entry:
+            try:
+                parsed_job = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(parsed_job, dict):
+                    entry["metadata"] = parsed_job
+            except Exception:
+                entry["metadata_error"] = "invalid_json"
+        result_path = p.with_name(f"{p.stem}.result.json")
+        if result_path.exists():
+            entry["result_path"] = result_path.relative_to(pdir).as_posix()
+            try:
+                entry["result"] = json.loads(result_path.read_text(encoding="utf-8"))
+            except Exception:
+                entry["result_error"] = "invalid_json"
+        nvidia_render_jobs.append(entry)
     raw_unreal_exports = []
     raw_unreal_returns = []
     if isinstance(proj.meta, dict):

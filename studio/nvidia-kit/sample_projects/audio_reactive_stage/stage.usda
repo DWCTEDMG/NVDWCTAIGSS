@@ -7,8 +7,10 @@
     metersPerUnit = 1
     upAxis = "Y"
     customLayerData = {
-        string edmg:projectKind = "audio_reactive_music_video"
-        string edmg:schemaVersion = "0.1"
+        dictionary edmg = {
+            string projectKind = "audio_reactive_music_video"
+            string schemaVersion = "0.1"
+        }
     }
 )
 

@@ -596,14 +596,29 @@ export default function Outputs(props: PageProps) {
                       <b>{entry.metadata?.project?.title || entry.name || String(entry.path).split("/").slice(-1)[0]}</b>
                       {entry.metadata?.scene_count ? <> • {entry.metadata.scene_count} scenes</> : null}
                       {entry.metadata?.renderer?.fps ? <> • {entry.metadata.renderer.fps} fps</> : null}
+                      {entry.metadata?.status ? <> • {entry.metadata.status}</> : null}
+                      {entry.result?.status ? <> • result {entry.result.status}</> : null}
                       {entry.size_bytes ? <> • {(Number(entry.size_bytes) / 1024).toFixed(1)} KB</> : null}
                     </div>
                     <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>{entry.path}</div>
+                    {entry.result?.outputs?.still ? (
+                      <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>RTX still: {entry.result.outputs.still}</div>
+                    ) : null}
                     <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                       <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open render job</a>
                       <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render job", entry.path, "reveal")}>
                         {desktopActionLabel("reveal", "render job")}
                       </button>
+                      {entry.result_path ? (
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render result", entry.result_path, "reveal")}>
+                          {desktopActionLabel("reveal", "render result")}
+                        </button>
+                      ) : null}
+                      {entry.result?.outputs?.still ? (
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX still", entry.result.outputs.still, "reveal")}>
+                          {desktopActionLabel("reveal", "RTX still")}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}

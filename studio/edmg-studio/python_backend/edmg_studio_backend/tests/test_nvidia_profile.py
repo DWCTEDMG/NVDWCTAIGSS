@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi import HTTPException
 
@@ -375,10 +377,27 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert render_job["job"]["timeline"][0]["prompt"] == "project route scene"
     assert render_job["export"]["path"].startswith("outputs/nvidia/render_jobs/")
     assert (project_store.project_dir(project.id) / render_job["export"]["path"]).exists()
+    result = backend_app.report_project_nvidia_render_job_result(
+        project.id,
+        {
+            "job_path": render_job["export"]["path"],
+            "status": "completed",
+            "message": "Kit RTX worker rendered preview frames.",
+            "outputs": {"still": "outputs/nvidia/renders/001_project/frame_000000.png"},
+            "worker": {"name": "edmg.render_queue", "runtime": "omniverse-kit"},
+        },
+    )
+    assert result["ok"] is True
+    assert result["result"]["status"] == "completed"
+    assert result["result"]["outputs"]["still"].endswith("frame_000000.png")
+    saved_job = json.loads((project_store.project_dir(project.id) / render_job["export"]["path"]).read_text(encoding="utf-8"))
+    assert saved_job["status"] == "completed"
+    assert saved_job["result"]["worker"]["name"] == "edmg.render_queue"
     saved = project_store.get(project.id)
     assert saved is not None
     assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
     assert saved.meta["exports"]["nvidia_render_jobs"][-1]["path"] == render_job["export"]["path"]
+    assert saved.meta["last_nvidia_render_result"]["status"] == "completed"
 
 
 def test_project_nvidia_scene_plan_read_404_when_missing(tmp_path, monkeypatch):
@@ -411,5 +430,7 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
     text = scene_plan_usda_text(payload)
 
     assert 'custom string edmg:title = "A \\"quoted\\" title"' in text
+    assert 'def Camera "MainCamera"' in text
+    assert 'def Cube "Preview__1_drop_scene"' in text
     assert 'def Xform "_1_drop_scene"' in text
     assert 'custom string edmg:prompt = "laser \\"wall\\"\\nwith haze"' in text

@@ -1,6 +1,9 @@
 param(
   [string]$KitSdkRoot = $env:OMNI_KIT_SDK_ROOT,
   [string]$BackendUrl = "http://127.0.0.1:8000",
+  [string]$ProjectsRoot = "",
+  [string]$ProjectId = "",
+  [switch]$AutoRunRenderWorker,
   [switch]$ListExtensions
 )
 
@@ -12,6 +15,10 @@ $appConfig = Resolve-Path (Join-Path $kitRoot "apps\edmg.nvidia.studio.kit")
 $extensionsRoot = Resolve-Path (Join-Path $kitRoot "extensions")
 $sampleStage = Resolve-Path (Join-Path $kitRoot "sample_projects\audio_reactive_stage\stage.usda")
 $sampleScenePlan = Resolve-Path (Join-Path $kitRoot "sample_projects\audio_reactive_stage\scene_plan.json")
+if ([string]::IsNullOrWhiteSpace($ProjectsRoot)) {
+  $studioRoot = Resolve-Path (Join-Path $kitRoot "..")
+  $ProjectsRoot = Join-Path $studioRoot.Path "edmg-studio\python_backend\data\projects"
+}
 
 if ([string]::IsNullOrWhiteSpace($KitSdkRoot)) {
   throw "KitSdkRoot was not provided. Pass -KitSdkRoot or set OMNI_KIT_SDK_ROOT."
@@ -28,9 +35,15 @@ $args = @(
   "--ext-folder",
   $extensionsRoot.Path,
   "--/edmg/nvidia/backend_url=$BackendUrl",
+  "--/edmg/nvidia/projects_root=$ProjectsRoot",
+  "--/edmg/nvidia/render_worker_autorun=$([bool]$AutoRunRenderWorker)",
   "--/edmg/nvidia/sample_stage=$($sampleStage.Path)",
   "--/edmg/nvidia/sample_scene_plan=$($sampleScenePlan.Path)"
 )
+
+if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
+  $args += "--/edmg/nvidia/project_id=$ProjectId"
+}
 
 if ($ListExtensions) {
   $args += "--list-exts"
@@ -39,6 +52,11 @@ if ($ListExtensions) {
 Write-Host "[edmg-kit] SDK: $resolvedSdkRoot"
 Write-Host "[edmg-kit] App: $($appConfig.Path)"
 Write-Host "[edmg-kit] Backend: $BackendUrl"
+Write-Host "[edmg-kit] Projects: $ProjectsRoot"
+if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
+  Write-Host "[edmg-kit] Project ID: $ProjectId"
+}
+Write-Host "[edmg-kit] Auto-run render worker: $([bool]$AutoRunRenderWorker)"
 Write-Host "[edmg-kit] Sample stage: $($sampleStage.Path)"
 
 & $kitExe @args

@@ -47,6 +47,22 @@ def _usd_number(value: float | int | None) -> str:
     return f"{number:.6f}".rstrip("0").rstrip(".")
 
 
+def _scene_color(index: int) -> tuple[float, float, float]:
+    palette = (
+        (0.05, 0.62, 1.0),
+        (1.0, 0.56, 0.16),
+        (0.62, 0.96, 0.42),
+        (0.82, 0.42, 1.0),
+        (1.0, 0.22, 0.38),
+        (0.28, 0.92, 0.86),
+    )
+    return palette[(max(1, index) - 1) % len(palette)]
+
+
+def _usd_color(values: tuple[float, float, float]) -> str:
+    return "(" + ", ".join(_usd_number(value) for value in values) + ")"
+
+
 def _slug(value: Any, fallback: str) -> str:
     raw = str(value or "").strip().lower()
     slug = _SLUG_RE.sub("-", raw).strip("-")
@@ -289,9 +305,115 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         f"    custom string edmg:provider = {_usd_string(provider)}",
         f"    custom int edmg:sceneCount = {len(normalized['scenes'])}",
         "",
-        '    def Scope "Scenes"',
+        '    def Scope "Cameras"',
         "    {",
+        '        def Camera "MainCamera"',
+        "        {",
+        "            double3 xformOp:translate = (0, 3.2, 10.5)",
+        "            double3 xformOp:rotateXYZ = (-16, 0, 0)",
+        '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]',
+        "            float focalLength = 35",
+        "            float horizontalAperture = 20.955",
+        "        }",
+        "    }",
+        "",
+        '    def Scope "Lighting"',
+        "    {",
+        '        def DistantLight "KeyLight"',
+        "        {",
+        "            double3 xformOp:rotateXYZ = (-45, 25, 0)",
+        '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
+        "            float intensity = 850",
+        "            color3f color = (0.86, 0.92, 1)",
+        "        }",
+        '        def DistantLight "RimLight"',
+        "        {",
+        "            double3 xformOp:rotateXYZ = (-20, -45, 0)",
+        '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
+        "            float intensity = 420",
+        "            color3f color = (1, 0.64, 0.32)",
+        "        }",
+        "    }",
+        "",
+        '    def Scope "Looks"',
+        "    {",
+        '        def Material "FloorMaterial"',
+        "        {",
+        '            token outputs:surface.connect = </EDMGScenePlan/Looks/FloorMaterial/PreviewSurface.outputs:surface>',
+        '            def Shader "PreviewSurface"',
+        "            {",
+        '                uniform token info:id = "UsdPreviewSurface"',
+        "                color3f inputs:diffuseColor = (0.015, 0.017, 0.024)",
+        "                float inputs:roughness = 0.72",
+        "                token outputs:surface",
+        "            }",
+        "        }",
     ]
+
+    for index, _scene in enumerate(normalized["scenes"], start=1):
+        color = _scene_color(index)
+        lines.extend(
+            [
+                f'        def Material "SceneMaterial_{index:03d}"',
+                "        {",
+                f'            token outputs:surface.connect = </EDMGScenePlan/Looks/SceneMaterial_{index:03d}/PreviewSurface.outputs:surface>',
+                '            def Shader "PreviewSurface"',
+                "            {",
+                '                uniform token info:id = "UsdPreviewSurface"',
+                f"                color3f inputs:diffuseColor = {_usd_color(color)}",
+                "                float inputs:roughness = 0.38",
+                "                float inputs:metallic = 0.06",
+                "                token outputs:surface",
+                "            }",
+                "        }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "    }",
+            "",
+            '    def Xform "PreviewRig"',
+            "    {",
+            '        def Cube "Floor"',
+            "        {",
+            "            rel material:binding = </EDMGScenePlan/Looks/FloorMaterial>",
+            "            double3 xformOp:translate = (0, -0.06, 0)",
+            "            double3 xformOp:scale = (7.4, 0.05, 4.2)",
+            '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
+            "        }",
+        ]
+    )
+
+    scene_count = max(1, len(normalized["scenes"]))
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        x_offset = (index - (scene_count + 1) / 2.0) * 1.15
+        y_offset = 1.0 + (0.22 if index % 2 == 0 else 0.0)
+        z_offset = -0.16 * (index % 3)
+        scene_duration = float(scene.get("end_s") or 0) - float(scene.get("start_s") or 0)
+        scale_y = max(0.8, min(1.8, scene_duration / max(duration_s, 1.0) * 6.0))
+        lines.extend(
+            [
+                f'        def Cube "Preview_{prim_name}"',
+                "        {",
+                f"            rel material:binding = </EDMGScenePlan/Looks/SceneMaterial_{index:03d}>",
+                f"            double3 xformOp:translate = ({_usd_number(x_offset)}, {_usd_number(y_offset)}, {_usd_number(z_offset)})",
+                f"            double3 xformOp:scale = (0.46, {_usd_number(scale_y)}, 0.05)",
+                '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
+                f"            custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                "        }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "    }",
+            "",
+            '    def Scope "Scenes"',
+            "    {",
+        ]
+    )
 
     for index, scene in enumerate(normalized["scenes"], start=1):
         prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")

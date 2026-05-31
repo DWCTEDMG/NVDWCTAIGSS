@@ -192,7 +192,7 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
 The Studio Workspace Handoff section also shows the saved NVIDIA/OpenUSD plan
 and can export the persisted USDA artifact into the project's `outputs/nvidia/`
 folder. It can also build an RTX render-job JSON handoff in
-`outputs/nvidia/render_jobs/` for a future Omniverse Kit RTX worker.
+`outputs/nvidia/render_jobs/` for the Omniverse Kit RTX worker.
 
 If Riva is running and you want it to handle project transcription, set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva`. The backend will try
@@ -212,6 +212,14 @@ To generate the render-worker handoff from the saved NVIDIA scene plan:
 curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/render-job `
   -H "Content-Type: application/json" `
   -d '{"fps":24,"width":1920,"height":1080}'
+```
+
+The Kit `edmg.render_queue` panel consumes that job from the local projects
+folder, opens the referenced USDA stage, captures RTX viewport frames into
+`outputs/nvidia/renders/`, and reports completion or failure to:
+
+```text
+POST /v1/projects/{project_id}/nvidia/render-job/result
 ```
 
 ## 7. Launch the Kit app against a local Kit SDK
@@ -234,7 +242,8 @@ and the starter stage. The first panels are loaded by the EDMG extensions:
 - `edmg.timeline` reads `/edmg/nvidia/sample_scene_plan` and summarizes scene
   cues.
 - `edmg.render_queue` checks `/v1/worker/status` and
-  `/v1/nvidia/diagnostics`.
+  `/v1/nvidia/diagnostics`, scans pending RTX render jobs, and can run the next
+  job from the Kit UI.
 
 In the AI Director panel:
 
@@ -247,6 +256,15 @@ In the AI Director panel:
 4. Use `Open Preview` to write the USDA text to a temporary local file and open
    it as the active Kit stage.
 
+In the Render Queue panel:
+
+1. Use `Scan RTX Jobs` to find pending `outputs/nvidia/render_jobs/*.json`
+   contracts.
+2. Use `Run Next RTX Job` to open the USDA stage and capture one RTX viewport
+   frame per timeline scene.
+3. Check the Studio Outputs page for the job status, result sidecar, and
+   rendered frame paths.
+
 ## Current implementation target
 
 The `nvidia-nim-planner` backend path is wired: `/v1/nvidia/scene-plan` calls the
@@ -256,6 +274,6 @@ normalized scene plan into existing Studio project metadata when `project_id`
 matches a project.
 
 The remaining validation target is to run the same path against a real
-NIM/OpenAI-compatible endpoint on the target NVIDIA workstation or remote GPU
-host, then harden the Kit packaging/runtime selection around the now-wired
-project metadata handoff.
+NIM/OpenAI-compatible endpoint and Kit viewport on the target NVIDIA workstation
+or remote GPU host, then harden movie capture/packaging around the now-wired
+project metadata and RTX frame handoff.
