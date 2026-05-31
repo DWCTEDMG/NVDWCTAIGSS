@@ -88,6 +88,19 @@ describe("Outputs page", () => {
             metadata: { scene_count: 2, provider: "nvidia-profile:openai_compat:nvidia/test" },
           },
         ],
+        nvidia_render_jobs: [
+          {
+            path: "outputs/nvidia/render_jobs/nvidia_project_20260531_120000.json",
+            name: "nvidia_project_20260531_120000.json",
+            size_bytes: 4096,
+            metadata: {
+              kind: "nvidia_rtx_render_job",
+              scene_count: 2,
+              renderer: { fps: 24 },
+              project: { title: "NVIDIA Project" },
+            },
+          },
+        ],
         unreal_exports: unrealExported
           ? [
               {
@@ -205,5 +218,7 @@ describe("Outputs page", () => {
     expect(await screen.findByText(/Outpaint margins/i)).toBeTruthy();
     expect(await screen.findByText(/NVIDIA \/ OpenUSD exports/i)).toBeTruthy();
     expect((await screen.findAllByText(/nvidia_project_20260531_120000\.usda/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/NVIDIA RTX render jobs/i)).toBeTruthy();
+    expect((await screen.findAllByText(/outputs\/nvidia\/render_jobs\/nvidia_project_20260531_120000\.json/i)).length).toBeGreaterThan(0);
   }, 15000);
 });

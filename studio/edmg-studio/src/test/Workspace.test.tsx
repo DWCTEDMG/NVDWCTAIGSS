@@ -240,6 +240,11 @@ describe("Workspace page", () => {
         ok: true,
         export: { path: "outputs/nvidia/nvidia_project_20260531_120000.usda", scene_count: 2 },
       },
+      "POST /v1/projects/p1/nvidia/render-job": {
+        ok: true,
+        export: { path: "outputs/nvidia/render_jobs/nvidia_project_20260531_120000.json", scene_count: 2 },
+        job: { kind: "nvidia_rtx_render_job", scene_count: 2 },
+      },
       "/v1/projects/p1/creative_direction*": {
         creative_direction: {
           status: "NVIDIA project direction.",
@@ -271,11 +276,16 @@ describe("Workspace page", () => {
     ).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Export USDA" }));
     expect(await screen.findByText("NVIDIA USDA exported to project outputs.")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Build RTX job" }));
+    expect(await screen.findByText("NVIDIA RTX render job exported to project outputs.")).toBeTruthy();
     expect(fetchMock.mock.calls.some(([input, init]) =>
       String(input).includes("/v1/projects/p1/nvidia/scene-plan") && String(init?.method || "GET").toUpperCase() === "POST",
     )).toBe(true);
     expect(fetchMock.mock.calls.some(([input, init]) =>
       String(input).includes("/v1/projects/p1/nvidia/scene-plan/export") && String(init?.method || "GET").toUpperCase() === "POST",
+    )).toBe(true);
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).includes("/v1/projects/p1/nvidia/render-job") && String(init?.method || "GET").toUpperCase() === "POST",
     )).toBe(true);
   });
 });

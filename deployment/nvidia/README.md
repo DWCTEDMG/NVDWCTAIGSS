@@ -119,6 +119,10 @@ Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 environment has the NVIDIA Riva Python client installed and the Riva gRPC URI is
 reachable; otherwise the normal Studio analysis path keeps using the existing
 local ASR fallback.
+The RTX render-worker lane now has a project-scoped handoff route:
+`/v1/projects/{project_id}/nvidia/render-job`. It writes a JSON contract to
+`outputs/nvidia/render_jobs/`; a real Omniverse Kit worker still needs to consume
+that contract to render frames.
 
 ## Environment knobs
 

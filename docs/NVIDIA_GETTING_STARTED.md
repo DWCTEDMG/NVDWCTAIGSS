@@ -191,7 +191,8 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
 
 The Studio Workspace Handoff section also shows the saved NVIDIA/OpenUSD plan
 and can export the persisted USDA artifact into the project's `outputs/nvidia/`
-folder.
+folder. It can also build an RTX render-job JSON handoff in
+`outputs/nvidia/render_jobs/` for a future Omniverse Kit RTX worker.
 
 If Riva is running and you want it to handle project transcription, set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva`. The backend will try
@@ -203,6 +204,14 @@ call the direct project route without changing the default ASR provider:
 curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/riva/transcribe `
   -H "Content-Type: application/json" `
   -d '{"language_code":"en-US"}'
+```
+
+To generate the render-worker handoff from the saved NVIDIA scene plan:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/render-job `
+  -H "Content-Type: application/json" `
+  -d '{"fps":24,"width":1920,"height":1080}'
 ```
 
 ## 7. Launch the Kit app against a local Kit SDK

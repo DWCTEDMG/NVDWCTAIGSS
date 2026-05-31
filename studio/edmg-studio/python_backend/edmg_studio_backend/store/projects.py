@@ -33,6 +33,7 @@ class ProjectStore:
         (d / "outputs" / "videos").mkdir(parents=True, exist_ok=True)
         (d / "outputs" / "deforum").mkdir(parents=True, exist_ok=True)
         (d / "outputs" / "nvidia").mkdir(parents=True, exist_ok=True)
+        (d / "outputs" / "nvidia" / "render_jobs").mkdir(parents=True, exist_ok=True)
         (d / "outputs" / "unreal").mkdir(parents=True, exist_ok=True)
         (d / "jobs").mkdir(parents=True, exist_ok=True)
         return d

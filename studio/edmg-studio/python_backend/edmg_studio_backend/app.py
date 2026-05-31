@@ -93,6 +93,7 @@ from .services.render_settings import (
 from .services.nvidia_profile import nvidia_profile_status
 from .services.nvidia_diagnostics import nvidia_diagnostics
 from .services.nvidia_riva import RivaTranscriptionError, riva_asr_status, transcribe_with_riva
+from .services.nvidia_render_job import build_rtx_render_job
 from .services.nvidia_scene_plan import (
     normalize_scene_plan,
     plan_response_to_scene_plan,
@@ -2709,6 +2710,83 @@ def transcribe_project_audio_with_riva(project_id: str, payload: dict[str, Any] 
         "saved_at": saved_at,
         "transcript": transcript,
         "riva": riva_asr_status(),
+    }
+
+
+@app.post("/v1/projects/{project_id}/nvidia/render-job")
+def create_project_nvidia_render_job(project_id: str, payload: dict[str, Any] | None = None):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    entry = proj.meta.get("last_nvidia_scene_plan") if isinstance(proj.meta, dict) else None
+    if not isinstance(entry, dict):
+        raise HTTPException(404, "NVIDIA scene plan not found")
+    scene_plan = entry.get("scene_plan") if isinstance(entry.get("scene_plan"), dict) else {}
+    if not scene_plan:
+        raise HTTPException(404, "NVIDIA scene plan not found")
+
+    options = payload if isinstance(payload, dict) else {}
+    try:
+        fps = max(1, min(240, int(options.get("fps") or 24)))
+        width = max(1, min(16384, int(options.get("width") or 1920)))
+        height = max(1, min(16384, int(options.get("height") or 1080)))
+    except Exception as exc:
+        raise HTTPException(400, "fps, width, and height must be integers") from exc
+
+    exports = proj.meta.get("exports") if isinstance(proj.meta.get("exports"), dict) else {}
+    nvidia_scene_exports = exports.get("nvidia_scene_plans") if isinstance(exports.get("nvidia_scene_plans"), list) else []
+    latest_usda = ""
+    if nvidia_scene_exports:
+        latest = nvidia_scene_exports[-1]
+        if isinstance(latest, dict):
+            latest_usda = str(latest.get("path") or "")
+
+    job = build_rtx_render_job(
+        scene_plan,
+        project_id=project_id,
+        project_name=proj.name,
+        fps=fps,
+        width=width,
+        height=height,
+        usda_path=str(options.get("usda_path") or latest_usda),
+    )
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    stem = _safe_name_tag(str(scene_plan.get("title") or proj.name or "nvidia_render_job"), "nvidia_render_job")
+    pdir = store.project_dir(project_id)
+    out_root = pdir / "outputs" / "nvidia" / "render_jobs"
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / f"{stem}_{stamp}.json"
+    suffix = 2
+    while out_path.exists():
+        out_path = out_root / f"{stem}_{stamp}_{suffix}.json"
+        suffix += 1
+    out_path.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+    export_entry = {
+        "path": out_path.relative_to(pdir).as_posix(),
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "scene_count": int(job.get("scene_count") or 0),
+        "duration_s": float(job.get("duration_s") or 0.0),
+        "fps": fps,
+        "resolution": job.get("renderer", {}).get("resolution") if isinstance(job.get("renderer"), dict) else {},
+        "source_saved_at": entry.get("saved_at"),
+    }
+    exports = proj.meta.setdefault("exports", {})
+    if not isinstance(exports, dict):
+        exports = {}
+    render_jobs = exports.setdefault("nvidia_render_jobs", [])
+    if not isinstance(render_jobs, list):
+        render_jobs = []
+    render_jobs.append(export_entry)
+    exports["nvidia_render_jobs"] = render_jobs[-20:]
+    proj.meta["exports"] = exports
+    store.save(proj)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "job": job,
+        "export": export_entry,
     }
 
 
@@ -8923,6 +9001,7 @@ def list_outputs(project_id: str):
     vids = []
     defs = []
     nvidia_exports = []
+    nvidia_render_jobs = []
     unreal_exports = []
     for p in sorted((pdir / "outputs" / "images").glob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
@@ -8948,6 +9027,8 @@ def list_outputs(project_id: str):
         defs.append(_file_entry(p))
     for p in sorted((pdir / "outputs" / "nvidia").glob("*.usda"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         nvidia_exports.append(_file_entry(p))
+    for p in sorted((pdir / "outputs" / "nvidia" / "render_jobs").glob("*.json"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
+        nvidia_render_jobs.append(_file_entry(p))
     raw_unreal_exports = []
     raw_unreal_returns = []
     if isinstance(proj.meta, dict):
@@ -9043,6 +9124,7 @@ def list_outputs(project_id: str):
         "videos": vids,
         "deforum_exports": defs,
         "nvidia_exports": nvidia_exports,
+        "nvidia_render_jobs": nvidia_render_jobs,
         "unreal_exports": unreal_exports,
         "unreal_returns": unreal_returns,
         "project_id": project_id,

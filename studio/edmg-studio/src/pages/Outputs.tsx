@@ -585,6 +585,32 @@ export default function Outputs(props: PageProps) {
             </>
           ) : null}
 
+          {outs.nvidia_render_jobs?.length ? (
+            <>
+              <hr />
+              <div style={{ fontWeight: 800, marginBottom: 10 }}>NVIDIA RTX render jobs</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {outs.nvidia_render_jobs.map((entry: any) => (
+                  <div key={entry.path} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 10 }}>
+                    <div className="small">
+                      <b>{entry.metadata?.project?.title || entry.name || String(entry.path).split("/").slice(-1)[0]}</b>
+                      {entry.metadata?.scene_count ? <> • {entry.metadata.scene_count} scenes</> : null}
+                      {entry.metadata?.renderer?.fps ? <> • {entry.metadata.renderer.fps} fps</> : null}
+                      {entry.size_bytes ? <> • {(Number(entry.size_bytes) / 1024).toFixed(1)} KB</> : null}
+                    </div>
+                    <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>{entry.path}</div>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open render job</a>
+                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render job", entry.path, "reveal")}>
+                        {desktopActionLabel("reveal", "render job")}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
           {outs.unreal_exports?.length ? (
             <>
               <hr />

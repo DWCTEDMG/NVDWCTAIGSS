@@ -356,6 +356,7 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     generated = backend_app.generate_project_nvidia_scene_plan(project.id, {"duration_s": 12})
     fetched = backend_app.get_project_nvidia_scene_plan(project.id)
     exported = backend_app.export_project_nvidia_scene_plan(project.id, {})
+    render_job = backend_app.create_project_nvidia_render_job(project.id, {"fps": 30, "width": 1280, "height": 720})
 
     assert generated["project"]["persisted"] is True
     assert fetched["ok"] is True
@@ -367,9 +368,17 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert exported["export"]["path"].startswith("outputs/nvidia/")
     assert exported["export"]["path"].endswith(".usda")
     assert (project_store.project_dir(project.id) / exported["export"]["path"]).exists()
+    assert render_job["ok"] is True
+    assert render_job["job"]["kind"] == "nvidia_rtx_render_job"
+    assert render_job["job"]["renderer"]["fps"] == 30
+    assert render_job["job"]["renderer"]["resolution"] == {"width": 1280, "height": 720}
+    assert render_job["job"]["timeline"][0]["prompt"] == "project route scene"
+    assert render_job["export"]["path"].startswith("outputs/nvidia/render_jobs/")
+    assert (project_store.project_dir(project.id) / render_job["export"]["path"]).exists()
     saved = project_store.get(project.id)
     assert saved is not None
     assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
+    assert saved.meta["exports"]["nvidia_render_jobs"][-1]["path"] == render_job["export"]["path"]
 
 
 def test_project_nvidia_scene_plan_read_404_when_missing(tmp_path, monkeypatch):

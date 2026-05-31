@@ -398,6 +398,25 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
     }
   };
 
+  const buildNvidiaRenderJob = async () => {
+    if (!projectId || !nvidiaScenePlan?.scene_plan) return;
+    setErr(null); setInfo(null);
+    try {
+      const d = await runOperation(
+        {
+          label: "Building NVIDIA RTX render job",
+          detail: "Writing an Omniverse Kit RTX worker handoff from the saved scene plan.",
+          successDetail: "NVIDIA RTX render job exported to project outputs.",
+        },
+        () => apiPost(`/v1/projects/${encodeURIComponent(projectId)}/nvidia/render-job`, { fps: 24, width: 1920, height: 1080 }),
+      );
+      setInfo(d);
+      await refreshProject(projectId);
+    } catch (e: any) {
+      setErr(String(e));
+    }
+  };
+
   const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/file?path=${encodeURIComponent(rel)}`;
 
   const variantScenes = plan?.variants?.[selectedVariant]?.scenes || [];
@@ -1133,6 +1152,9 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
                   </button>
                   <button className="secondary" onClick={() => void exportNvidiaUsda()} disabled={!nvidiaScenePlan?.usd_stage?.text}>
                     Export USDA
+                  </button>
+                  <button className="secondary" onClick={() => void buildNvidiaRenderJob()} disabled={!nvidiaScenePlan?.scene_plan}>
+                    Build RTX job
                   </button>
                 </div>
               </div>
