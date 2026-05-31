@@ -1,14 +1,14 @@
 # Audio Reactive Stage Sample
 
-This sample defines the first project contract for the future Omniverse Kit app.
+This sample defines the first project contract for the Omniverse Kit app.
 It is intentionally small:
 
 - `stage.usda` is the durable OpenUSD scene shell.
 - `scene_plan.json` is the normalized AI Director output that the Kit app should
   write into USD metadata or shot prims.
 
-The first Kit milestone should load this stage, show the camera/light layout,
-read the EDMG custom metadata, and render a short RTX preview after applying the
+The Kit app can load this stage, show the camera/light layout, read the EDMG
+custom metadata, and render RTX preview frames or movie output after applying a
 scene plan.
 
 ## Intended mapping

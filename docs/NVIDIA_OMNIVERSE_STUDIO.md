@@ -150,14 +150,17 @@ Starter branch status:
 - `studio/nvidia-kit/apps/edmg.nvidia.studio.kit` declares the first Kit app
   shell and four EDMG extensions.
 - `edmg.ai_director` opens the first Kit-side AI Director panel. It can refresh
-  NVIDIA status, fetch a persisted project scene plan, generate a project-scoped
-  NVIDIA/NIM plan, export the persisted USDA, and open the generated USDA text
-  preview as a local OpenUSD stage without third-party Python packages.
+  NVIDIA status, resolve a visible project name to its Studio project id, fetch
+  a persisted project scene plan, generate a project-scoped NVIDIA/NIM plan,
+  export the persisted USDA, and open the generated USDA text preview as a local
+  OpenUSD stage without third-party Python packages.
 - `edmg.timeline` opens a Kit timeline panel from the configured scene-plan JSON
   and summarizes cue boundaries for the starter OpenUSD workflow.
 - `edmg.render_queue` opens a Kit readiness panel that checks the Studio worker
-  plus NVIDIA diagnostics/readiness before the future RTX render-worker path is
-  added.
+  plus NVIDIA diagnostics/readiness, scans project
+  `outputs/nvidia/render_jobs/*.json`, opens the referenced USDA stage, captures
+  RTX viewport frames, assembles the requested MP4 through FFmpeg, and reports
+  the result back to the backend.
 - `studio/nvidia-kit/tools/export_scene_plan_usda.py` writes a scene-plan JSON
   artifact to a starter `.usda` file without requiring Omniverse locally.
 - `studio/nvidia-kit/tools/smoke_ai_director_backend.py` validates the same
@@ -174,7 +177,7 @@ Build a minimum useful NVIDIA path:
 4. Connect to a configured Riva-compatible ASR endpoint for transcription, or
    fall back to the current faster-whisper path.
 5. Surface the persisted NVIDIA scene plan in the Kit UI.
-6. Render a short RTX preview or export a render job request.
+6. Render an RTX preview/movie from the Kit render queue handoff.
 
 ## Repository layout proposal
 
@@ -194,10 +197,10 @@ studio/nvidia-kit/
 `- sample_projects/
 ```
 
-This branch adds the deployment, architecture starter, Kit source, and the first
-usable Kit panels for AI Director, Timeline, and Render Queue readiness. Runtime
-packaging still depends on choosing the exact Kit SDK/template version and
-verifying Windows packaging locally.
+This branch adds the deployment, architecture starter, Kit source, and usable Kit
+panels for AI Director, Timeline, and Render Queue execution. Runtime packaging
+still depends on choosing the exact Kit SDK/template version and verifying
+Windows packaging locally.
 
 ## Risks to settle early
 
