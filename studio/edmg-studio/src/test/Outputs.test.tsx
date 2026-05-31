@@ -99,6 +99,13 @@ describe("Outputs page", () => {
               renderer: { fps: 24 },
               project: { title: "NVIDIA Project" },
             },
+            result: {
+              status: "completed",
+              outputs: {
+                still: "outputs/nvidia/renders/001_scene-1/001_scene-1_000000.png",
+                movie: "outputs/nvidia/renders/001_scene-1.mp4",
+              },
+            },
           },
         ],
         unreal_exports: unrealExported
@@ -220,5 +227,6 @@ describe("Outputs page", () => {
     expect((await screen.findAllByText(/nvidia_project_20260531_120000\.usda/i)).length).toBeGreaterThan(0);
     expect(await screen.findByText(/NVIDIA RTX render jobs/i)).toBeTruthy();
     expect((await screen.findAllByText(/outputs\/nvidia\/render_jobs\/nvidia_project_20260531_120000\.json/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/outputs\/nvidia\/renders\/001_scene-1\.mp4/i)).length).toBeGreaterThan(0);
   }, 15000);
 });

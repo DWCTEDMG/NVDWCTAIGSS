@@ -44,6 +44,17 @@ if (-not (Test-CommandExists "docker")) {
 $dockerVersion = docker --version
 Write-Step "Docker: $dockerVersion"
 
+if (Test-CommandExists "ffmpeg") {
+  try {
+    $ffmpegVersion = (ffmpeg -version 2>$null | Select-Object -First 1)
+    Write-Step "FFmpeg: $ffmpegVersion"
+  } catch {
+    Write-Step "FFmpeg: found, but version check failed ($($_.Exception.Message))"
+  }
+} else {
+  Write-Step "FFmpeg: not found on PATH; install FFmpeg or pass -FfmpegPath to studio/nvidia-kit/tools/launch_edmg_kit.ps1 for MP4 output"
+}
+
 if (Test-CommandExists "nvidia-smi") {
   try {
     $gpuLines = @(nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader 2>$null)

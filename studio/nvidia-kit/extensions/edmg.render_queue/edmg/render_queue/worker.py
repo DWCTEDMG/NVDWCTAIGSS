@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
+import shutil
 import socket
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -34,12 +37,45 @@ def _renderer_settings(payload: dict[str, Any]) -> tuple[int, int, int]:
     return width, height, fps
 
 
+def _float_value(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except Exception:
+        return None
+    return parsed
+
+
+def _project_relpath(record: RenderJobRecord, path: Path) -> str:
+    try:
+        return path.relative_to(record.project_root).as_posix()
+    except Exception:
+        return path.as_posix()
+
+
 def _timeline_scenes(payload: dict[str, Any]) -> list[dict[str, Any]]:
     timeline = payload.get("timeline") if isinstance(payload.get("timeline"), list) else []
     scenes = [item for item in timeline if isinstance(item, dict)]
     if scenes:
         return scenes
     return [{"id": "preview", "start_frame": 0, "output": {}}]
+
+
+def _scene_duration_seconds(scene: dict[str, Any], fps: int) -> float:
+    duration_s = _float_value(scene.get("duration_s"))
+    if duration_s is not None and duration_s > 0:
+        return duration_s
+
+    start_s = _float_value(scene.get("start_s"))
+    end_s = _float_value(scene.get("end_s"))
+    if start_s is not None and end_s is not None and end_s > start_s:
+        return end_s - start_s
+
+    start_frame = _float_value(scene.get("start_frame"))
+    end_frame = _float_value(scene.get("end_frame"))
+    if start_frame is not None and end_frame is not None and end_frame > start_frame:
+        return (end_frame - start_frame) / float(max(1, fps))
+
+    return 1.0
 
 
 def _scene_output_path(record: RenderJobRecord, scene: dict[str, Any], index: int) -> Path:
@@ -59,6 +95,142 @@ def _scene_output_path(record: RenderJobRecord, scene: dict[str, Any], index: in
         frame = 0
     safe_id = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in str(scene.get("id") or f"scene_{index}"))
     return out_dir / f"{index:03d}_{safe_id}_{frame:06d}.png"
+
+
+def _resolve_project_output_path(record: RenderJobRecord, value: object) -> Path | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    candidate = path if path.is_absolute() else (record.project_root / path)
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(record.project_root.resolve())
+    except Exception as exc:
+        raise RenderJobExecutionError(f"Render output path escapes project root: {raw}") from exc
+    return resolved
+
+
+def _movie_output_path(record: RenderJobRecord, timeline: list[dict[str, Any]]) -> Path:
+    top_outputs = record.payload.get("outputs") if isinstance(record.payload.get("outputs"), dict) else {}
+    for key in ("movie", "mp4", "final_mp4"):
+        path = _resolve_project_output_path(record, top_outputs.get(key))
+        if path is not None:
+            return path
+
+    for scene in timeline:
+        output = scene.get("output") if isinstance(scene.get("output"), dict) else {}
+        path = _resolve_project_output_path(record, output.get("movie"))
+        if path is not None:
+            return path
+
+    fallback = record.project_root / "outputs" / "nvidia" / "renders" / f"{record.job_path.stem}.mp4"
+    return fallback.resolve()
+
+
+def _kit_setting_string(path: str) -> str:
+    try:
+        carb_settings = importlib.import_module("carb.settings")
+        settings = carb_settings.get_settings()
+        value = settings.get(path)
+    except Exception:
+        return ""
+    return str(value or "").strip()
+
+
+def _resolve_executable(candidate: str) -> str:
+    raw = candidate.strip().strip('"')
+    if not raw:
+        return ""
+    path = Path(raw)
+    if path.exists():
+        return str(path)
+    resolved = shutil.which(raw)
+    return resolved or raw
+
+
+def _ffmpeg_executable() -> str:
+    setting = _kit_setting_string("/edmg/nvidia/ffmpeg_path")
+    env_value = os.environ.get("EDMG_FFMPEG_PATH", "").strip()
+    candidates: list[str] = []
+    if setting and setting.lower() not in {"ffmpeg", "ffmpeg.exe"}:
+        candidates.append(setting)
+    if env_value:
+        candidates.append(env_value)
+    if setting:
+        candidates.append(setting)
+    candidates.append("ffmpeg")
+    for candidate in candidates:
+        resolved = _resolve_executable(candidate)
+        if resolved:
+            return resolved
+    return "ffmpeg"
+
+
+def _ffmpeg_concat_file_line(path: Path) -> str:
+    escaped = path.resolve().as_posix().replace("'", "'\\''")
+    return f"file '{escaped}'"
+
+
+def _write_movie_concat_manifest(movie_path: Path, frames: list[Path], durations: list[float]) -> Path:
+    if not frames:
+        raise RenderJobExecutionError("Cannot assemble movie without captured frames")
+    if len(durations) < len(frames):
+        durations = durations + [1.0] * (len(frames) - len(durations))
+
+    concat_path = movie_path.with_name(f".{movie_path.stem}.concat.txt")
+    lines: list[str] = []
+    for frame_path, duration_s in zip(frames, durations):
+        lines.append(_ffmpeg_concat_file_line(frame_path))
+        lines.append(f"duration {max(0.001, float(duration_s)):.6f}")
+    lines.append(_ffmpeg_concat_file_line(frames[-1]))
+    concat_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    return concat_path
+
+
+def _assemble_movie_from_frames(
+    record: RenderJobRecord,
+    timeline: list[dict[str, Any]],
+    frames: list[Path],
+    fps: int,
+) -> tuple[Path, Path]:
+    movie_path = _movie_output_path(record, timeline)
+    movie_path.parent.mkdir(parents=True, exist_ok=True)
+    durations = [_scene_duration_seconds(scene, fps) for scene in timeline[: len(frames)]]
+    concat_path = _write_movie_concat_manifest(movie_path, frames, durations)
+    ffmpeg = _ffmpeg_executable()
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_path),
+        "-vf",
+        f"fps={max(1, int(fps))},format=yuv420p",
+        "-movflags",
+        "+faststart",
+        str(movie_path),
+    ]
+    timeout_s = max(120, int(sum(durations) + 120))
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout_s)
+    except FileNotFoundError as exc:
+        raise RenderJobExecutionError(f"FFmpeg executable was not found: {ffmpeg}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RenderJobExecutionError(f"FFmpeg timed out while assembling {movie_path}") from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        detail = f": {stderr}" if stderr else ""
+        raise RenderJobExecutionError(f"FFmpeg failed while assembling {movie_path}{detail}") from exc
+    if not movie_path.exists() or movie_path.stat().st_size <= 0:
+        raise RenderJobExecutionError(f"FFmpeg did not create a non-empty movie: {movie_path}")
+    return movie_path, concat_path
 
 
 def _set_kit_renderer_options(width: int, height: int) -> None:
@@ -197,8 +369,10 @@ async def execute_rtx_render_job(record: RenderJobRecord) -> dict[str, Any]:
     await asyncio.sleep(0.5)
 
     frames: list[str] = []
+    frame_paths: list[Path] = []
     start = time.monotonic()
-    for index, scene in enumerate(_timeline_scenes(record.payload), start=1):
+    timeline = _timeline_scenes(record.payload)
+    for index, scene in enumerate(timeline, start=1):
         try:
             frame = max(0, int(scene.get("start_frame") or 0))
         except Exception:
@@ -208,19 +382,23 @@ async def execute_rtx_render_job(record: RenderJobRecord) -> dict[str, Any]:
         out_path = _scene_output_path(record, scene, index)
         print(f"[edmg.render_queue] capturing frame {frame} to {out_path}")
         await _capture_viewport_frame(viewport, out_path)
-        frames.append(out_path.relative_to(record.project_root).as_posix())
+        frame_paths.append(out_path)
+        frames.append(_project_relpath(record, out_path))
 
     movie = ""
+    movie_concat = ""
     renderer = record.payload.get("renderer") if isinstance(record.payload.get("renderer"), dict) else {}
     if str(renderer.get("output_format") or "").lower() == "mp4":
-        timeline = _timeline_scenes(record.payload)
-        first_output = timeline[0].get("output") if timeline and isinstance(timeline[0].get("output"), dict) else {}
-        movie = str(first_output.get("movie") or "")
+        print(f"[edmg.render_queue] assembling MP4 from {len(frame_paths)} captured frame(s)")
+        movie_path, concat_path = _assemble_movie_from_frames(record, timeline, frame_paths, fps)
+        movie = _project_relpath(record, movie_path)
+        movie_concat = _project_relpath(record, concat_path)
 
     return {
         "still": frames[0] if frames else record.still_relpath,
         "frames": frames,
         "movie": movie,
+        "movie_concat": movie_concat,
         "stage": record.stage_path.relative_to(record.project_root).as_posix(),
         "rendered_frame_count": len(frames),
         "elapsed_s": round(time.monotonic() - start, 3),

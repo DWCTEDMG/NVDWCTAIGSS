@@ -18,6 +18,13 @@ def _int(value: Any, default: int) -> int:
         return default
 
 
+def _path_tag(value: Any, fallback: str) -> str:
+    raw = str(value or "").strip()
+    cleaned = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in raw)
+    cleaned = "_".join(part for part in cleaned.split("_") if part)
+    return cleaned or fallback
+
+
 def build_rtx_render_job(
     scene_plan: dict[str, Any],
     *,
@@ -30,12 +37,14 @@ def build_rtx_render_job(
 ) -> dict[str, Any]:
     scenes = scene_plan.get("scenes") if isinstance(scene_plan.get("scenes"), list) else []
     timeline: list[dict[str, Any]] = []
+    job_tag = _path_tag(scene_plan.get("title") or project_name or project_id, "nvidia_render")
     for index, raw in enumerate(scenes, start=1):
         if not isinstance(raw, dict):
             continue
         start_s = max(0.0, _float(raw.get("start_s"), 0.0))
         end_s = max(start_s, _float(raw.get("end_s"), start_s))
         name = str(raw.get("name") or raw.get("id") or f"scene_{index}")
+        output_tag = _path_tag(name, f"scene_{index}")
         timeline.append(
             {
                 "id": str(raw.get("id") or f"scene_{index}"),
@@ -50,8 +59,8 @@ def build_rtx_render_job(
                 "motion": str(raw.get("motion") or ""),
                 "usd_variant": str(raw.get("usd_variant") or raw.get("variant") or name),
                 "output": {
-                    "sequence_dir": f"outputs/nvidia/renders/{index:03d}_{name}",
-                    "movie": f"outputs/nvidia/renders/{index:03d}_{name}.mp4",
+                    "sequence_dir": f"outputs/nvidia/renders/{index:03d}_{output_tag}",
+                    "movie": f"outputs/nvidia/renders/{index:03d}_{output_tag}.mp4",
                 },
             }
         )
@@ -74,6 +83,9 @@ def build_rtx_render_job(
             "fps": max(1, int(fps)),
             "resolution": {"width": max(1, int(width)), "height": max(1, int(height))},
             "output_format": "mp4",
+        },
+        "outputs": {
+            "movie": f"outputs/nvidia/renders/{job_tag}.mp4",
         },
         "inputs": {
             "scene_plan_provider": str(scene_plan.get("provider") or ""),

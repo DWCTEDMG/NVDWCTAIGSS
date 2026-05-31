@@ -123,8 +123,11 @@ The RTX render-worker lane now has a project-scoped handoff route:
 `/v1/projects/{project_id}/nvidia/render-job`. It writes a JSON contract to
 `outputs/nvidia/render_jobs/`. The Kit `edmg.render_queue` panel now consumes
 those local JSON files, opens the referenced USDA stage, captures RTX viewport
-frames into `outputs/nvidia/renders/`, and reports completion or failure through
-`/v1/projects/{project_id}/nvidia/render-job/result`.
+frames into `outputs/nvidia/renders/`, assembles MP4 output with FFmpeg, and
+reports completion or failure through
+`/v1/projects/{project_id}/nvidia/render-job/result`. FFmpeg must be available
+on `PATH`, passed to the Kit launcher with `-FfmpegPath`, or set with
+`EDMG_FFMPEG_PATH`.
 
 ## Environment knobs
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import subprocess
 import sys
 import threading
 import types
@@ -151,6 +152,64 @@ def test_render_queue_discovers_pending_rtx_jobs(tmp_path):
     assert result_payload["job_path"] == "outputs/nvidia/render_jobs/project_job.json"
     assert result_payload["outputs"]["stage"] == "outputs/nvidia/project.usda"
     assert result_payload["outputs"]["frames"] == ["a.png"]
+
+
+def test_render_queue_assembles_mp4_with_ffmpeg_concat(tmp_path, monkeypatch):
+    panel = _import_extension_module("edmg.render_queue", "render_queue", "panel")
+    worker = _import_extension_module("edmg.render_queue", "render_queue", "worker")
+    project_root = tmp_path / "project-one"
+    stage = project_root / "outputs" / "nvidia" / "project.usda"
+    job_path = project_root / "outputs" / "nvidia" / "render_jobs" / "project_job.json"
+    frames = [
+        project_root / "outputs" / "nvidia" / "renders" / "001_scene-1" / "001_scene-1_000000.png",
+        project_root / "outputs" / "nvidia" / "renders" / "002_scene-2" / "002_scene-2_000060.png",
+    ]
+    for path in [stage, job_path, *frames]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"frame")
+
+    payload = {
+        "renderer": {"fps": 24, "output_format": "mp4"},
+        "outputs": {"movie": "outputs/nvidia/renders/final_timeline.mp4"},
+        "timeline": [
+            {
+                "id": "scene-1",
+                "start_s": 0,
+                "end_s": 2.5,
+                "output": {"movie": "outputs/nvidia/renders/001_scene-1.mp4"},
+            },
+            {"id": "scene-2", "start_frame": 60, "end_frame": 120, "output": {}},
+        ],
+    }
+    record = panel.RenderJobRecord(
+        project_id="project-one",
+        project_root=project_root,
+        job_path=job_path,
+        payload=payload,
+        status="ready_for_kit_worker",
+        stage_path=stage,
+        still_path=frames[0],
+    )
+    commands = []
+
+    def fake_run(cmd, **kwargs):
+        commands.append((cmd, kwargs))
+        Path(cmd[-1]).write_bytes(b"mp4")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(worker, "_ffmpeg_executable", lambda: r"C:\ffmpeg\bin\ffmpeg.exe")
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+
+    movie_path, concat_path = worker._assemble_movie_from_frames(record, payload["timeline"], frames, 24)
+
+    assert movie_path == project_root / "outputs" / "nvidia" / "renders" / "final_timeline.mp4"
+    assert movie_path.read_bytes() == b"mp4"
+    assert commands[0][0][0] == r"C:\ffmpeg\bin\ffmpeg.exe"
+    vf_index = commands[0][0].index("-vf")
+    assert commands[0][0][vf_index + 1] == "fps=24,format=yuv420p"
+    concat_text = concat_path.read_text(encoding="utf-8")
+    assert concat_text.count("duration 2.500000") == 2
+    assert concat_text.count("file '") == 3
 
 
 def test_render_queue_extension_starts_headless_with_fake_backend(monkeypatch):

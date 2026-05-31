@@ -374,7 +374,9 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert render_job["job"]["kind"] == "nvidia_rtx_render_job"
     assert render_job["job"]["renderer"]["fps"] == 30
     assert render_job["job"]["renderer"]["resolution"] == {"width": 1280, "height": 720}
+    assert render_job["job"]["outputs"]["movie"].endswith("Project_Scoped_NVIDIA.mp4")
     assert render_job["job"]["timeline"][0]["prompt"] == "project route scene"
+    assert " " not in render_job["job"]["timeline"][0]["output"]["sequence_dir"]
     assert render_job["export"]["path"].startswith("outputs/nvidia/render_jobs/")
     assert (project_store.project_dir(project.id) / render_job["export"]["path"]).exists()
     result = backend_app.report_project_nvidia_render_job_result(

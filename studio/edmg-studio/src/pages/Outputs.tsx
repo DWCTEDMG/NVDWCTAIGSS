@@ -604,6 +604,9 @@ export default function Outputs(props: PageProps) {
                     {entry.result?.outputs?.still ? (
                       <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>RTX still: {entry.result.outputs.still}</div>
                     ) : null}
+                    {entry.result?.outputs?.movie ? (
+                      <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>RTX movie: {entry.result.outputs.movie}</div>
+                    ) : null}
                     <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                       <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open render job</a>
                       <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render job", entry.path, "reveal")}>
@@ -618,6 +621,14 @@ export default function Outputs(props: PageProps) {
                         <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX still", entry.result.outputs.still, "reveal")}>
                           {desktopActionLabel("reveal", "RTX still")}
                         </button>
+                      ) : null}
+                      {entry.result?.outputs?.movie ? (
+                        <>
+                          <a className="secondary" href={fileUrl(projectId, entry.result.outputs.movie)} target="_blank" rel="noreferrer">Open movie</a>
+                          <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX movie", entry.result.outputs.movie, "reveal")}>
+                            {desktopActionLabel("reveal", "RTX movie")}
+                          </button>
+                        </>
                       ) : null}
                     </div>
                   </div>

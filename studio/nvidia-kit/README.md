@@ -38,8 +38,8 @@ work:
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio
   worker status plus NVIDIA diagnostics/readiness, scans the Studio
   `outputs/nvidia/render_jobs/*.json` handoff files, opens the referenced USDA
-  stage, captures RTX viewport frames, and reports the result back to the
-  backend.
+  stage, captures RTX viewport frames, assembles MP4 output with FFmpeg when the
+  job requests it, and reports the result back to the backend.
 
 A full Kit App Template checkout, launcher scripts, and redistributable runtime
 packaging should be added only after selecting and verifying a specific
@@ -86,6 +86,10 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -KitSdkRoot "C:\path\to\kit-sdk-public" `
   -ProjectsRoot "C:\NVDWCTAIGSS\studio\edmg-studio\python_backend\data\projects"
 ```
+
+The launcher auto-detects `ffmpeg` from `PATH` for MP4 assembly and sends it to
+Kit through `/edmg/nvidia/ffmpeg_path`. Set `EDMG_FFMPEG_PATH` or pass
+`-FfmpegPath` only when you need to force a specific FFmpeg binary.
 
 To check extension resolution without opening the UI:
 

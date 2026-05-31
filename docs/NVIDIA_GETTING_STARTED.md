@@ -21,6 +21,7 @@ Expected baseline on a ready Windows workstation:
 - Docker is found.
 - `nvidia-smi` reports the local GPU.
 - Docker reports an `nvidia` runtime.
+- `ffmpeg` is on `PATH` for MP4 assembly from Kit RTX captures.
 - Compose config renders for the base and `nvidia-local` profiles.
 
 This does not pull official NVIDIA images and does not print secrets.
@@ -216,7 +217,8 @@ curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/render-job
 
 The Kit `edmg.render_queue` panel consumes that job from the local projects
 folder, opens the referenced USDA stage, captures RTX viewport frames into
-`outputs/nvidia/renders/`, and reports completion or failure to:
+`outputs/nvidia/renders/`, assembles the requested MP4 with FFmpeg, and reports
+completion or failure to:
 
 ```text
 POST /v1/projects/{project_id}/nvidia/render-job/result
@@ -245,6 +247,10 @@ and the starter stage. The first panels are loaded by the EDMG extensions:
   `/v1/nvidia/diagnostics`, scans pending RTX render jobs, and can run the next
   job from the Kit UI.
 
+The launcher auto-detects `ffmpeg` from `PATH` and passes it to Kit as
+`/edmg/nvidia/ffmpeg_path`. You can also set `EDMG_FFMPEG_PATH` before launching
+Kit when you need to pin a specific FFmpeg binary.
+
 In the AI Director panel:
 
 1. Enter a real Studio `project_id`.
@@ -261,9 +267,10 @@ In the Render Queue panel:
 1. Use `Scan RTX Jobs` to find pending `outputs/nvidia/render_jobs/*.json`
    contracts.
 2. Use `Run Next RTX Job` to open the USDA stage and capture one RTX viewport
-   frame per timeline scene.
+   frame per timeline scene, then assemble the MP4 requested by the render-job
+   contract.
 3. Check the Studio Outputs page for the job status, result sidecar, and
-   rendered frame paths.
+   rendered frame and movie paths.
 
 ## Current implementation target
 
@@ -275,5 +282,5 @@ matches a project.
 
 The remaining validation target is to run the same path against a real
 NIM/OpenAI-compatible endpoint and Kit viewport on the target NVIDIA workstation
-or remote GPU host, then harden movie capture/packaging around the now-wired
-project metadata and RTX frame handoff.
+or remote GPU host, then harden packaging/distribution around the now-wired
+project metadata, RTX frame handoff, and FFmpeg movie assembly.

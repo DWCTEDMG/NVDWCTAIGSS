@@ -1,6 +1,7 @@
 param(
   [string]$KitSdkRoot = $env:OMNI_KIT_SDK_ROOT,
   [string]$BackendUrl = "http://127.0.0.1:8000",
+  [string]$FfmpegPath = "",
   [string]$ProjectsRoot = "",
   [string]$ProjectId = "",
   [switch]$AutoRunRenderWorker,
@@ -19,6 +20,14 @@ if ([string]::IsNullOrWhiteSpace($ProjectsRoot)) {
   $studioRoot = Resolve-Path (Join-Path $kitRoot "..")
   $ProjectsRoot = Join-Path $studioRoot.Path "edmg-studio\python_backend\data\projects"
 }
+if ([string]::IsNullOrWhiteSpace($FfmpegPath)) {
+  $ffmpegCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
+  if ($ffmpegCommand -and $ffmpegCommand.Source) {
+    $FfmpegPath = $ffmpegCommand.Source
+  } else {
+    $FfmpegPath = "ffmpeg"
+  }
+}
 
 if ([string]::IsNullOrWhiteSpace($KitSdkRoot)) {
   throw "KitSdkRoot was not provided. Pass -KitSdkRoot or set OMNI_KIT_SDK_ROOT."
@@ -35,6 +44,7 @@ $args = @(
   "--ext-folder",
   $extensionsRoot.Path,
   "--/edmg/nvidia/backend_url=$BackendUrl",
+  "--/edmg/nvidia/ffmpeg_path=$FfmpegPath",
   "--/edmg/nvidia/projects_root=$ProjectsRoot",
   "--/edmg/nvidia/render_worker_autorun=$([bool]$AutoRunRenderWorker)",
   "--/edmg/nvidia/sample_stage=$($sampleStage.Path)",
@@ -52,6 +62,7 @@ if ($ListExtensions) {
 Write-Host "[edmg-kit] SDK: $resolvedSdkRoot"
 Write-Host "[edmg-kit] App: $($appConfig.Path)"
 Write-Host "[edmg-kit] Backend: $BackendUrl"
+Write-Host "[edmg-kit] FFmpeg: $FfmpegPath"
 Write-Host "[edmg-kit] Projects: $ProjectsRoot"
 if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
   Write-Host "[edmg-kit] Project ID: $ProjectId"
