@@ -122,8 +122,8 @@ The Omniverse Kit `edmg.ai_director` panel uses those same routes for
 project-scoped fetch, generate, export, and OpenUSD preview actions.
 The Kit `edmg.render_queue` panel reads `/v1/worker/status` and
 `/v1/nvidia/diagnostics` from the same backend URL, so it is a quick UI smoke
-for local worker plus NVIDIA readiness before a dedicated RTX render worker is
-added.
+for local worker plus NVIDIA readiness. With `-AutoRunRenderWorker`, it also
+stays alive as the RTX render queue consumer.
 Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 `/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend

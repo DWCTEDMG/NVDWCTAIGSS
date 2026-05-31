@@ -326,7 +326,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -RenderWorkerPollSeconds 5
 ```
 
-## Current implementation target
+## Current local status
 
 The `nvidia-nim-planner` backend path is wired: `/v1/nvidia/scene-plan` calls the
 configured OpenAI-compatible planner, converts the selected variant into the
@@ -334,7 +334,12 @@ normalized NVIDIA scene-plan contract, returns a USDA preview, and saves the
 normalized scene plan into existing Studio project metadata when `project_id`
 matches a project.
 
-The remaining validation target is to run the same path against a real
-NIM/OpenAI-compatible endpoint and Kit viewport on the target NVIDIA workstation
-or remote GPU host, then harden packaging/distribution around the now-wired
-project metadata, RTX frame handoff, and FFmpeg movie assembly.
+On this Windows workstation, the local NVIDIA lane has been validated end to
+end: backend health, NVIDIA diagnostics readiness, NIM/OpenAI-compatible
+planning, project-scoped USDA export, Kit queue consumption, RTX viewport frame
+capture, FFmpeg MP4 assembly, and backend result reporting. The repeatable smoke
+command is `deployment/nvidia/smoke_nvidia_kit_render_job.ps1`.
+
+The remaining build work is packaging/distribution hardening, richer USD scene
+authoring, and optional live integrations for Riva, Audio2Face/ACE, Triton,
+Cosmos, and remote GPU service profiles.

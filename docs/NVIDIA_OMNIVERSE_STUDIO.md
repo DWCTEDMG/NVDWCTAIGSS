@@ -122,7 +122,7 @@ The existing EDMG AI service already has `/v1/plan`, `/v1/transcribe`, and
 `/v1/audio_features`; keep those as compatibility routes while adding
 NVIDIA-specific orchestration around them.
 
-Starter branch status:
+Current local lane status:
 
 - `/v1/nvidia/status` reports the masked NVIDIA service profile.
 - `/v1/nvidia/diagnostics` reports host GPU, Docker NVIDIA runtime, and NIM
@@ -159,13 +159,20 @@ Starter branch status:
 - `edmg.render_queue` opens a Kit readiness panel that checks the Studio worker
   plus NVIDIA diagnostics/readiness, scans project
   `outputs/nvidia/render_jobs/*.json`, opens the referenced USDA stage, captures
-  RTX viewport frames, assembles the requested MP4 through FFmpeg, and reports
-  the result back to the backend.
+  RTX viewport frames, assembles the requested MP4 through FFmpeg, reports the
+  result back to the backend, and can keep polling as an unattended queue
+  consumer when Kit is launched with `-AutoRunRenderWorker`.
 - `studio/nvidia-kit/tools/export_scene_plan_usda.py` writes a scene-plan JSON
   artifact to a starter `.usda` file without requiring Omniverse locally.
 - `studio/nvidia-kit/tools/smoke_ai_director_backend.py` validates the same
   backend contract from the Kit workspace, including project-scoped generate and
   fetch checks when a real Studio `project_id` is supplied.
+- `deployment/nvidia/start_nvidia_runtime_local.ps1` starts or reuses the local
+  NVIDIA backend, prints diagnostics readiness, detects FFmpeg, and launches Kit
+  with render-worker autorun.
+- `deployment/nvidia/smoke_nvidia_kit_render_job.ps1` validates the real local
+  RTX handoff by exporting USDA, creating a render-job JSON contract, waiting
+  for Kit completion, and probing the MP4 result.
 
 ## First milestone
 
@@ -197,10 +204,10 @@ studio/nvidia-kit/
 `- sample_projects/
 ```
 
-This branch adds the deployment, architecture starter, Kit source, and usable Kit
-panels for AI Director, Timeline, and Render Queue execution. Runtime packaging
-still depends on choosing the exact Kit SDK/template version and verifying
-Windows packaging locally.
+This branch now has a verified local workstation path for AI Director, Timeline,
+Render Queue execution, RTX frame capture, FFmpeg MP4 assembly, and backend
+result reporting. Runtime packaging still depends on choosing the exact Kit
+SDK/template version and verifying Windows installer/distribution locally.
 
 ## Risks to settle early
 
