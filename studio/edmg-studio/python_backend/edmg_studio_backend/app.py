@@ -2334,6 +2334,53 @@ def nvidia_status():
 def nvidia_diagnostics_route():
     return {"ok": True, "nvidia": nvidia_diagnostics()}
 
+
+def _persist_nvidia_scene_plan(
+    project_id: str,
+    *,
+    request_payload: dict[str, Any],
+    planner_summary: dict[str, Any],
+    scene_plan: dict[str, Any],
+    usd_metadata: dict[str, Any],
+    usd_stage: dict[str, Any],
+) -> dict[str, Any]:
+    project_id = str(project_id or "").strip()
+    if not project_id:
+        return {"persisted": False, "reason": "project_id_missing"}
+
+    proj = store.get(project_id)
+    if not proj:
+        return {"persisted": False, "project_id": project_id, "reason": "project_not_found"}
+
+    saved_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    entry = {
+        "project_id": project_id,
+        "saved_at": saved_at,
+        "request": request_payload,
+        "planner": planner_summary,
+        "scene_plan": scene_plan,
+        "usd_metadata": usd_metadata,
+        "usd_stage": usd_stage,
+        "nvidia_profile": nvidia_profile_status(),
+    }
+    proj.meta["last_nvidia_scene_plan"] = entry
+    history = proj.meta.setdefault("nvidia_scene_plan_history", [])
+    if not isinstance(history, list):
+        history = []
+    history.append(
+        {
+            "saved_at": saved_at,
+            "title": scene_plan.get("title"),
+            "scene_count": len(scene_plan.get("scenes") or []),
+            "provider": scene_plan.get("provider"),
+            "planner": planner_summary,
+        }
+    )
+    proj.meta["nvidia_scene_plan_history"] = history[-10:]
+    store.save(proj)
+    return {"persisted": True, "project_id": project_id, "saved_at": saved_at}
+
+
 @app.post("/v1/nvidia/scene-plan")
 def nvidia_generate_scene_plan(payload: dict[str, Any]):
     if not isinstance(payload, dict):
@@ -2394,21 +2441,35 @@ def nvidia_generate_scene_plan(payload: dict[str, Any]):
             },
         ) from exc
 
+    normalized_scene_plan = normalize_scene_plan(scene_plan)
+    usd_metadata = scene_plan_usd_metadata(scene_plan)
+    usd_stage = {
+        "format": "usda",
+        "text": scene_plan_usda_text(scene_plan),
+    }
+    planner_summary = {
+        "provider": planner_response.get("provider"),
+        "model": planner_response.get("model"),
+        "variant_index": variant_index,
+        "variant_count": len(planner_response.get("variants") or []),
+    }
+    project_status = _persist_nvidia_scene_plan(
+        str(payload.get("project_id") or "").strip(),
+        request_payload=planner_payload,
+        planner_summary=planner_summary,
+        scene_plan=normalized_scene_plan,
+        usd_metadata=usd_metadata,
+        usd_stage=usd_stage,
+    )
+
     return {
         "ok": True,
         "request": planner_payload,
-        "planner": {
-            "provider": planner_response.get("provider"),
-            "model": planner_response.get("model"),
-            "variant_index": variant_index,
-            "variant_count": len(planner_response.get("variants") or []),
-        },
-        "scene_plan": normalize_scene_plan(scene_plan),
-        "usd_metadata": scene_plan_usd_metadata(scene_plan),
-        "usd_stage": {
-            "format": "usda",
-            "text": scene_plan_usda_text(scene_plan),
-        },
+        "planner": planner_summary,
+        "scene_plan": normalized_scene_plan,
+        "usd_metadata": usd_metadata,
+        "usd_stage": usd_stage,
+        "project": project_status,
         "nvidia": nvidia_profile_status(),
     }
 
@@ -2505,6 +2566,103 @@ def get_project(project_id: str):
     if not proj:
         raise HTTPException(404, "Project not found")
     return _project_response_payload(proj)
+
+
+@app.get("/v1/projects/{project_id}/nvidia/scene-plan")
+def get_project_nvidia_scene_plan(project_id: str):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    entry = proj.meta.get("last_nvidia_scene_plan") if isinstance(proj.meta, dict) else None
+    if not isinstance(entry, dict):
+        raise HTTPException(404, "NVIDIA scene plan not found")
+
+    history = proj.meta.get("nvidia_scene_plan_history") if isinstance(proj.meta, dict) else []
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "scene_plan": entry.get("scene_plan"),
+        "usd_metadata": entry.get("usd_metadata"),
+        "usd_stage": entry.get("usd_stage"),
+        "planner": entry.get("planner"),
+        "request": entry.get("request"),
+        "saved_at": entry.get("saved_at"),
+        "history": history if isinstance(history, list) else [],
+        "nvidia": nvidia_profile_status(),
+    }
+
+
+@app.post("/v1/projects/{project_id}/nvidia/scene-plan")
+def generate_project_nvidia_scene_plan(project_id: str, payload: dict[str, Any]):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "NVIDIA scene-plan request root must be an object")
+
+    request_payload = {**payload, "project_id": project_id}
+    if not str(request_payload.get("title") or "").strip():
+        request_payload["title"] = proj.name
+    return nvidia_generate_scene_plan(request_payload)
+
+
+@app.post("/v1/projects/{project_id}/nvidia/scene-plan/export")
+def export_project_nvidia_scene_plan(project_id: str, _payload: dict[str, Any] | None = None):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    entry = proj.meta.get("last_nvidia_scene_plan") if isinstance(proj.meta, dict) else None
+    if not isinstance(entry, dict):
+        raise HTTPException(404, "NVIDIA scene plan not found")
+
+    usd_stage = entry.get("usd_stage") if isinstance(entry.get("usd_stage"), dict) else {}
+    usda_text = str(usd_stage.get("text") or "")
+    if not usda_text.strip():
+        raise HTTPException(400, "NVIDIA scene plan does not include a USDA preview")
+
+    scene_plan = entry.get("scene_plan") if isinstance(entry.get("scene_plan"), dict) else {}
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    stem = _safe_name_tag(str(scene_plan.get("title") or proj.name or "nvidia_scene_plan"), "nvidia_scene_plan")
+    pdir = store.project_dir(project_id)
+    out_root = pdir / "outputs" / "nvidia"
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / f"{stem}_{stamp}.usda"
+    suffix = 2
+    while out_path.exists():
+        out_path = out_root / f"{stem}_{stamp}_{suffix}.usda"
+        suffix += 1
+    out_path.write_text(usda_text, encoding="utf-8", newline="\n")
+
+    export_entry = {
+        "path": out_path.relative_to(pdir).as_posix(),
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "scene_count": len(scene_plan.get("scenes") or []),
+        "provider": scene_plan.get("provider"),
+        "planner": entry.get("planner"),
+        "source_saved_at": entry.get("saved_at"),
+    }
+    metadata_path = _output_metadata_path(out_path)
+    metadata_path.write_text(json.dumps(export_entry, ensure_ascii=False, indent=2), encoding="utf-8")
+    export_entry["metadata_path"] = metadata_path.relative_to(pdir).as_posix()
+
+    exports = proj.meta.setdefault("exports", {})
+    if not isinstance(exports, dict):
+        exports = {}
+    nvidia_exports = exports.setdefault("nvidia_scene_plans", [])
+    if not isinstance(nvidia_exports, list):
+        nvidia_exports = []
+    nvidia_exports.append(export_entry)
+    exports["nvidia_scene_plans"] = nvidia_exports[-20:]
+    proj.meta["exports"] = exports
+    store.save(proj)
+
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "export": export_entry,
+    }
 
 
 @app.get("/v1/projects/{project_id}/visual_dna")
@@ -8717,6 +8875,7 @@ def list_outputs(project_id: str):
     imgs = []
     vids = []
     defs = []
+    nvidia_exports = []
     unreal_exports = []
     for p in sorted((pdir / "outputs" / "images").glob("*"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
@@ -8740,6 +8899,8 @@ def list_outputs(project_id: str):
         vids.append(entry)
     for p in sorted((pdir / "outputs" / "deforum").glob("*.json"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         defs.append(_file_entry(p))
+    for p in sorted((pdir / "outputs" / "nvidia").glob("*.usda"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
+        nvidia_exports.append(_file_entry(p))
     raw_unreal_exports = []
     raw_unreal_returns = []
     if isinstance(proj.meta, dict):
@@ -8834,6 +8995,7 @@ def list_outputs(project_id: str):
         "images": imgs,
         "videos": vids,
         "deforum_exports": defs,
+        "nvidia_exports": nvidia_exports,
         "unreal_exports": unreal_exports,
         "unreal_returns": unreal_returns,
         "project_id": project_id,

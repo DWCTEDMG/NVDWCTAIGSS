@@ -555,6 +555,36 @@ export default function Outputs(props: PageProps) {
             </>
           ) : null}
 
+          {outs.nvidia_exports?.length ? (
+            <>
+              <hr />
+              <div style={{ fontWeight: 800, marginBottom: 10 }}>NVIDIA / OpenUSD exports</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {outs.nvidia_exports.map((entry: any) => (
+                  <div key={entry.path} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 10 }}>
+                    <div className="small">
+                      <b>{entry.name || String(entry.path).split("/").slice(-1)[0]}</b>
+                      {entry.metadata?.scene_count ? <> • {entry.metadata.scene_count} scenes</> : null}
+                      {entry.size_bytes ? <> • {(Number(entry.size_bytes) / 1024).toFixed(1)} KB</> : null}
+                    </div>
+                    <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>{entry.path}</div>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open USDA</a>
+                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA USDA", entry.path, "reveal")}>
+                        {desktopActionLabel("reveal", "NVIDIA USDA")}
+                      </button>
+                      {entry.metadata_path ? (
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA metadata", entry.metadata_path, "reveal")}>
+                          {desktopActionLabel("reveal", "metadata")}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+
           {outs.unreal_exports?.length ? (
             <>
               <hr />

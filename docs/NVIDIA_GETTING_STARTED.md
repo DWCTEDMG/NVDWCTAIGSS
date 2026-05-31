@@ -172,6 +172,21 @@ The Kit workspace has an equivalent AI Director smoke:
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py --backend-url http://127.0.0.1:8000
 ```
 
+With a real Studio project id, the same smoke can verify the project-scoped
+generate-and-persist path:
+
+```powershell
+python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
+  --backend-url http://127.0.0.1:8000 `
+  --generate `
+  --project-id YOUR_PROJECT_ID `
+  --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_project.usda
+```
+
+The Studio Workspace Handoff section also shows the saved NVIDIA/OpenUSD plan
+and can export the persisted USDA artifact into the project's `outputs/nvidia/`
+folder.
+
 ## 7. Launch the Kit app against a local Kit SDK
 
 Download the Windows Kit SDK resource from NGC, extract the zip, and point the
@@ -186,10 +201,34 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 `-ListExtensions` is the fast non-UI smoke test. Remove it to open the Kit UI
-and the starter stage.
+and the starter stage. The first panels are loaded by the EDMG extensions:
 
-## Next implementation target
+- `edmg.ai_director` uses the backend URL from `/edmg/nvidia/backend_url`.
+- `edmg.timeline` reads `/edmg/nvidia/sample_scene_plan` and summarizes scene
+  cues.
+- `edmg.render_queue` checks `/v1/worker/status` and
+  `/v1/nvidia/diagnostics`.
 
-The next code target is `nvidia-nim-planner`: prove a real NIM/OpenAI-compatible
-planner endpoint can complete the existing `/v1/plan` contract, then persist the
-normalized result into USD project metadata.
+In the AI Director panel:
+
+1. Enter a real Studio `project_id`.
+2. Use `Fetch Project Plan` to load the saved NVIDIA/OpenUSD plan, or
+   `Generate Plan` to call the configured NVIDIA/NIM-compatible planner through
+   the project-scoped backend route.
+3. Use `Export USDA` to persist the saved preview into the project
+   `outputs/nvidia/` folder.
+4. Use `Open Preview` to write the USDA text to a temporary local file and open
+   it as the active Kit stage.
+
+## Current implementation target
+
+The `nvidia-nim-planner` backend path is wired: `/v1/nvidia/scene-plan` calls the
+configured OpenAI-compatible planner, converts the selected variant into the
+normalized NVIDIA scene-plan contract, returns a USDA preview, and saves the
+normalized scene plan into existing Studio project metadata when `project_id`
+matches a project.
+
+The remaining validation target is to run the same path against a real
+NIM/OpenAI-compatible endpoint on the target NVIDIA workstation or remote GPU
+host, then harden the Kit packaging/runtime selection around the now-wired
+project metadata handoff.

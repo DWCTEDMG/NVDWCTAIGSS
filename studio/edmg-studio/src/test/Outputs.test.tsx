@@ -79,6 +79,15 @@ describe("Outputs page", () => {
             },
           },
         ],
+        nvidia_exports: [
+          {
+            path: "outputs/nvidia/nvidia_project_20260531_120000.usda",
+            name: "nvidia_project_20260531_120000.usda",
+            size_bytes: 2048,
+            metadata_path: "outputs/nvidia/nvidia_project_20260531_120000.usda.json",
+            metadata: { scene_count: 2, provider: "nvidia-profile:openai_compat:nvidia/test" },
+          },
+        ],
         unreal_exports: unrealExported
           ? [
               {
@@ -194,5 +203,7 @@ describe("Outputs page", () => {
     expect((await screen.findAllByText(/Generation metadata/)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/A luminous skyline with added edge detail/)).length).toBeGreaterThan(0);
     expect(await screen.findByText(/Outpaint margins/i)).toBeTruthy();
+    expect(await screen.findByText(/NVIDIA \/ OpenUSD exports/i)).toBeTruthy();
+    expect((await screen.findAllByText(/nvidia_project_20260531_120000\.usda/i)).length).toBeGreaterThan(0);
   }, 15000);
 });

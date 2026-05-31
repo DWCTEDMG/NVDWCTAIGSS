@@ -64,7 +64,18 @@ export function createDirectorRuntime({
   function appendChildOutput(stream, filePath) {
     if (!stream || !filePath) return null;
     ensureDirSync(path.dirname(filePath));
-    const fileStream = fs.createWriteStream(filePath, { flags: "a" });
+    let fileStream = null;
+    try {
+      fileStream = fs.createWriteStream(filePath, { flags: "a" });
+    } catch (error) {
+      lastError = `Unable to open EDMG Director log ${filePath}: ${String(error?.message ?? error)}`;
+      console.warn("[director] log unavailable", lastError);
+      return null;
+    }
+    fileStream.on("error", (error) => {
+      lastError = `Unable to write EDMG Director log ${filePath}: ${String(error?.message ?? error)}`;
+      console.warn("[director] log unavailable", lastError);
+    });
     stream.on("data", (chunk) => {
       safeStreamWrite(fileStream, chunk);
     });

@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from urllib import error, request
 
 
@@ -58,6 +59,18 @@ class EdmgBackendClient:
     def generate_scene_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/nvidia/scene-plan", payload)
 
+    def generate_project_scene_plan(self, project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/scene-plan", payload)
+
+    def project_scene_plan(self, project_id: str) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("GET", f"/v1/projects/{encoded_project_id}/nvidia/scene-plan")
+
+    def export_project_scene_plan(self, project_id: str) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/scene-plan/export", {})
+
     def scene_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/usd/scene-plan", payload)
 
@@ -79,6 +92,16 @@ class EdmgBackendClient:
         text = stage.get("text")
         if not isinstance(text, str) or not text.strip():
             raise BackendClientError("scene-plan response included an empty USDA stage")
+        return text
+
+    def project_scene_plan_usda(self, project_id: str) -> str:
+        response = self.project_scene_plan(project_id)
+        stage = response.get("usd_stage")
+        if not isinstance(stage, dict) or stage.get("format") != "usda":
+            raise BackendClientError("project scene-plan response did not include a USDA stage")
+        text = stage.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise BackendClientError("project scene-plan response included an empty USDA stage")
         return text
 
 

@@ -131,17 +131,31 @@ Starter branch status:
   official local NVIDIA service stack.
 - `/v1/nvidia/scene-plan` asks the configured NVIDIA/NIM-compatible planner for
   a plan, converts the selected variant into the normalized NVIDIA scene-plan
-  contract, and returns a generated USDA preview.
+  contract, returns a generated USDA preview, and saves the normalized result
+  into existing Studio project metadata when the request includes a matching
+  `project_id`.
+- `/v1/projects/{project_id}/nvidia/scene-plan` provides the project-scoped
+  generate-and-fetch path for the persisted NVIDIA scene plan.
+- `/v1/projects/{project_id}/nvidia/scene-plan/export` writes the persisted USDA
+  preview into `outputs/nvidia/` and registers it in project exports.
 - `/v1/usd/scene-plan` validates a scene plan and returns normalized USD-style
   metadata keys plus a generated USDA text preview.
 - `studio/nvidia-kit/apps/edmg.nvidia.studio.kit` declares the first Kit app
-  shell and four EDMG extension skeletons.
-- `edmg.ai_director.backend_client` can call the NVIDIA status and USD scene
-  plan contracts from a Kit extension without third-party Python packages.
+  shell and four EDMG extensions.
+- `edmg.ai_director` opens the first Kit-side AI Director panel. It can refresh
+  NVIDIA status, fetch a persisted project scene plan, generate a project-scoped
+  NVIDIA/NIM plan, export the persisted USDA, and open the generated USDA text
+  preview as a local OpenUSD stage without third-party Python packages.
+- `edmg.timeline` opens a Kit timeline panel from the configured scene-plan JSON
+  and summarizes cue boundaries for the starter OpenUSD workflow.
+- `edmg.render_queue` opens a Kit readiness panel that checks the Studio worker
+  plus NVIDIA diagnostics/readiness before the future RTX render-worker path is
+  added.
 - `studio/nvidia-kit/tools/export_scene_plan_usda.py` writes a scene-plan JSON
   artifact to a starter `.usda` file without requiring Omniverse locally.
 - `studio/nvidia-kit/tools/smoke_ai_director_backend.py` validates the same
-  backend contract from the Kit workspace.
+  backend contract from the Kit workspace, including project-scoped generate and
+  fetch checks when a real Studio `project_id` is supplied.
 
 ## First milestone
 
@@ -152,7 +166,7 @@ Build a minimum useful NVIDIA path:
 3. Connect to a configured NIM-compatible LLM endpoint for AI scene planning.
 4. Connect to a configured Riva-compatible ASR endpoint for transcription, or
    fall back to the current faster-whisper path.
-5. Write the normalized scene plan back into project metadata.
+5. Surface the persisted NVIDIA scene plan in the Kit UI.
 6. Render a short RTX preview or export a render job request.
 
 ## Repository layout proposal
@@ -173,9 +187,10 @@ studio/nvidia-kit/
 `- sample_projects/
 ```
 
-This branch adds the deployment, architecture starter, and Kit source skeleton.
-Runtime packaging still depends on choosing the exact Kit SDK/template version
-and verifying Windows packaging locally.
+This branch adds the deployment, architecture starter, Kit source, and the first
+usable Kit panels for AI Director, Timeline, and Render Queue readiness. Runtime
+packaging still depends on choosing the exact Kit SDK/template version and
+verifying Windows packaging locally.
 
 ## Risks to settle early
 

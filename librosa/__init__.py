@@ -15,7 +15,7 @@ when the repo is on `sys.path` (e.g., during tests). It behaves as follows:
    execute it into this module so you get the full upstream feature set.
 2) If importing system librosa fails (or isn't installed), we provide a
    self-contained fallback that implements the subset of the API that EDMG uses:
-   - load, stft, istft, frames_to_time
+   - load, stft, istft, frames_to_time, time_to_frames, get_duration
    - util.normalize
    - beat.beat_track
    - onset.onset_strength, onset.onset_detect
@@ -231,6 +231,25 @@ def _install_fallback() -> None:
     def frames_to_time(frames: Any, sr: int, hop_length: int = 512):
         f = np.asarray(frames, dtype=np.float32)
         return (f * float(hop_length)) / float(sr)
+
+    def time_to_frames(times: Any, sr: int, hop_length: int = 512):
+        t = np.asarray(times, dtype=np.float32)
+        frames = np.floor((t * float(sr)) / float(hop_length)).astype(np.int64)
+        if np.isscalar(times):
+            return int(frames)
+        return frames
+
+    def get_duration(y: Any = None, sr: Optional[int] = 22050, filename: Optional[str] = None, path: Optional[str] = None, **_: Any) -> float:
+        if y is not None:
+            sample_rate = int(sr or 22050)
+            return float(np.asarray(y).shape[0]) / float(sample_rate) if sample_rate > 0 else 0.0
+        source = filename or path
+        if source and sf is not None:
+            info = sf.info(source)
+            sample_rate = int(getattr(info, "samplerate", 0) or 0)
+            frames = int(getattr(info, "frames", 0) or 0)
+            return float(frames) / float(sample_rate) if sample_rate > 0 else 0.0
+        return 0.0
 
     # ----------------------------
     # Beat tracking (lightweight)
@@ -471,6 +490,8 @@ def _install_fallback() -> None:
     g["stft"] = stft
     g["istft"] = istft
     g["frames_to_time"] = frames_to_time
+    g["time_to_frames"] = time_to_frames
+    g["get_duration"] = get_duration
     g["util"] = util
     g["beat"] = beat
     g["feature"] = feature

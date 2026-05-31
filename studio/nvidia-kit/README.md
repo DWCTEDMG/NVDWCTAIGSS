@@ -26,10 +26,21 @@ studio/nvidia-kit/
 `- tools/
 ```
 
-The app and extensions are source skeletons. A full Kit App Template checkout,
-launcher scripts, and redistributable runtime packaging should be added only
-after selecting and verifying a specific Omniverse Kit SDK/App Template version
-on the target Windows build machine.
+The app is still a starter, but the main user-facing extensions now do useful
+work:
+
+- `edmg.ai_director` opens a Kit panel for the first project-scoped workflow.
+  From that panel you can enter a Studio `project_id`, fetch the saved NVIDIA
+  scene plan, ask the backend/NIM planner for a refreshed plan, export the
+  persisted USDA, and open the generated USDA preview as a local Kit stage.
+- `edmg.timeline` opens a scene timeline panel from the configured starter
+  scene-plan JSON and summarizes the OpenUSD cue boundaries.
+- `edmg.render_queue` opens a backend readiness panel that checks the Studio
+  worker status plus NVIDIA diagnostics/readiness.
+
+A full Kit App Template checkout, launcher scripts, and redistributable runtime
+packaging should be added only after selecting and verifying a specific
+Omniverse Kit SDK/App Template version on the target Windows build machine.
 
 ## Starter Sample
 
@@ -51,6 +62,17 @@ Validate the Kit app/extension skeleton with:
 
 ```powershell
 python studio/nvidia-kit/tools/validate_kit_layout.py
+```
+
+The dependency-free tests for the Kit panels can run without a local Kit SDK:
+
+```powershell
+python -m pytest `
+  tests/test_nvidia_kit_panel.py `
+  tests/test_nvidia_kit_runtime_panels.py `
+  tests/test_nvidia_kit_backend_client.py `
+  tests/test_nvidia_kit_layout.py `
+  tests/test_nvidia_scene_plan_validator.py
 ```
 
 Launch against a local Kit SDK by passing the SDK root that contains `kit.exe`:
@@ -78,11 +100,15 @@ python studio/nvidia-kit/tools/export_scene_plan_usda.py `
   studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_scene_plan.usda
 ```
 
-The `edmg.ai_director` extension also includes a dependency-free backend client
-for the first API contracts:
+The `edmg.ai_director` extension includes a dependency-free backend client and a
+Kit UI panel for the first API contracts:
 
 - `GET /v1/nvidia/status`
 - `POST /v1/usd/scene-plan`
+- `POST /v1/nvidia/scene-plan`
+- `GET /v1/projects/{project_id}/nvidia/scene-plan`
+- `POST /v1/projects/{project_id}/nvidia/scene-plan`
+- `POST /v1/projects/{project_id}/nvidia/scene-plan/export`
 
 Smoke those contracts from the Kit workspace with:
 
@@ -103,4 +129,16 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
   --duration-s 60 `
   --bpm 128 `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_nim.usda
+```
+
+To exercise the same project-scoped path that the Kit panel uses, add a real
+Studio project id:
+
+```powershell
+python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
+  --backend-url http://127.0.0.1:8000 `
+  --project-id YOUR_PROJECT_ID `
+  --generate `
+  --fetch-persisted `
+  --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_project.usda
 ```

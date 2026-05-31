@@ -7,6 +7,7 @@ from edmg_studio_backend import app as backend_app
 from edmg_studio_backend.services import nvidia_diagnostics as diagnostics_module
 from edmg_studio_backend.services.nvidia_profile import nvidia_profile_status
 from edmg_studio_backend.services.nvidia_scene_plan import scene_plan_usda_text
+from edmg_studio_backend.store.projects import ProjectStore
 
 
 def test_nvidia_profile_status_masks_ngc_key(monkeypatch):
@@ -260,6 +261,117 @@ def test_nvidia_generate_scene_plan_route_calls_planner_and_returns_usda(monkeyp
     assert payload["usd_metadata"]["edmg:sceneCount"] == 2
     assert 'def Xform "scene_1"' in payload["usd_stage"]["text"]
     assert "planner-secret-token" not in repr(payload)
+
+
+def test_nvidia_generate_scene_plan_persists_existing_project(monkeypatch, tmp_path):
+    monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
+    monkeypatch.setenv("NGC_API_KEY", "persist-secret-token")
+    project_store = ProjectStore(tmp_path)
+    project = project_store.create("NVIDIA Persist Test")
+    monkeypatch.setattr(backend_app, "store", project_store)
+
+    class FakeAi:
+        def plan(self, payload):
+            return {
+                "provider": "openai_compat",
+                "model": "nvidia/test-nim",
+                "variants": [
+                    {
+                        "name": "Persisted RTX Pass",
+                        "scenes": [
+                            {
+                                "start_s": 0,
+                                "end_s": payload["duration_s"],
+                                "prompt": "saved neon stage",
+                                "camera": "wide",
+                                "motion": "beat pulse",
+                            },
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(backend_app, "ai", FakeAi())
+
+    response = backend_app.nvidia_generate_scene_plan(
+        {
+            "project_id": project.id,
+            "title": "Persisted NVIDIA Stage",
+            "duration_s": 18,
+            "bpm": 126,
+        }
+    )
+
+    saved = project_store.get(project.id)
+    assert response["project"]["persisted"] is True
+    assert saved is not None
+    persisted = saved.meta["last_nvidia_scene_plan"]
+    assert persisted["scene_plan"]["project_id"] == project.id
+    assert persisted["usd_metadata"]["edmg:sceneCount"] == 1
+    assert persisted["usd_stage"]["format"] == "usda"
+    assert "saved neon stage" in persisted["usd_stage"]["text"]
+    assert saved.meta["nvidia_scene_plan_history"][-1]["scene_count"] == 1
+    assert "persist-secret-token" not in repr(response)
+    assert "persist-secret-token" not in repr(saved.meta)
+
+
+def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_path):
+    monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
+    project_store = ProjectStore(tmp_path)
+    project = project_store.create("Project Scoped NVIDIA")
+    monkeypatch.setattr(backend_app, "store", project_store)
+
+    class FakeAi:
+        def plan(self, payload):
+            assert payload["title"] == "Project Scoped NVIDIA"
+            return {
+                "provider": "openai_compat",
+                "model": "nvidia/test-nim",
+                "variants": [
+                    {
+                        "name": "Project RTX Pass",
+                        "scenes": [
+                            {
+                                "start_s": 0,
+                                "end_s": 12,
+                                "prompt": "project route scene",
+                            }
+                        ],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(backend_app, "ai", FakeAi())
+
+    generated = backend_app.generate_project_nvidia_scene_plan(project.id, {"duration_s": 12})
+    fetched = backend_app.get_project_nvidia_scene_plan(project.id)
+    exported = backend_app.export_project_nvidia_scene_plan(project.id, {})
+
+    assert generated["project"]["persisted"] is True
+    assert fetched["ok"] is True
+    assert fetched["project_id"] == project.id
+    assert fetched["scene_plan"]["title"] == "Project Scoped NVIDIA"
+    assert fetched["scene_plan"]["scenes"][0]["prompt"] == "project route scene"
+    assert fetched["history"][-1]["scene_count"] == 1
+    assert exported["ok"] is True
+    assert exported["export"]["path"].startswith("outputs/nvidia/")
+    assert exported["export"]["path"].endswith(".usda")
+    assert (project_store.project_dir(project.id) / exported["export"]["path"]).exists()
+    saved = project_store.get(project.id)
+    assert saved is not None
+    assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
+
+
+def test_project_nvidia_scene_plan_read_404_when_missing(tmp_path, monkeypatch):
+    project_store = ProjectStore(tmp_path)
+    project = project_store.create("No NVIDIA Plan")
+    monkeypatch.setattr(backend_app, "store", project_store)
+
+    with pytest.raises(HTTPException) as exc_info:
+        backend_app.get_project_nvidia_scene_plan(project.id)
+
+    assert exc_info.value.status_code == 404
+    assert "NVIDIA scene plan not found" in str(exc_info.value.detail)
 
 
 def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():

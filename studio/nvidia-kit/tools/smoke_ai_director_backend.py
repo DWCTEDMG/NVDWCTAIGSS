@@ -29,6 +29,8 @@ def main() -> int:
     parser.add_argument("--style-prefs", default="RTX stage lighting, OpenUSD-ready camera moves, audio-reactive motion")
     parser.add_argument("--user-notes", default="Build a short NVIDIA Studio scene plan that can be previewed in Kit.")
     parser.add_argument("--max-scenes", type=int, default=4)
+    parser.add_argument("--project-id", default="", help="Existing Studio project id for generate-and-persist or fetch-persisted checks.")
+    parser.add_argument("--fetch-persisted", action="store_true", help="Fetch the persisted NVIDIA scene plan for --project-id.")
     args = parser.parse_args()
 
     client = EdmgBackendClient(base_url=args.backend_url)
@@ -38,9 +40,19 @@ def main() -> int:
     print(f"[kit-ai-director] NVIDIA mode: {nvidia.get('enabled')}")
     print(f"[kit-ai-director] NVIDIA profile: {nvidia.get('profile')}")
 
-    if args.generate:
+    if args.fetch_persisted:
+        if not args.project_id:
+            raise RuntimeError("--fetch-persisted requires --project-id")
+        response = client.project_scene_plan(args.project_id)
+        planner = response.get("planner") if isinstance(response.get("planner"), dict) else {}
+        print(f"[kit-ai-director] Persisted project: {response.get('project_id')}")
+        print(f"[kit-ai-director] Saved at: {response.get('saved_at') or 'unknown'}")
+        print(f"[kit-ai-director] Planner: {planner.get('provider')} {planner.get('model') or ''}".rstrip())
+        stage = response.get("usd_stage") if isinstance(response.get("usd_stage"), dict) else {}
+        usda_text = str(stage.get("text") or "")
+    elif args.generate:
         request_payload = {
-            "project_id": "kit-smoke-generated",
+            "project_id": args.project_id or "kit-smoke-generated",
             "title": args.title,
             "duration_s": args.duration_s,
             "bpm": args.bpm,
@@ -49,9 +61,15 @@ def main() -> int:
             "num_variants": 1,
             "max_scenes": args.max_scenes,
         }
-        response = client.generate_scene_plan(request_payload)
+        if args.project_id:
+            response = client.generate_project_scene_plan(args.project_id, request_payload)
+        else:
+            response = client.generate_scene_plan(request_payload)
         planner = response.get("planner") if isinstance(response.get("planner"), dict) else {}
         print(f"[kit-ai-director] Planner: {planner.get('provider')} {planner.get('model') or ''}".rstrip())
+        project_status = response.get("project") if isinstance(response.get("project"), dict) else {}
+        if project_status:
+            print(f"[kit-ai-director] Persisted: {project_status.get('persisted')} {project_status.get('project_id') or project_status.get('reason') or ''}".rstrip())
         stage = response.get("usd_stage") if isinstance(response.get("usd_stage"), dict) else {}
         usda_text = str(stage.get("text") or "")
     else:

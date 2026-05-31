@@ -195,4 +195,87 @@ describe("Workspace page", () => {
     expect((await screen.findAllByText(/No speech detected after VAD/i)).length).toBeGreaterThan(0);
     expect(await screen.findByText("No speech after VAD")).toBeTruthy();
   });
+
+  it("surfaces the persisted NVIDIA scene plan and can request a project-scoped refresh", async () => {
+    window.localStorage.clear();
+    installEdmgBridge();
+    const fetchMock = installFetchMock({
+      "/v1/projects": { projects: [{ id: "p1", name: "NVIDIA Project" }] },
+      "/v1/projects/p1": {
+        project: {
+          id: "p1",
+          name: "NVIDIA Project",
+          meta: {
+            analysis: { features: { duration_s: 32, bpm: 128 }, transcript: { text: "Neon chorus." } },
+            last_plan: {
+              variants: [
+                {
+                  name: "Variant 1",
+                  scenes: [{ name: "Neon pass", start_s: 0, end_s: 16, prompt: "RTX neon stage." }],
+                },
+              ],
+            },
+          },
+        },
+      },
+      "/v1/projects/p1/assets": { assets: { refs: [] } },
+      "/v1/projects/p1/nvidia/scene-plan": {
+        ok: true,
+        project_id: "p1",
+        saved_at: "2026-05-31 12:00:00",
+        scene_plan: { provider: "nvidia-profile:openai_compat:nvidia/test", scenes: [{ id: "a" }, { id: "b" }] },
+        planner: { provider: "openai_compat", model: "nvidia/test" },
+        usd_metadata: { "edmg:sceneCount": 2 },
+        usd_stage: { format: "usda", text: "#usda 1.0\n" },
+      },
+      "POST /v1/projects/p1/nvidia/scene-plan": {
+        ok: true,
+        project: { persisted: true, project_id: "p1" },
+        scene_plan: { provider: "nvidia-profile:openai_compat:nvidia/test", scenes: [{ id: "a" }, { id: "b" }] },
+        planner: { provider: "openai_compat", model: "nvidia/test" },
+        usd_metadata: { "edmg:sceneCount": 2 },
+        usd_stage: { format: "usda", text: "#usda 1.0\n" },
+      },
+      "POST /v1/projects/p1/nvidia/scene-plan/export": {
+        ok: true,
+        export: { path: "outputs/nvidia/nvidia_project_20260531_120000.usda", scene_count: 2 },
+      },
+      "/v1/projects/p1/creative_direction*": {
+        creative_direction: {
+          status: "NVIDIA project direction.",
+          export_text: "",
+          scenes: [],
+          metrics: { energy: 0, bass: 0, mid: 0, treble: 0, duration_s: 32, source: "analysis" },
+          missing: [],
+          waveform: [],
+          motifs: [],
+          transcript_text: "Neon chorus.",
+          transcript_summary: "Neon chorus.",
+          preset: "cinematic",
+          sensitivity: 1,
+          provider_mode: "local",
+          scene_source: "plan",
+          ready: true,
+        },
+      },
+    });
+
+    renderWithStudio(<Workspace backendUrl="http://127.0.0.1:7863" config={{}} />);
+
+    expect(await screen.findByText("NVIDIA / OpenUSD handoff")).toBeTruthy();
+    expect(await screen.findByText("2 USD scenes")).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Generate NVIDIA plan" }));
+
+    expect(
+      await screen.findByText("NVIDIA scene plan saved to the active project."),
+    ).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Export USDA" }));
+    expect(await screen.findByText("NVIDIA USDA exported to project outputs.")).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).includes("/v1/projects/p1/nvidia/scene-plan") && String(init?.method || "GET").toUpperCase() === "POST",
+    )).toBe(true);
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input).includes("/v1/projects/p1/nvidia/scene-plan/export") && String(init?.method || "GET").toUpperCase() === "POST",
+    )).toBe(true);
+  });
 });

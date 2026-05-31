@@ -192,6 +192,7 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
   const [assets, setAssets] = useState<any>(null);
   const [analysis, setAnalysis] = useState<any>(null);
   const [plan, setPlan] = useState<any>(null);
+  const [nvidiaScenePlan, setNvidiaScenePlan] = useState<any>(null);
 
   const [planMode, setPlanMode] = useState<"auto" | "ai" | "local">("auto");
 
@@ -219,6 +220,7 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
       setAssets(null);
       setAnalysis(null);
       setPlan(null);
+      setNvidiaScenePlan(null);
     }
   };
 
@@ -238,6 +240,13 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
     } catch {
       setAssets(null);
     }
+    try {
+      const nvidiaPlan = await apiGet(`/v1/projects/${encodeURIComponent(id)}/nvidia/scene-plan`);
+      setNvidiaScenePlan(nvidiaPlan);
+    } catch {
+      const saved = d.project?.meta?.last_nvidia_scene_plan || null;
+      setNvidiaScenePlan(saved ? { ok: true, project_id: id, ...saved } : null);
+    }
   };
 
   useEffect(() => { refreshProjects().catch(() => {}); }, []);
@@ -250,6 +259,7 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
       setAssets(null);
       setAnalysis(null);
       setPlan(null);
+      setNvidiaScenePlan(null);
     }
   }, [projectId, projectsReady]);
   // Workspace stays focused on project + timeline. Rendering lives in the Render page.
@@ -339,6 +349,55 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
     } catch (e: any) { setErr(String(e)); }
   };
 
+  const generateNvidiaScenePlan = async () => {
+    if (!projectId) return;
+    setErr(null); setInfo(null);
+    try {
+      const sceneCount = variantScenes.length || analysisSections.length || 6;
+      const d = await runOperation(
+        {
+          label: "Generating NVIDIA scene plan",
+          detail: "NIM/OpenAI-compatible planner to USD scene-plan metadata.",
+          successDetail: "NVIDIA scene plan saved to the active project.",
+        },
+        () =>
+          apiPost(`/v1/projects/${encodeURIComponent(projectId)}/nvidia/scene-plan`, {
+            title: project?.name || "EDMG NVIDIA Scene Plan",
+            duration_s: durationS || 60,
+            bpm: analysisBpm || undefined,
+            style_prefs: "RTX stage lighting, OpenUSD camera moves, audio-reactive motion",
+            user_notes: variantScenes[0]?.prompt || analysisSummary,
+            max_scenes: Math.max(1, Math.min(12, sceneCount)),
+            num_variants: 1,
+          }),
+      );
+      setNvidiaScenePlan(d);
+      setInfo(d);
+      await refreshProject(projectId);
+    } catch (e: any) {
+      setErr(String(e));
+    }
+  };
+
+  const exportNvidiaUsda = async () => {
+    if (!projectId || !nvidiaScenePlan?.usd_stage?.text) return;
+    setErr(null); setInfo(null);
+    try {
+      const d = await runOperation(
+        {
+          label: "Exporting NVIDIA USDA",
+          detail: "Writing the saved NVIDIA scene plan into project outputs.",
+          successDetail: "NVIDIA USDA exported to project outputs.",
+        },
+        () => apiPost(`/v1/projects/${encodeURIComponent(projectId)}/nvidia/scene-plan/export`, {}),
+      );
+      setInfo(d);
+      await refreshProject(projectId);
+    } catch (e: any) {
+      setErr(String(e));
+    }
+  };
+
   const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/file?path=${encodeURIComponent(rel)}`;
 
   const variantScenes = plan?.variants?.[selectedVariant]?.scenes || [];
@@ -366,6 +425,9 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
   const referenceProgress = refAssets.length ? Math.min(100, 30 + refAssets.length * 22) : 0;
   const planProgress = storyboardReady ? 100 : variantCount ? 70 : 0;
   const handoffProgress = reactiveAppliedAt ? 100 : plannerImportedAt ? 62 : 0;
+  const nvidiaSceneCount = Number(nvidiaScenePlan?.usd_metadata?.["edmg:sceneCount"] || nvidiaScenePlan?.scene_plan?.scenes?.length || 0);
+  const nvidiaSavedAt = String(nvidiaScenePlan?.saved_at || "");
+  const nvidiaProvider = String(nvidiaScenePlan?.scene_plan?.provider || nvidiaScenePlan?.planner?.provider || "");
   const analysisActionLabel = audioFile ? "Upload + Analyze" : "Analyze + Transcribe";
   const transcriptStatusLabel = transcriptReady
     ? "Transcript ready"
@@ -1049,6 +1111,30 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
               <div className="workspace-handoffCard">
                 <div className="workspace-handoffLabel">Reactive handoff</div>
                 <strong>{reactiveAppliedAt ? `${reactiveSectionCount} sections applied` : "Not synced yet"}</strong>
+              </div>
+              <div className="workspace-handoffCard">
+                <div className="workspace-handoffLabel">NVIDIA scene plan</div>
+                <strong>{nvidiaSceneCount ? `${nvidiaSceneCount} USD scenes` : "Not generated yet"}</strong>
+              </div>
+            </div>
+            <div className="workspace-inlineDetails" style={{ marginTop: 12, padding: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 800 }}>NVIDIA / OpenUSD handoff</div>
+                  <div className="small">
+                    {nvidiaSceneCount
+                      ? `${nvidiaProvider || "NVIDIA profile"}${nvidiaSavedAt ? ` • saved ${nvidiaSavedAt}` : ""}`
+                      : "Generate a project-scoped scene plan for Kit and OpenUSD workflows."}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <button className="secondary" onClick={() => void generateNvidiaScenePlan()} disabled={!projectId}>
+                    Generate NVIDIA plan
+                  </button>
+                  <button className="secondary" onClick={() => void exportNvidiaUsda()} disabled={!nvidiaScenePlan?.usd_stage?.text}>
+                    Export USDA
+                  </button>
+                </div>
               </div>
             </div>
             <div className="row workspace-actionRow" style={{ gap: 10, flexWrap: "wrap" }}>

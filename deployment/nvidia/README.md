@@ -100,6 +100,20 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_nim.usda
 ```
 
+When the generate request includes an existing Studio `project_id`, the backend
+also saves `last_nvidia_scene_plan` and a capped `nvidia_scene_plan_history`
+entry in that project metadata. The smoke command uses a standalone sample ID,
+so it remains a non-mutating contract check by default.
+Use `--project-id YOUR_PROJECT_ID` to exercise the project-scoped route, then
+call `/v1/projects/{project_id}/nvidia/scene-plan/export` or use the Workspace
+Handoff button to write the USDA preview into `outputs/nvidia/`.
+The Omniverse Kit `edmg.ai_director` panel uses those same routes for
+project-scoped fetch, generate, export, and OpenUSD preview actions.
+The Kit `edmg.render_queue` panel reads `/v1/worker/status` and
+`/v1/nvidia/diagnostics` from the same backend URL, so it is a quick UI smoke
+for local worker plus NVIDIA readiness before a dedicated RTX render worker is
+added.
+
 ## Environment knobs
 
 ```powershell
@@ -143,7 +157,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
 1. Start the existing backend with this override.
 2. Confirm `/health` returns the configured OpenAI-compatible provider.
 3. Send a small `/v1/plan` request through the current AI service contract.
-4. Add a separate Riva/ASR adapter only after the planning path is stable.
+4. Send `/v1/nvidia/scene-plan` with a real Studio `project_id` and confirm
+   `last_nvidia_scene_plan` is saved in that project metadata.
+5. Launch the Kit app and use the AI Director panel to fetch, regenerate,
+   export, and open the same project-scoped USDA preview.
+6. Add a separate Riva/ASR adapter only after the planning path is stable.
 
 ## Official image policy
 
