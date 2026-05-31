@@ -2337,6 +2337,41 @@ def nvidia_diagnostics_route():
     return {"ok": True, "nvidia": nvidia_diagnostics()}
 
 
+@app.get("/v1/nvidia/services")
+def nvidia_services_route():
+    diagnostics = nvidia_diagnostics()
+    return {
+        "ok": True,
+        "services": diagnostics.get("services", {}),
+        "readiness": diagnostics.get("readiness", {}),
+        "profile": diagnostics.get("profile", {}),
+    }
+
+
+@app.get("/v1/nvidia/services/{service_id}/status")
+def nvidia_service_status_route(service_id: str):
+    normalized = str(service_id or "").strip().lower().replace("-", "_")
+    diagnostics = nvidia_diagnostics()
+    services = diagnostics.get("services", {}) if isinstance(diagnostics.get("services"), dict) else {}
+    aliases = {
+        "nim_llm": "nim",
+        "nvidia_nim": "nim",
+        "nvidia_riva": "riva",
+        "audio_2_face": "audio2face",
+        "a2f": "audio2face",
+    }
+    normalized = aliases.get(normalized, normalized)
+    service = services.get(normalized)
+    if not isinstance(service, dict):
+        raise HTTPException(404, f"NVIDIA service '{service_id}' was not found")
+    return {
+        "ok": True,
+        "service_id": normalized,
+        "service": service,
+        "profile": diagnostics.get("profile", {}),
+    }
+
+
 @app.get("/v1/nvidia/riva/status")
 def nvidia_riva_status_route():
     return {"ok": True, "riva": riva_asr_status(), "nvidia": nvidia_profile_status()}

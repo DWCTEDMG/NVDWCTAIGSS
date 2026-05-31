@@ -105,6 +105,50 @@ def test_nvidia_diagnostics_route_masks_secret_and_reports_reachability(monkeypa
     assert "diag-secret-token" not in repr(payload)
 
 
+def test_nvidia_service_status_routes_report_optional_services(monkeypatch):
+    monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
+    monkeypatch.setenv("NGC_API_KEY", "service-secret-token")
+    monkeypatch.setenv("EDMG_NVIDIA_NIM_URL", "http://nim.local:8000")
+    monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/model")
+    monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_URL", "http://audio2face.local:8011")
+    monkeypatch.setenv("EDMG_NVIDIA_TRITON_URL", "http://triton.local:8000")
+    monkeypatch.setenv("EDMG_NVIDIA_TRITON_MODEL", "edmg_ensemble")
+
+    monkeypatch.setattr(
+        diagnostics_module,
+        "_gpu_status",
+        lambda: {"available": True, "ok": True, "gpus": [{"name": "Test RTX"}], "error": ""},
+    )
+    monkeypatch.setattr(
+        diagnostics_module,
+        "_docker_status",
+        lambda: {"available": True, "ok": True, "version": "Docker test", "nvidia_runtime": True, "error": ""},
+    )
+    monkeypatch.setattr(
+        diagnostics_module,
+        "_http_probe",
+        lambda url, **_kwargs: {"configured": True, "reachable": True, "url_seen": url},
+    )
+    monkeypatch.setattr(
+        diagnostics_module,
+        "_tcp_probe",
+        lambda endpoint, **_kwargs: {"configured": True, "reachable": True, "endpoint_seen": endpoint},
+    )
+
+    services_payload = backend_app.nvidia_services_route()
+    audio2face_payload = backend_app.nvidia_service_status_route("a2f")
+    triton_payload = backend_app.nvidia_service_status_route("triton")
+
+    assert any(getattr(route, "path", None) == "/v1/nvidia/services" for route in backend_app.app.routes)
+    assert services_payload["ok"] is True
+    assert services_payload["services"]["audio2face"]["probe"]["url_seen"] == "http://audio2face.local:8011"
+    assert audio2face_payload["service_id"] == "audio2face"
+    assert audio2face_payload["service"]["configured"] is True
+    assert triton_payload["service"]["model"] == "edmg_ensemble"
+    assert "service-secret-token" not in repr(services_payload)
+    assert "service-secret-token" not in repr(audio2face_payload)
+
+
 def test_nvidia_diagnostics_readiness_flags_placeholder_nim(monkeypatch):
     monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
     monkeypatch.delenv("NGC_API_KEY", raising=False)

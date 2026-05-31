@@ -164,6 +164,8 @@ From the backend:
 ```powershell
 curl http://127.0.0.1:8000/v1/nvidia/status
 curl http://127.0.0.1:8000/v1/nvidia/diagnostics
+curl http://127.0.0.1:8000/v1/nvidia/services
+curl http://127.0.0.1:8000/v1/nvidia/services/audio2face/status
 curl http://127.0.0.1:8000/v1/config
 ```
 
@@ -176,6 +178,9 @@ From the desktop app:
   reachability without printing key values.
 - `/v1/nvidia/riva/status` reports the configured Riva ASR URI, language,
   model, SSL flag, and fallback behavior without secrets.
+- `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
+  direct no-secret status checks for NIM, Riva, Omniverse, NeMo, Triton,
+  Audio2Face, ACE, and Cosmos.
 - Dashboard and Setup page: NVIDIA Runtime Readiness shows a single ready,
   partial, blocked, or disabled state plus the next actions needed for the
   official local stack.

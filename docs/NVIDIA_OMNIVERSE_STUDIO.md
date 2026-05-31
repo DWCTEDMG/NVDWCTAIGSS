@@ -142,6 +142,9 @@ Current local lane status:
   `/v1/projects/{project_id}/nvidia/riva/transcribe` add the first Riva ASR
   service-profile adapter while keeping faster-whisper as the default fallback
   unless Riva ASR is explicitly enabled.
+- `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
+  direct no-secret status payloads for configured optional NVIDIA services such
+  as Triton, Audio2Face/ACE, Cosmos, NeMo, Omniverse, NIM, and Riva.
 - `/v1/projects/{project_id}/nvidia/render-job` builds a project-scoped
   Omniverse Kit RTX render-job JSON handoff from the saved NVIDIA scene plan and
   writes it into `outputs/nvidia/render_jobs/`.
