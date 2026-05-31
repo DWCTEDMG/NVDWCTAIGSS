@@ -196,6 +196,20 @@ Or run the PowerShell smoke script:
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/smoke_nvidia_backend.ps1
 ```
 
+With the Kit app running in `-AutoRunRenderWorker` mode, run the full RTX queue
+handoff smoke:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/smoke_nvidia_kit_render_job.ps1 `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+```
+
+That command exports the saved NVIDIA scene plan to USDA, writes a render-job
+JSON file under the project `outputs/nvidia/render_jobs/` folder, waits for Kit
+to report completion, and validates the returned MP4 metadata.
+
 The Kit workspace has an equivalent AI Director smoke:
 
 ```powershell

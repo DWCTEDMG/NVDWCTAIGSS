@@ -88,6 +88,17 @@ scene-plan-to-USDA contract:
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/smoke_nvidia_backend.ps1
 ```
 
+With Kit already running through `start_nvidia_runtime_local.ps1` or
+`launch_edmg_kit.ps1 -AutoRunRenderWorker`, smoke the actual RTX render-job
+handoff with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/smoke_nvidia_kit_render_job.ps1
+```
+
+The script can select the first project returned by `/v1/projects`, or you can
+pin one with `-ProjectId`.
+
 To prove the Kit-facing generated-planner path, run the AI Director smoke with
 `--generate`. With a reachable NIM-compatible endpoint it uses that provider;
 otherwise the backend reports or falls back according to the configured AI
