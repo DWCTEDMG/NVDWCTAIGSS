@@ -169,7 +169,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
   with the NVIDIA env file loaded, while leaving NIM free to use host port
   `8001`. It reuses an existing listener, otherwise it uses or bootstraps
   `studio/edmg-studio/python_backend/.venv` from Python 3.10-3.13 so the backend
-  does not accidentally start with unsupported Python 3.14.
+  does not accidentally start with unsupported Python 3.14. If port `8000` is
+  already occupied by a backend that is not running with NVIDIA mode enabled,
+  the helper stops with a clear message unless you pass `-StopExisting` or
+  explicitly allow reuse with `-ReuseExisting`.
 
 ## First validation target
 

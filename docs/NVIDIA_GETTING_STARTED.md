@@ -76,7 +76,10 @@ file and never prints the key value.
 The local backend helper uses `studio/edmg-studio/python_backend/.venv` when it
 is ready, or bootstraps that virtual environment from an installed Python
 3.10-3.13 interpreter. The backend package declares `<3.14`, so do not launch
-the backend directly with Python 3.14.
+the backend directly with Python 3.14. If port `8000` is already held by a
+backend that was started without NVIDIA mode, the helper refuses to reuse it;
+rerun with `-StopExisting` to replace that process or `-ReuseExisting` only when
+you intentionally want to keep it.
 
 ## 4. Start the NVIDIA-aware stack
 

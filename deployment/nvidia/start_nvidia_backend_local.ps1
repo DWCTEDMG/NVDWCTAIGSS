@@ -3,7 +3,9 @@ param(
   [string]$HostName = "127.0.0.1",
   [int]$Port = 8000,
   [string]$PythonExe = "",
-  [switch]$NoBootstrap
+  [switch]$NoBootstrap,
+  [switch]$ReuseExisting,
+  [switch]$StopExisting
 )
 
 Set-StrictMode -Version Latest
@@ -135,11 +137,33 @@ function Initialize-BackendVenv {
   }
 }
 
+function Get-ExistingBackendNvidiaEnabled {
+  param([string]$Url)
+  try {
+    $status = Invoke-RestMethod -Uri "$Url/v1/nvidia/status" -TimeoutSec 3
+    return [bool]$status.nvidia.enabled
+  } catch {
+    return $false
+  }
+}
+
 $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($null -ne $existing) {
-  Write-Step "Port $Port is already listening on PID $($existing.OwningProcess). Reusing that backend."
-  Write-Step "Health: http://$HostName`:$Port/health"
-  exit 0
+  $existingUrl = "http://$HostName`:$Port"
+  $existingNvidiaEnabled = Get-ExistingBackendNvidiaEnabled -Url $existingUrl
+  if ($existingNvidiaEnabled -or $ReuseExisting) {
+    $modeText = if ($existingNvidiaEnabled) { "NVIDIA-enabled" } else { "non-NVIDIA" }
+    Write-Step "Port $Port is already listening on PID $($existing.OwningProcess). Reusing $modeText backend."
+    Write-Step "Health: $existingUrl/health"
+    exit 0
+  }
+  if ($StopExisting) {
+    Write-Step "Stopping existing non-NVIDIA listener on port $Port, PID $($existing.OwningProcess)."
+    Stop-Process -Id $existing.OwningProcess -Force
+    Start-Sleep -Seconds 2
+  } else {
+    throw "Port $Port is already listening on PID $($existing.OwningProcess), but NVIDIA mode is not enabled. Stop that process, rerun with -StopExisting, or pass -ReuseExisting to keep it."
+  }
 }
 
 if ([string]::IsNullOrWhiteSpace($PythonExe)) {
