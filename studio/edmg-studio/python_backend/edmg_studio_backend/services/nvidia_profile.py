@@ -31,9 +31,15 @@ def nvidia_profile_status() -> dict[str, Any]:
     """Return NVIDIA service-profile configuration without exposing secrets."""
 
     nim_url = _env("EDMG_NVIDIA_NIM_URL") or _env("EDMG_AI_OPENAI_COMPAT_BASE_URL")
-    riva_url = _env("EDMG_RIVA_URL")
+    riva_url = _env("EDMG_NVIDIA_RIVA_URL") or _env("EDMG_RIVA_URL")
     omniverse_url = _env("EDMG_NVIDIA_OMNIVERSE_URL")
     ngc_api_key = _env("NGC_API_KEY")
+    asr_provider = _env("EDMG_AI_ASR_PROVIDER").lower()
+    riva_asr_enabled = (
+        asr_provider in {"riva", "nvidia_riva"}
+        or _truthy(_env("EDMG_NVIDIA_RIVA_ASR"))
+        or _truthy(_env("EDMG_RIVA_ASR"))
+    )
 
     return {
         "enabled": _truthy(_env("EDMG_NVIDIA_MODE", "0")),
@@ -50,6 +56,12 @@ def nvidia_profile_status() -> dict[str, Any]:
             "riva": {
                 "base_url": riva_url,
                 "configured": _configured(riva_url),
+                "asr_enabled": riva_asr_enabled,
+                "language_code": _env("EDMG_NVIDIA_RIVA_LANGUAGE_CODE", "en-US") or "en-US",
+                "model": _env("EDMG_NVIDIA_RIVA_MODEL"),
+                "ssl": _truthy(_env("EDMG_NVIDIA_RIVA_USE_SSL")),
+                "fallback_enabled": not _env("EDMG_NVIDIA_RIVA_ASR_FALLBACK")
+                or _truthy(_env("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "1")),
             },
             "omniverse": {
                 "base_url": omniverse_url,

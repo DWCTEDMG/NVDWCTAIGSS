@@ -17,6 +17,8 @@ def test_nvidia_profile_status_masks_ngc_key(monkeypatch):
     monkeypatch.setenv("EDMG_NVIDIA_NIM_URL", "http://nim.local:8000")
     monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/model")
     monkeypatch.setenv("EDMG_RIVA_URL", "http://riva.local:50051")
+    monkeypatch.setenv("EDMG_NVIDIA_RIVA_ASR", "1")
+    monkeypatch.setenv("EDMG_NVIDIA_RIVA_LANGUAGE_CODE", "en-US")
     monkeypatch.setenv("EDMG_NVIDIA_TRITON_URL", "http://triton.local:8000")
     monkeypatch.setenv("EDMG_NVIDIA_TRITON_MODEL", "edmg_plan_ensemble")
 
@@ -27,6 +29,9 @@ def test_nvidia_profile_status_masks_ngc_key(monkeypatch):
     assert status["credentials"]["ngc_api_key_configured"] is True
     assert status["services"]["nim"]["base_url"] == "http://nim.local:8000"
     assert status["services"]["nim"]["model"] == "nvidia/model"
+    assert status["services"]["riva"]["configured"] is True
+    assert status["services"]["riva"]["asr_enabled"] is True
+    assert status["services"]["riva"]["language_code"] == "en-US"
     assert status["services"]["triton"]["configured"] is True
     assert status["services"]["triton"]["model"] == "edmg_plan_ensemble"
     assert "secret-ngc-token" not in repr(status)
@@ -75,9 +80,13 @@ def test_nvidia_diagnostics_route_masks_secret_and_reports_reachability(monkeypa
     def fake_http_probe(url: str, **_kwargs):
         return {"configured": True, "reachable": True, "status_code": 200, "models_url_seen": url}
 
+    def fake_tcp_probe(endpoint: str, **_kwargs):
+        return {"configured": True, "reachable": True, "endpoint_seen": endpoint}
+
     monkeypatch.setattr(diagnostics_module, "_gpu_status", fake_gpu_status)
     monkeypatch.setattr(diagnostics_module, "_docker_status", fake_docker_status)
     monkeypatch.setattr(diagnostics_module, "_http_probe", fake_http_probe)
+    monkeypatch.setattr(diagnostics_module, "_tcp_probe", fake_tcp_probe)
 
     assert any(getattr(route, "path", None) == "/v1/nvidia/diagnostics" for route in backend_app.app.routes)
     payload = backend_app.nvidia_diagnostics_route()
@@ -87,6 +96,7 @@ def test_nvidia_diagnostics_route_masks_secret_and_reports_reachability(monkeypa
     assert payload["nvidia"]["host"]["docker"]["nvidia_runtime"] is True
     assert payload["nvidia"]["services"]["nim"]["probe"]["reachable"] is True
     assert payload["nvidia"]["services"]["nim"]["probe"]["models_url_seen"] == "http://nim.local:8000/v1/models"
+    assert payload["nvidia"]["services"]["riva"]["probe"]["protocol"] == "grpc"
     assert payload["nvidia"]["readiness"]["level"] == "ready"
     assert payload["nvidia"]["readiness"]["planner_ready"] is True
     assert payload["nvidia"]["readiness"]["official_local_ready"] is True

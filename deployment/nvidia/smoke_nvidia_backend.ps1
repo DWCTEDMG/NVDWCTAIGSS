@@ -35,6 +35,7 @@ Write-Step "NVIDIA profile: $($profile.profile)"
 Write-Step "NGC key configured: $($profile.credentials.ngc_api_key_configured)"
 Write-Step "NIM configured: $($profile.services.nim.configured)"
 Write-Step "Riva configured: $($profile.services.riva.configured)"
+Write-Step "Riva ASR enabled: $($profile.services.riva.asr_enabled)"
 Write-Step "Omniverse configured: $($profile.services.omniverse.configured)"
 
 $diag = $diagnostics.nvidia
@@ -44,6 +45,7 @@ if ($diag.host.gpu.gpus.Count -gt 0) {
 }
 Write-Step "Docker NVIDIA runtime: $($diag.host.docker.nvidia_runtime)"
 Write-Step "NIM endpoint reachable: $($diag.services.nim.probe.reachable)"
+Write-Step "Riva endpoint reachable: $($diag.services.riva.probe.reachable)"
 if ($null -ne $diag.readiness) {
   Write-Step "Readiness: $($diag.readiness.level) - $($diag.readiness.summary)"
   Write-Step "Planner ready: $($diag.readiness.planner_ready)"

@@ -92,6 +92,7 @@ from .services.render_settings import (
 )
 from .services.nvidia_profile import nvidia_profile_status
 from .services.nvidia_diagnostics import nvidia_diagnostics
+from .services.nvidia_riva import RivaTranscriptionError, riva_asr_status, transcribe_with_riva
 from .services.nvidia_scene_plan import (
     normalize_scene_plan,
     plan_response_to_scene_plan,
@@ -2335,6 +2336,11 @@ def nvidia_diagnostics_route():
     return {"ok": True, "nvidia": nvidia_diagnostics()}
 
 
+@app.get("/v1/nvidia/riva/status")
+def nvidia_riva_status_route():
+    return {"ok": True, "riva": riva_asr_status(), "nvidia": nvidia_profile_status()}
+
+
 def _persist_nvidia_scene_plan(
     project_id: str,
     *,
@@ -2662,6 +2668,47 @@ def export_project_nvidia_scene_plan(project_id: str, _payload: dict[str, Any] |
         "ok": True,
         "project_id": project_id,
         "export": export_entry,
+    }
+
+
+@app.post("/v1/projects/{project_id}/nvidia/riva/transcribe")
+def transcribe_project_audio_with_riva(project_id: str, payload: dict[str, Any] | None = None):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    audio_meta = proj.meta.get("audio") if isinstance(proj.meta, dict) else None
+    if not isinstance(audio_meta, dict) or not audio_meta.get("filename"):
+        raise HTTPException(400, "No audio uploaded")
+
+    audio_path = store.project_dir(project_id) / "assets" / "audio" / str(audio_meta["filename"])
+    if not audio_path.exists() or not audio_path.is_file():
+        raise HTTPException(404, "Audio file missing on disk")
+
+    language_code = ""
+    if isinstance(payload, dict):
+        language_code = str(payload.get("language_code") or "").strip()
+    try:
+        transcript = transcribe_with_riva(
+            audio_path,
+            language_code=language_code or None,
+            require_enabled=False,
+        )
+    except RivaTranscriptionError as exc:
+        raise HTTPException(502, {"message": "NVIDIA Riva transcription failed", "error": str(exc)}) from exc
+
+    saved_at = time.strftime("%Y-%m-%d %H:%M:%S")
+    proj.meta["last_nvidia_riva_transcript"] = {
+        "saved_at": saved_at,
+        "audio": audio_meta,
+        "transcript": transcript,
+    }
+    store.save(proj)
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "saved_at": saved_at,
+        "transcript": transcript,
+        "riva": riva_asr_status(),
     }
 
 

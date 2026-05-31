@@ -44,6 +44,10 @@ EDMG_AI_PROVIDER=openai_compat
 EDMG_NVIDIA_NIM_URL=http://host.docker.internal:8001
 EDMG_AI_OPENAI_COMPAT_BASE_URL=http://host.docker.internal:8001/v1
 EDMG_AI_OPENAI_COMPAT_MODEL=meta/llama-3.2-1b-instruct
+EDMG_NVIDIA_RIVA_URL=host.docker.internal:50051
+EDMG_NVIDIA_RIVA_ASR=0
+EDMG_NVIDIA_RIVA_LANGUAGE_CODE=en-US
+EDMG_NVIDIA_RIVA_ASR_FALLBACK=1
 EDMG_NVIDIA_OMNIVERSE_URL=
 NGC_API_KEY=
 EDMG_AI_OPENAI_COMPAT_API_KEY=
@@ -129,6 +133,8 @@ From the desktop app:
 - Settings page: Live AI / NVIDIA Status shows NGC, NIM, Riva, and Omniverse
   configuration state plus host GPU, Docker NVIDIA runtime, and NIM endpoint
   reachability without printing key values.
+- `/v1/nvidia/riva/status` reports the configured Riva ASR URI, language,
+  model, SSL flag, and fallback behavior without secrets.
 - Dashboard and Setup page: NVIDIA Runtime Readiness shows a single ready,
   partial, blocked, or disabled state plus the next actions needed for the
   official local stack.
@@ -186,6 +192,18 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
 The Studio Workspace Handoff section also shows the saved NVIDIA/OpenUSD plan
 and can export the persisted USDA artifact into the project's `outputs/nvidia/`
 folder.
+
+If Riva is running and you want it to handle project transcription, set
+`EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva`. The backend will try
+Riva first through the NVIDIA Riva Python client, then fall back to the existing
+local faster-whisper path when `EDMG_NVIDIA_RIVA_ASR_FALLBACK=1`. You can also
+call the direct project route without changing the default ASR provider:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/riva/transcribe `
+  -H "Content-Type: application/json" `
+  -d '{"language_code":"en-US"}'
+```
 
 ## 7. Launch the Kit app against a local Kit SDK
 

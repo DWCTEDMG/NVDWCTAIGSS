@@ -113,6 +113,12 @@ The Kit `edmg.render_queue` panel reads `/v1/worker/status` and
 `/v1/nvidia/diagnostics` from the same backend URL, so it is a quick UI smoke
 for local worker plus NVIDIA readiness before a dedicated RTX render worker is
 added.
+Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
+`/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
+`EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend
+environment has the NVIDIA Riva Python client installed and the Riva gRPC URI is
+reachable; otherwise the normal Studio analysis path keeps using the existing
+local ASR fallback.
 
 ## Environment knobs
 
@@ -121,6 +127,8 @@ $env:EDMG_AI_PROVIDER="openai_compat"
 $env:EDMG_NVIDIA_NIM_URL="http://host.docker.internal:8001"
 $env:EDMG_AI_OPENAI_COMPAT_BASE_URL="http://host.docker.internal:8001/v1"
 $env:EDMG_AI_OPENAI_COMPAT_MODEL="your-nim-model"
+$env:EDMG_NVIDIA_RIVA_URL="host.docker.internal:50051"
+$env:EDMG_NVIDIA_RIVA_ASR="0"
 $env:EDMG_NVIDIA_MODE="1"
 $env:EDMG_NVIDIA_PROFILE="omniverse"
 ```
@@ -159,9 +167,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
 3. Send a small `/v1/plan` request through the current AI service contract.
 4. Send `/v1/nvidia/scene-plan` with a real Studio `project_id` and confirm
    `last_nvidia_scene_plan` is saved in that project metadata.
-5. Launch the Kit app and use the AI Director panel to fetch, regenerate,
+5. Confirm `/v1/nvidia/riva/status` reports the expected Riva URI and enable
+   `EDMG_NVIDIA_RIVA_ASR=1` only after the Riva Python client and service are
+   available.
+6. Launch the Kit app and use the AI Director panel to fetch, regenerate,
    export, and open the same project-scoped USDA preview.
-6. Add a separate Riva/ASR adapter only after the planning path is stable.
+7. Wire Audio2Face/ACE after planner, USD, and speech paths are stable.
 
 ## Official image policy
 

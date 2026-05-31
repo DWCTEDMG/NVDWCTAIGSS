@@ -138,6 +138,10 @@ Starter branch status:
   generate-and-fetch path for the persisted NVIDIA scene plan.
 - `/v1/projects/{project_id}/nvidia/scene-plan/export` writes the persisted USDA
   preview into `outputs/nvidia/` and registers it in project exports.
+- `/v1/nvidia/riva/status` and
+  `/v1/projects/{project_id}/nvidia/riva/transcribe` add the first Riva ASR
+  service-profile adapter while keeping faster-whisper as the default fallback
+  unless Riva ASR is explicitly enabled.
 - `/v1/usd/scene-plan` validates a scene plan and returns normalized USD-style
   metadata keys plus a generated USDA text preview.
 - `studio/nvidia-kit/apps/edmg.nvidia.studio.kit` declares the first Kit app

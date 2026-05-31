@@ -37,6 +37,7 @@ function Use-HostLoopbackForLocalBackend {
   $names = @(
     "EDMG_AI_OPENAI_COMPAT_BASE_URL",
     "EDMG_NVIDIA_NIM_URL",
+    "EDMG_NVIDIA_RIVA_URL",
     "EDMG_RIVA_URL",
     "EDMG_NVIDIA_OMNIVERSE_URL",
     "EDMG_NVIDIA_TRITON_URL",
@@ -91,6 +92,8 @@ Write-Step "Starting backend on http://$HostName`:$Port"
 Write-Step "NVIDIA mode: $env:EDMG_NVIDIA_MODE profile: $env:EDMG_NVIDIA_PROFILE"
 Write-Step "NIM base URL: $env:EDMG_AI_OPENAI_COMPAT_BASE_URL"
 Write-Step "NIM model: $env:EDMG_AI_OPENAI_COMPAT_MODEL"
+Write-Step "Riva URI: $env:EDMG_NVIDIA_RIVA_URL"
+Write-Step "Riva ASR enabled: $env:EDMG_NVIDIA_RIVA_ASR"
 Write-Step "NGC_API_KEY configured: $(-not [string]::IsNullOrWhiteSpace($env:NGC_API_KEY))"
 Write-Step "Python: $PythonExe"
 

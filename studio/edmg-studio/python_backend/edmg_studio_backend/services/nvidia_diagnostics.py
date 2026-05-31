@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import subprocess
 from typing import Any
 from urllib import error, request
+from urllib.parse import urlparse
 
 from .nvidia_profile import nvidia_profile_status
 
@@ -123,6 +125,26 @@ def _http_probe(url: str, *, api_key: str | None = None, timeout_s: float = 3.0)
         return {"configured": True, "reachable": False, "error": str(exc.reason)}
     except Exception as exc:
         return {"configured": True, "reachable": False, "error": str(exc)}
+
+
+def _tcp_probe(endpoint: str, *, timeout_s: float = 3.0) -> dict[str, Any]:
+    if not endpoint:
+        return {"configured": False, "reachable": False, "skipped": True}
+    raw = endpoint.strip()
+    if "://" in raw:
+        parsed = urlparse(raw)
+        host = parsed.hostname or ""
+        port = parsed.port
+    else:
+        host, sep, port_text = raw.rpartition(":")
+        port = int(port_text) if sep and port_text.isdigit() else None
+    if not host or port is None:
+        return {"configured": True, "reachable": False, "error": "Endpoint must include host:port"}
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout_s):
+            return {"configured": True, "reachable": True, "host": host, "port": int(port)}
+    except Exception as exc:
+        return {"configured": True, "reachable": False, "host": host, "port": int(port), "error": str(exc)}
 
 
 def _check(
@@ -265,6 +287,7 @@ def nvidia_diagnostics() -> dict[str, Any]:
     omniverse = profile_services.get("omniverse", {})
     nim_base_url = str(nim.get("base_url") or "").strip()
     omniverse_url = str(omniverse.get("base_url") or "").strip()
+    riva_url = str(riva.get("base_url") or "").strip()
 
     nim_probe = _http_probe(
         _nim_models_url(nim_base_url) if nim_base_url else "",
@@ -285,10 +308,14 @@ def nvidia_diagnostics() -> dict[str, Any]:
         },
         "riva": {
             "configured": bool(riva.get("configured")),
-            "base_url": riva.get("base_url") or "",
+            "base_url": riva_url,
+            "asr_enabled": bool(riva.get("asr_enabled")),
+            "language_code": riva.get("language_code") or "en-US",
+            "model": riva.get("model") or "",
+            "fallback_enabled": bool(riva.get("fallback_enabled")),
             "probe": {
-                "reachable": None,
-                "note": "Riva is gRPC-first; run the service-specific client probe after the image/profile is selected.",
+                **(_tcp_probe(riva_url, timeout_s=3.0) if riva_url else {"configured": False, "skipped": True}),
+                "protocol": "grpc",
             },
         },
         "omniverse": {

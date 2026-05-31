@@ -57,6 +57,8 @@ EDMG_AI_PROVIDER=openai_compat
 EDMG_NVIDIA_NIM_URL=http://127.0.0.1:8001
 EDMG_AI_OPENAI_COMPAT_BASE_URL=http://127.0.0.1:8001/v1
 EDMG_AI_OPENAI_COMPAT_MODEL=your-nim-model
+EDMG_NVIDIA_RIVA_URL=127.0.0.1:50051
+EDMG_NVIDIA_RIVA_ASR=0
 NGC_API_KEY=...  # load from shell or ignored local env file, never commit it
 ```
 
@@ -65,6 +67,12 @@ package remains a client/workstation shell; NIM, Riva, NeMo, and related GPU
 services should run as local or remote service endpoints. If the inference
 endpoint itself requires bearer auth, set `EDMG_AI_OPENAI_COMPAT_API_KEY` too;
 do not assume it is always the same value as `NGC_API_KEY`.
+
+Riva ASR stays opt-in. Set `EDMG_NVIDIA_RIVA_ASR=1` or
+`EDMG_AI_ASR_PROVIDER=riva` only after the backend environment has the NVIDIA
+Riva Python client and the Riva gRPC endpoint is reachable. With
+`EDMG_NVIDIA_RIVA_ASR_FALLBACK=1`, failed Riva transcription falls back to the
+existing local faster-whisper path.
 
 ## External AI service (advanced)
 

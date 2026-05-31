@@ -7,6 +7,13 @@ from typing import Any, Protocol
 
 import requests
 
+from .nvidia_riva import (
+    RivaTranscriptionError,
+    riva_asr_enabled,
+    riva_fallback_enabled,
+    transcribe_with_riva,
+)
+
 
 class AiDirector(Protocol):
     """Small interface used by Studio backend."""
@@ -114,16 +121,35 @@ class LocalAiDirectorClient:
         return resp.model_dump()
 
     def transcribe(self, audio_path: str, model_size: str = "turbo") -> dict[str, Any]:
+        riva_error: str | None = None
+        if riva_asr_enabled():
+            try:
+                return transcribe_with_riva(audio_path)
+            except RivaTranscriptionError as exc:
+                riva_error = str(exc)
+                if not riva_fallback_enabled():
+                    return {"text": None, "error": riva_error, "source": "nvidia_riva"}
+
         try:
             self._ensure_import_path()
             from edmg_ai_service.asr import transcribe_detailed
         except Exception as e:
-            return {"text": None, "note": f"transcription not available: {e}"}
+            note = f"transcription not available: {e}"
+            if riva_error:
+                note = f"NVIDIA Riva unavailable, fallback failed: {riva_error}; {note}"
+            return {"text": None, "note": note}
 
         try:
-            return transcribe_detailed(audio_path, model_size=model_size)
+            result = transcribe_detailed(audio_path, model_size=model_size)
         except Exception as e:
-            return {"text": None, "error": str(e)}
+            error_text = str(e)
+            if riva_error:
+                error_text = f"NVIDIA Riva unavailable, fallback failed: {riva_error}; {error_text}"
+            return {"text": None, "error": error_text}
+        if riva_error and isinstance(result, dict):
+            result = dict(result)
+            result["nvidia_riva"] = {"fallback_from": "nvidia_riva", "error": riva_error}
+        return result
 
     def audio_features(self, audio_path: str) -> dict[str, Any]:
         try:
