@@ -161,6 +161,7 @@ Credential split:
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
 ```
 
 - `login_ngc.ps1` logs Docker into `nvcr.io` with `$oauthtoken` and a masked
@@ -175,6 +176,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
   already occupied by a backend that is not running with NVIDIA mode enabled,
   the helper stops with a clear message unless you pass `-StopExisting` or
   explicitly allow reuse with `-ReuseExisting`.
+- `start_nvidia_runtime_local.ps1` wraps the backend helper and Kit launcher
+  into one local runtime command. It waits for `/health`, prints NVIDIA
+  diagnostics readiness, detects FFmpeg, and launches Kit with
+  `-AutoRunRenderWorker`.
 
 ## First validation target
 

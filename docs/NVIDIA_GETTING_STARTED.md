@@ -68,6 +68,7 @@ Optional helpers:
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
 ```
 
 The NGC login helper reads `NGC_API_KEY` from the shell or ignored `.env.local`
@@ -80,6 +81,20 @@ the backend directly with Python 3.14. If port `8000` is already held by a
 backend that was started without NVIDIA mode, the helper refuses to reuse it;
 rerun with `-StopExisting` to replace that process or `-ReuseExisting` only when
 you intentionally want to keep it.
+
+The local runtime helper wraps the backend helper and the Kit launcher: it waits
+for backend health, prints NVIDIA diagnostics readiness, detects FFmpeg, then
+launches Kit with the RTX render queue autorun enabled. On this workstation the
+known-good command is:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_runtime_local.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -StopExistingKit
+```
 
 ## 4. Start the NVIDIA-aware stack
 
@@ -290,8 +305,9 @@ For unattended local handoff testing, launch Kit with:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
-  -KitSdkRoot $env:OMNI_KIT_SDK_ROOT `
-  -ProjectId YOUR_PROJECT_ID `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -AutoRunRenderWorker `
   -RenderWorkerPollSeconds 5
 ```
