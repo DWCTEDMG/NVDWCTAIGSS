@@ -2624,12 +2624,24 @@ def export_project_nvidia_scene_plan(project_id: str, _payload: dict[str, Any] |
     if not isinstance(entry, dict):
         raise HTTPException(404, "NVIDIA scene plan not found")
 
-    usd_stage = entry.get("usd_stage") if isinstance(entry.get("usd_stage"), dict) else {}
-    usda_text = str(usd_stage.get("text") or "")
+    scene_plan = entry.get("scene_plan") if isinstance(entry.get("scene_plan"), dict) else {}
+    if not scene_plan:
+        raise HTTPException(404, "NVIDIA scene plan not found")
+    try:
+        usda_text = scene_plan_usda_text(scene_plan)
+        entry["usd_metadata"] = scene_plan_usd_metadata(scene_plan)
+        entry["usd_stage"] = {
+            "format": "usda",
+            "text": usda_text,
+            "bytes": len(usda_text.encode("utf-8")),
+        }
+        proj.meta["last_nvidia_scene_plan"] = entry
+    except Exception:
+        usd_stage = entry.get("usd_stage") if isinstance(entry.get("usd_stage"), dict) else {}
+        usda_text = str(usd_stage.get("text") or "")
     if not usda_text.strip():
         raise HTTPException(400, "NVIDIA scene plan does not include a USDA preview")
 
-    scene_plan = entry.get("scene_plan") if isinstance(entry.get("scene_plan"), dict) else {}
     stamp = time.strftime("%Y%m%d_%H%M%S")
     stem = _safe_name_tag(str(scene_plan.get("title") or proj.name or "nvidia_scene_plan"), "nvidia_scene_plan")
     pdir = store.project_dir(project_id)

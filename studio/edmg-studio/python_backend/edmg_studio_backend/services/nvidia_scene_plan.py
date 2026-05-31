@@ -63,6 +63,31 @@ def _usd_color(values: tuple[float, float, float]) -> str:
     return "(" + ", ".join(_usd_number(value) for value in values) + ")"
 
 
+def _frame_at_seconds(seconds: Any, fps: float = 24.0) -> int:
+    try:
+        value = float(seconds)
+    except Exception:
+        value = 0.0
+    return max(0, int(round(value * fps)))
+
+
+def _camera_translate_sample(index: int, total: int) -> tuple[float, float, float]:
+    total = max(1, total)
+    center = (total + 1) / 2.0
+    x_offset = (index - center) * 0.34
+    z_offset = 10.5 - min(2.4, index * 0.22)
+    y_offset = 3.1 + (0.12 if index % 2 == 0 else 0.0)
+    return x_offset, y_offset, z_offset
+
+
+def _camera_rotate_sample(index: int, total: int) -> tuple[float, float, float]:
+    total = max(1, total)
+    center = (total + 1) / 2.0
+    yaw = (center - index) * 1.8
+    pitch = -15.5 - (0.4 if index % 2 == 0 else 0.0)
+    return pitch, yaw, 0.0
+
+
 def _slug(value: Any, fallback: str) -> str:
     raw = str(value or "").strip().lower()
     slug = _SLUG_RE.sub("-", raw).strip("-")
@@ -285,12 +310,14 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
     bpm = normalized["bpm"]
     provider = normalized["provider"]
     end_frame = max(1, int(round(duration_s * 24.0)))
+    scene_count = max(1, len(normalized["scenes"]))
 
     lines = [
         "#usda 1.0",
         "(",
         '    defaultPrim = "EDMGScenePlan"',
         "    metersPerUnit = 1",
+        '    upAxis = "Y"',
         "    timeCodesPerSecond = 24",
         "    startTimeCode = 0",
         f"    endTimeCode = {end_frame}",
@@ -305,50 +332,84 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         f"    custom string edmg:provider = {_usd_string(provider)}",
         f"    custom int edmg:sceneCount = {len(normalized['scenes'])}",
         "",
+        '    def Scope "AudioTimeline"',
+        "    {",
+        f"        custom double edmg:durationSeconds = {_usd_number(duration_s)}",
+        f"        custom double edmg:bpm = {_usd_number(bpm)}",
+        "        custom double edmg:framesPerSecond = 24",
+        f"        custom int edmg:endFrame = {end_frame}",
+        "    }",
+        "",
         '    def Scope "Cameras"',
         "    {",
         '        def Camera "MainCamera"',
         "        {",
         "            double3 xformOp:translate = (0, 3.2, 10.5)",
         "            double3 xformOp:rotateXYZ = (-16, 0, 0)",
-        '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]',
-        "            float focalLength = 35",
-        "            float horizontalAperture = 20.955",
-        "        }",
-        "    }",
-        "",
-        '    def Scope "Lighting"',
-        "    {",
-        '        def DistantLight "KeyLight"',
-        "        {",
-        "            double3 xformOp:rotateXYZ = (-45, 25, 0)",
-        '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
-        "            float intensity = 850",
-        "            color3f color = (0.86, 0.92, 1)",
-        "        }",
-        '        def DistantLight "RimLight"',
-        "        {",
-        "            double3 xformOp:rotateXYZ = (-20, -45, 0)",
-        '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
-        "            float intensity = 420",
-        "            color3f color = (1, 0.64, 0.32)",
-        "        }",
-        "    }",
-        "",
-        '    def Scope "Looks"',
-        "    {",
-        '        def Material "FloorMaterial"',
-        "        {",
-        '            token outputs:surface.connect = </EDMGScenePlan/Looks/FloorMaterial/PreviewSurface.outputs:surface>',
-        '            def Shader "PreviewSurface"',
-        "            {",
-        '                uniform token info:id = "UsdPreviewSurface"',
-        "                color3f inputs:diffuseColor = (0.015, 0.017, 0.024)",
-        "                float inputs:roughness = 0.72",
-        "                token outputs:surface",
-        "            }",
-        "        }",
+        "            double3 xformOp:translate.timeSamples = {",
     ]
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        frame = _frame_at_seconds(scene.get("start_s"))
+        lines.append(f"                {frame}: {_usd_color(_camera_translate_sample(index, scene_count))},")
+    lines.extend(
+        [
+            f"                {end_frame}: {_usd_color(_camera_translate_sample(scene_count, scene_count))}",
+            "            }",
+            "            double3 xformOp:rotateXYZ.timeSamples = {",
+        ]
+    )
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        frame = _frame_at_seconds(scene.get("start_s"))
+        lines.append(f"                {frame}: {_usd_color(_camera_rotate_sample(index, scene_count))},")
+    lines.extend(
+        [
+            f"                {end_frame}: {_usd_color(_camera_rotate_sample(scene_count, scene_count))}",
+            "            }",
+        ]
+    )
+
+    lines.extend(
+        [
+            '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]',
+            "            float focalLength = 35",
+            "            float horizontalAperture = 20.955",
+            "        }",
+            "    }",
+            "",
+            '    def Scope "Lighting"',
+            "    {",
+            '        def DistantLight "KeyLight"',
+            "        {",
+            "            double3 xformOp:rotateXYZ = (-45, 25, 0)",
+            '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
+            "            float intensity = 850",
+            "            color3f color = (0.86, 0.92, 1)",
+            "        }",
+            '        def DistantLight "RimLight"',
+            "        {",
+            "            double3 xformOp:rotateXYZ = (-20, -45, 0)",
+            '            uniform token[] xformOpOrder = ["xformOp:rotateXYZ"]',
+            "            float intensity = 420",
+            "            color3f color = (1, 0.64, 0.32)",
+            "        }",
+            "    }",
+            "",
+            '    def Scope "Looks"',
+            "    {",
+            '        def Material "FloorMaterial"',
+            "        {",
+            '            token outputs:surface.connect = </EDMGScenePlan/Looks/FloorMaterial/PreviewSurface.outputs:surface>',
+            '            def Shader "PreviewSurface"',
+            "            {",
+            '                uniform token info:id = "UsdPreviewSurface"',
+            "                color3f inputs:diffuseColor = (0.015, 0.017, 0.024)",
+            "                float inputs:roughness = 0.72",
+            "                token outputs:surface",
+            "            }",
+            "        }",
+        ]
+    )
 
     for index, _scene in enumerate(normalized["scenes"], start=1):
         color = _scene_color(index)
@@ -385,7 +446,6 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         ]
     )
 
-    scene_count = max(1, len(normalized["scenes"]))
     for index, scene in enumerate(normalized["scenes"], start=1):
         prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
         x_offset = (index - (scene_count + 1) / 2.0) * 1.15
@@ -424,6 +484,8 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
                 f"            custom string edmg:id = {_usd_string(scene.get('id'))}",
                 f"            custom double edmg:startSeconds = {_usd_number(scene.get('start_s'))}",
                 f"            custom double edmg:endSeconds = {_usd_number(scene.get('end_s'))}",
+                f"            custom int edmg:startFrame = {_frame_at_seconds(scene.get('start_s'))}",
+                f"            custom int edmg:endFrame = {_frame_at_seconds(scene.get('end_s'))}",
                 f"            custom string edmg:prompt = {_usd_string(scene.get('prompt'))}",
                 f"            custom string edmg:camera = {_usd_string(scene.get('camera'))}",
                 f"            custom string edmg:look = {_usd_string(scene.get('look'))}",

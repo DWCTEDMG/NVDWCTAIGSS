@@ -356,6 +356,10 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     monkeypatch.setattr(backend_app, "ai", FakeAi())
 
     generated = backend_app.generate_project_nvidia_scene_plan(project.id, {"duration_s": 12})
+    saved_with_stale_usda = project_store.get(project.id)
+    assert saved_with_stale_usda is not None
+    saved_with_stale_usda.meta["last_nvidia_scene_plan"]["usd_stage"]["text"] = "#usda 1.0\n# stale generated stage\n"
+    project_store.save(saved_with_stale_usda)
     fetched = backend_app.get_project_nvidia_scene_plan(project.id)
     exported = backend_app.export_project_nvidia_scene_plan(project.id, {})
     render_job = backend_app.create_project_nvidia_render_job(project.id, {"fps": 30, "width": 1280, "height": 720})
@@ -370,6 +374,9 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert exported["export"]["path"].startswith("outputs/nvidia/")
     assert exported["export"]["path"].endswith(".usda")
     assert (project_store.project_dir(project.id) / exported["export"]["path"]).exists()
+    exported_text = (project_store.project_dir(project.id) / exported["export"]["path"]).read_text(encoding="utf-8")
+    assert 'def Scope "AudioTimeline"' in exported_text
+    assert "double3 xformOp:translate.timeSamples" in exported_text
     assert render_job["ok"] is True
     assert render_job["job"]["kind"] == "nvidia_rtx_render_job"
     assert render_job["job"]["renderer"]["fps"] == 30
@@ -398,6 +405,7 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert saved_job["result"]["worker"]["name"] == "edmg.render_queue"
     saved = project_store.get(project.id)
     assert saved is not None
+    assert 'def Scope "AudioTimeline"' in saved.meta["last_nvidia_scene_plan"]["usd_stage"]["text"]
     assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
     assert saved.meta["exports"]["nvidia_render_jobs"][-1]["path"] == render_job["export"]["path"]
     assert saved.meta["last_nvidia_render_result"]["status"] == "completed"
@@ -433,7 +441,12 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
     text = scene_plan_usda_text(payload)
 
     assert 'custom string edmg:title = "A \\"quoted\\" title"' in text
+    assert 'upAxis = "Y"' in text
+    assert 'def Scope "AudioTimeline"' in text
     assert 'def Camera "MainCamera"' in text
+    assert "double3 xformOp:translate.timeSamples" in text
     assert 'def Cube "Preview__1_drop_scene"' in text
     assert 'def Xform "_1_drop_scene"' in text
+    assert "custom int edmg:startFrame = 0" in text
+    assert "custom int edmg:endFrame = 96" in text
     assert 'custom string edmg:prompt = "laser \\"wall\\"\\nwith haze"' in text
