@@ -209,7 +209,7 @@ def test_render_queue_assembles_mp4_with_ffmpeg_concat(tmp_path, monkeypatch):
     assert commands[0][0][vf_index + 1] == "fps=24,format=yuv420p"
     concat_text = concat_path.read_text(encoding="utf-8")
     assert concat_text.count("duration 2.500000") == 2
-    assert concat_text.count("file '") == 3
+    assert concat_text.count("file '") == 2
 
 
 def test_render_queue_extension_starts_headless_with_fake_backend(monkeypatch):

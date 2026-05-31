@@ -183,7 +183,6 @@ def _write_movie_concat_manifest(movie_path: Path, frames: list[Path], durations
     for frame_path, duration_s in zip(frames, durations):
         lines.append(_ffmpeg_concat_file_line(frame_path))
         lines.append(f"duration {max(0.001, float(duration_s)):.6f}")
-    lines.append(_ffmpeg_concat_file_line(frames[-1]))
     concat_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return concat_path
 
