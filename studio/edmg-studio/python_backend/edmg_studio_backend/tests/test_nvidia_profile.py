@@ -409,6 +409,19 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
     assert saved.meta["exports"]["nvidia_render_jobs"][-1]["path"] == render_job["export"]["path"]
     assert saved.meta["last_nvidia_render_result"]["status"] == "completed"
+    outputs = backend_app.list_outputs(project.id)
+    nvidia_export_entry = outputs["nvidia_exports"][0]
+    nvidia_job_entry = outputs["nvidia_render_jobs"][0]
+    export_abs_path = project_store.project_dir(project.id) / exported["export"]["path"]
+    job_abs_path = project_store.project_dir(project.id) / render_job["export"]["path"]
+    expected_export_path = str(export_abs_path.resolve())
+    expected_job_path = str(job_abs_path.resolve())
+    expected_result_path = str(job_abs_path.with_name(f"{job_abs_path.stem}.result.json").resolve())
+    expected_still_path = str((project_store.project_dir(project.id) / "outputs/nvidia/renders/001_project/frame_000000.png").resolve())
+    assert nvidia_export_entry["absolute_path"] == expected_export_path
+    assert nvidia_job_entry["absolute_path"] == expected_job_path
+    assert nvidia_job_entry["result_absolute_path"] == expected_result_path
+    assert nvidia_job_entry["result"]["outputs_absolute"]["still"] == expected_still_path
 
 
 def test_project_nvidia_scene_plan_read_404_when_missing(tmp_path, monkeypatch):

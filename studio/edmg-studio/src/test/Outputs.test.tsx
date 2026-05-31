@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import Outputs from "../pages/Outputs";
 import { installEdmgBridge, installFetchMock, renderWithStudio } from "./testUtils";
@@ -13,7 +13,12 @@ describe("Outputs page", () => {
     let exportRequest: any = null;
     let planRequest: any = null;
     let importRequest: any = null;
-    installEdmgBridge();
+    const nvidiaUsdaAbsolutePath = "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\nvidia_project_20260531_120000.usda";
+    const nvidiaRenderJobAbsolutePath = "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\render_jobs\\nvidia_project_20260531_120000.json";
+    const nvidiaRenderResultAbsolutePath = "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\render_jobs\\nvidia_project_20260531_120000.result.json";
+    const nvidiaMovieAbsolutePath = "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\renders\\001_scene-1.mp4";
+    const revealPath = vi.fn(async (value: string) => ({ ok: true, action: "reveal_path", path: value }));
+    installEdmgBridge({ revealPath });
     installFetchMock({
       "/v1/projects": { projects: [{ id: "p1", name: "Demo Project" }] },
       "/v1/projects/p1/outputs": () => ({
@@ -82,17 +87,22 @@ describe("Outputs page", () => {
         nvidia_exports: [
           {
             path: "outputs/nvidia/nvidia_project_20260531_120000.usda",
+            absolute_path: nvidiaUsdaAbsolutePath,
             name: "nvidia_project_20260531_120000.usda",
             size_bytes: 2048,
             metadata_path: "outputs/nvidia/nvidia_project_20260531_120000.usda.json",
+            metadata_absolute_path: "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\nvidia_project_20260531_120000.usda.json",
             metadata: { scene_count: 2, provider: "nvidia-profile:openai_compat:nvidia/test" },
           },
         ],
         nvidia_render_jobs: [
           {
             path: "outputs/nvidia/render_jobs/nvidia_project_20260531_120000.json",
+            absolute_path: nvidiaRenderJobAbsolutePath,
             name: "nvidia_project_20260531_120000.json",
             size_bytes: 4096,
+            result_path: "outputs/nvidia/render_jobs/nvidia_project_20260531_120000.result.json",
+            result_absolute_path: nvidiaRenderResultAbsolutePath,
             metadata: {
               kind: "nvidia_rtx_render_job",
               scene_count: 2,
@@ -104,6 +114,10 @@ describe("Outputs page", () => {
               outputs: {
                 still: "outputs/nvidia/renders/001_scene-1/001_scene-1_000000.png",
                 movie: "outputs/nvidia/renders/001_scene-1.mp4",
+              },
+              outputs_absolute: {
+                still: "C:\\NVDWCTAIGSS\\data\\projects\\p1\\outputs\\nvidia\\renders\\001_scene-1\\001_scene-1_000000.png",
+                movie: nvidiaMovieAbsolutePath,
               },
             },
           },
@@ -228,5 +242,13 @@ describe("Outputs page", () => {
     expect(await screen.findByText(/NVIDIA RTX render jobs/i)).toBeTruthy();
     expect((await screen.findAllByText(/outputs\/nvidia\/render_jobs\/nvidia_project_20260531_120000\.json/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/outputs\/nvidia\/renders\/001_scene-1\.mp4/i)).length).toBeGreaterThan(0);
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal NVIDIA USDA/i }));
+    await waitFor(() => expect(revealPath).toHaveBeenLastCalledWith(nvidiaUsdaAbsolutePath));
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal render job/i }));
+    await waitFor(() => expect(revealPath).toHaveBeenLastCalledWith(nvidiaRenderJobAbsolutePath));
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal render result/i }));
+    await waitFor(() => expect(revealPath).toHaveBeenLastCalledWith(nvidiaRenderResultAbsolutePath));
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal RTX movie/i }));
+    await waitFor(() => expect(revealPath).toHaveBeenLastCalledWith(nvidiaMovieAbsolutePath));
   }, 15000);
 });

@@ -9087,11 +9087,21 @@ def list_outputs(project_id: str):
         raise HTTPException(404, "Project not found")
     pdir = store.project_dir(project_id)
 
+    def _absolute_project_path(value: Any) -> str | None:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        try:
+            return str(safe_join(pdir, raw))
+        except Exception:
+            return None
+
     def _file_entry(fp: Path) -> dict[str, Any]:
         try:
             st = fp.stat()
             entry = {
                 "path": str(fp.relative_to(pdir)),
+                "absolute_path": str(fp.resolve()),
                 "name": fp.name,
                 "size_bytes": int(st.st_size),
                 "modified_at": float(st.st_mtime),
@@ -9099,13 +9109,18 @@ def list_outputs(project_id: str):
             metadata_path = _output_metadata_path(fp)
             if metadata_path.exists():
                 entry["metadata_path"] = str(metadata_path.relative_to(pdir))
+                entry["metadata_absolute_path"] = str(metadata_path.resolve())
                 try:
                     entry["metadata"] = json.loads(metadata_path.read_text(encoding="utf-8"))
                 except Exception:
                     entry["metadata_error"] = "invalid_json"
             return entry
         except Exception:
-            return {"path": str(fp.relative_to(pdir)), "name": fp.name}
+            return {
+                "path": str(fp.relative_to(pdir)),
+                "absolute_path": str(fp.resolve()),
+                "name": fp.name,
+            }
 
     imgs = []
     vids = []
@@ -9138,7 +9153,7 @@ def list_outputs(project_id: str):
     for p in sorted((pdir / "outputs" / "nvidia").glob("*.usda"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
         nvidia_exports.append(_file_entry(p))
     for p in sorted((pdir / "outputs" / "nvidia" / "render_jobs").glob("*.json"), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
-        if p.name.endswith(".result.json"):
+        if p.name.endswith(".result.json") or p.name.endswith(".json.json"):
             continue
         entry = _file_entry(p)
         if "metadata" not in entry:
@@ -9151,8 +9166,24 @@ def list_outputs(project_id: str):
         result_path = p.with_name(f"{p.stem}.result.json")
         if result_path.exists():
             entry["result_path"] = result_path.relative_to(pdir).as_posix()
+            entry["result_absolute_path"] = str(result_path.resolve())
             try:
-                entry["result"] = json.loads(result_path.read_text(encoding="utf-8"))
+                result_payload = json.loads(result_path.read_text(encoding="utf-8"))
+                if isinstance(result_payload, dict):
+                    outputs = result_payload.get("outputs")
+                    if isinstance(outputs, dict):
+                        outputs_absolute = {
+                            str(key): resolved
+                            for key, value in outputs.items()
+                            if isinstance(key, str)
+                            for resolved in [_absolute_project_path(value)]
+                            if resolved
+                        }
+                        if outputs_absolute:
+                            result_payload["outputs_absolute"] = outputs_absolute
+                    entry["result"] = result_payload
+                else:
+                    entry["result"] = result_payload
             except Exception:
                 entry["result_error"] = "invalid_json"
         nvidia_render_jobs.append(entry)

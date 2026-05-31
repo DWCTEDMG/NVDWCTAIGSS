@@ -56,10 +56,20 @@ export default function Outputs(props: PageProps) {
 
   const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/file?path=${encodeURIComponent(rel)}`;
   const activeInternalJobs = (outs?.active_internal_jobs || []) as any[];
+  const desktopPath = (relativePath: string | null | undefined, absolutePath?: string | null) => (
+    String(absolutePath || relativePath || "").trim()
+  );
+  const entryDesktopPath = (entry: any) => desktopPath(entry?.path, entry?.absolute_path);
+  const metadataDesktopPath = (entry: any) => desktopPath(entry?.metadata_path, entry?.metadata_absolute_path);
+  const resultDesktopPath = (entry: any) => desktopPath(entry?.result_path, entry?.result_absolute_path);
+  const resultOutputDesktopPath = (entry: any, key: string) => (
+    desktopPath(entry?.result?.outputs?.[key], entry?.result?.outputs_absolute?.[key])
+  );
 
   const renderMetadataCard = (entry: any) => {
     const metadata = entry?.metadata;
     const metadataPath = entry?.metadata_path;
+    const metadataRevealPath = metadataDesktopPath(entry);
     const baseModel = metadata?.base_model || {};
     const output = metadata?.output || {};
     const loras = Array.isArray(metadata?.loras) ? metadata.loras : [];
@@ -76,7 +86,7 @@ export default function Outputs(props: PageProps) {
           <div style={{ fontWeight: 800 }}>Generation metadata</div>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             {metadataPath ? (
-              <button className="secondary" onClick={(e) => { e.stopPropagation(); handleArtifactPathAction("metadata sidecar", metadataPath, "reveal"); }}>
+              <button className="secondary" onClick={(e) => { e.stopPropagation(); handleArtifactPathAction("metadata sidecar", metadataRevealPath, "reveal"); }}>
                 {desktopActionLabel("reveal", "metadata sidecar")}
               </button>
             ) : null}
@@ -570,11 +580,11 @@ export default function Outputs(props: PageProps) {
                     <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>{entry.path}</div>
                     <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                       <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open USDA</a>
-                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA USDA", entry.path, "reveal")}>
+                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA USDA", entryDesktopPath(entry), "reveal")}>
                         {desktopActionLabel("reveal", "NVIDIA USDA")}
                       </button>
                       {entry.metadata_path ? (
-                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA metadata", entry.metadata_path, "reveal")}>
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA metadata", metadataDesktopPath(entry), "reveal")}>
                           {desktopActionLabel("reveal", "metadata")}
                         </button>
                       ) : null}
@@ -609,23 +619,23 @@ export default function Outputs(props: PageProps) {
                     ) : null}
                     <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                       <a className="secondary" href={fileUrl(projectId, entry.path)} target="_blank" rel="noreferrer">Open render job</a>
-                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render job", entry.path, "reveal")}>
+                      <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render job", entryDesktopPath(entry), "reveal")}>
                         {desktopActionLabel("reveal", "render job")}
                       </button>
                       {entry.result_path ? (
-                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render result", entry.result_path, "reveal")}>
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX render result", resultDesktopPath(entry), "reveal")}>
                           {desktopActionLabel("reveal", "render result")}
                         </button>
                       ) : null}
                       {entry.result?.outputs?.still ? (
-                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX still", entry.result.outputs.still, "reveal")}>
+                        <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX still", resultOutputDesktopPath(entry, "still"), "reveal")}>
                           {desktopActionLabel("reveal", "RTX still")}
                         </button>
                       ) : null}
                       {entry.result?.outputs?.movie ? (
                         <>
                           <a className="secondary" href={fileUrl(projectId, entry.result.outputs.movie)} target="_blank" rel="noreferrer">Open movie</a>
-                          <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX movie", entry.result.outputs.movie, "reveal")}>
+                          <button className="secondary" onClick={() => handleArtifactPathAction("NVIDIA RTX movie", resultOutputDesktopPath(entry, "movie"), "reveal")}>
                             {desktopActionLabel("reveal", "RTX movie")}
                           </button>
                         </>
