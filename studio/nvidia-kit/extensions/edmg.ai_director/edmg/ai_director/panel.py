@@ -42,6 +42,39 @@ def _safe_filename_tag(value: str, default: str = "scene_plan") -> str:
     return cleaned or default
 
 
+def _project_match_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+def resolve_project_reference(reference: Any, projects_response: dict[str, Any]) -> str:
+    raw_reference = str(reference or "").strip()
+    if not raw_reference:
+        return ""
+
+    projects = projects_response.get("projects") if isinstance(projects_response.get("projects"), list) else []
+    normalized_reference = _project_match_key(raw_reference)
+    candidates: list[tuple[str, str]] = []
+    for item in projects:
+        if not isinstance(item, dict):
+            continue
+        project_id = str(item.get("id") or "").strip()
+        name = str(item.get("name") or item.get("title") or "").strip()
+        if project_id:
+            candidates.append((project_id, name))
+
+    for project_id, _name in candidates:
+        if raw_reference == project_id:
+            return project_id
+    for project_id, name in candidates:
+        if raw_reference.casefold() == name.casefold():
+            return project_id
+    for project_id, name in candidates:
+        if normalized_reference and normalized_reference in {_project_match_key(project_id), _project_match_key(name)}:
+            return project_id
+
+    return raw_reference
+
+
 def build_generation_payload(
     *,
     title: Any,

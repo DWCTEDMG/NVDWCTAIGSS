@@ -56,6 +56,9 @@ class EdmgBackendClient:
     def nvidia_diagnostics(self) -> dict[str, Any]:
         return self._json_request("GET", "/v1/nvidia/diagnostics")
 
+    def projects(self) -> dict[str, Any]:
+        return self._json_request("GET", "/v1/projects")
+
     def generate_scene_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/nvidia/scene-plan", payload)
 

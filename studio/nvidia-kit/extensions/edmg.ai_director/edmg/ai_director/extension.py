@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .backend_client import BackendClientError, EdmgBackendClient
-from .panel import build_generation_payload, summarize_scene_plan_response, write_usda_preview
+from .panel import build_generation_payload, resolve_project_reference, summarize_scene_plan_response, write_usda_preview
 
 try:
     import carb.settings  # type: ignore
@@ -107,7 +107,7 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
                     self._status_label = ui.Label("Checking backend...")
                     self._summary_label = ui.Label("No scene plan loaded.")
                     ui.Button("Refresh NVIDIA Status", clicked_fn=self._refresh_status)
-                    ui.Label("Project ID")
+                    ui.Label("Project ID or name")
                     ui.StringField(model=self._project_model)
                     ui.Label("Title")
                     ui.StringField(model=self._title_model)
@@ -152,6 +152,28 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
     def _project_id(self) -> str:
         return _model_string(self._project_model).strip()
 
+    def _set_project_id(self, project_id: str) -> None:
+        try:
+            self._project_model.set_value(project_id)
+        except Exception:
+            pass
+
+    def _resolve_project_id(self, *, required: bool, action: str) -> str:
+        reference = self._project_id()
+        if not reference:
+            if required:
+                self._set_status(f"Project ID or name is required to {action}.")
+            return ""
+        try:
+            resolved = resolve_project_reference(reference, self._backend.projects())
+        except BackendClientError as exc:
+            self._set_status(f"project list unavailable; using `{reference}` directly: {exc}")
+            return reference
+        if resolved and resolved != reference:
+            self._set_project_id(resolved)
+            self._set_status(f"Resolved project `{reference}` to id `{resolved}`.")
+        return resolved or reference
+
     def _store_response(self, response: dict) -> None:
         self._last_response = response
         summary = summarize_scene_plan_response(response)
@@ -174,9 +196,8 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._set_status(f"backend status unavailable: {exc}")
 
     def _fetch_project_plan(self) -> None:
-        project_id = self._project_id()
+        project_id = self._resolve_project_id(required=True, action="fetch a persisted scene plan")
         if not project_id:
-            self._set_status("Project ID is required to fetch a persisted scene plan.")
             return
         try:
             self._store_response(self._backend.project_scene_plan(project_id))
@@ -191,7 +212,7 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             max_scenes=_model_string(self._max_scenes_model, "6"),
             notes=_model_string(self._notes_model),
         )
-        project_id = self._project_id()
+        project_id = self._resolve_project_id(required=False, action="generate a project scene plan")
         try:
             response = (
                 self._backend.generate_project_scene_plan(project_id, payload)
@@ -203,9 +224,8 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._set_status(f"NVIDIA planner unavailable: {exc}")
 
     def _export_project_scene_plan(self) -> None:
-        project_id = self._project_id()
+        project_id = self._resolve_project_id(required=True, action="export a project USDA")
         if not project_id:
-            self._set_status("Project ID is required to export a project USDA.")
             return
         try:
             response = self._backend.export_project_scene_plan(project_id)

@@ -30,9 +30,10 @@ The app is still a starter, but the main user-facing extensions now do useful
 work:
 
 - `edmg.ai_director` opens a Kit panel for the first project-scoped workflow.
-  From that panel you can enter a Studio `project_id`, fetch the saved NVIDIA
-  scene plan, ask the backend/NIM planner for a refreshed plan, export the
-  persisted USDA, and open the generated USDA preview as a local Kit stage.
+  From that panel you can enter a Studio `project_id` or visible project name,
+  fetch the saved NVIDIA scene plan, ask the backend/NIM planner for a refreshed
+  plan, export the persisted USDA, and open the generated USDA preview as a
+  local Kit stage.
 - `edmg.timeline` opens a scene timeline panel from the configured starter
   scene-plan JSON and summarizes the OpenUSD cue boundaries.
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio

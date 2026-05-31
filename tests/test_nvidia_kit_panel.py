@@ -84,6 +84,47 @@ def test_kit_panel_summarizes_and_writes_usda_preview(tmp_path):
     assert written.read_text(encoding="utf-8").startswith("#usda 1.0")
 
 
+def test_kit_panel_resolves_project_name_to_id():
+    panel = _import_ai_director_module("panel")
+    projects = {
+        "projects": [
+            {"id": "4af898d1ebb24a0d8ed2d59a337dd965", "name": "the end"},
+            {"id": "project-two", "name": "Project Two"},
+        ]
+    }
+
+    assert panel.resolve_project_reference("the end", projects) == "4af898d1ebb24a0d8ed2d59a337dd965"
+    assert panel.resolve_project_reference("THE END", projects) == "4af898d1ebb24a0d8ed2d59a337dd965"
+    assert panel.resolve_project_reference("project-two", projects) == "project-two"
+    assert panel.resolve_project_reference("unknown", projects) == "unknown"
+
+
+def test_kit_ai_director_resolves_project_model_name_to_id():
+    extension = _import_ai_director_module("extension")
+
+    class FakeModel:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get_value_as_string(self) -> str:
+            return self.value
+
+        def set_value(self, value: str) -> None:
+            self.value = value
+
+    class FakeBackend:
+        def projects(self) -> dict:
+            return {"projects": [{"id": "project-id-1", "name": "The End"}]}
+
+    ext = extension.EdmgAiDirectorExtension()
+    ext._project_model = FakeModel("the end")
+    ext._status_label = None
+    ext._backend = FakeBackend()
+
+    assert ext._resolve_project_id(required=True, action="fetch a persisted scene plan") == "project-id-1"
+    assert ext._project_model.value == "project-id-1"
+
+
 def test_kit_ai_director_extension_starts_headless_with_fake_backend(monkeypatch):
     extension = _import_ai_director_module("extension")
 

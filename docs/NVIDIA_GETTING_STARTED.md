@@ -253,7 +253,9 @@ Kit when you need to pin a specific FFmpeg binary.
 
 In the AI Director panel:
 
-1. Enter a real Studio `project_id`.
+1. Enter a real Studio `project_id` or the visible project name from the Studio
+   project list. The Kit panel resolves project names to ids before calling the
+   project-scoped backend routes.
 2. Use `Fetch Project Plan` to load the saved NVIDIA/OpenUSD plan, or
    `Generate Plan` to call the configured NVIDIA/NIM-compatible planner through
    the project-scoped backend route.

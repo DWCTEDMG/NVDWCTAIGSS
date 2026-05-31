@@ -51,6 +51,16 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/nvidia/status":
             self._send_json({"ok": True, "nvidia": {"enabled": True, "profile": "omniverse"}})
             return
+        if self.path == "/v1/projects":
+            self._send_json(
+                {
+                    "projects": [
+                        {"id": "project one", "name": "Project One"},
+                        {"id": "project-two", "name": "Project Two"},
+                    ]
+                }
+            )
+            return
         parsed = urlparse(self.path)
         if parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan"):
             project_id = unquote(parsed.path.split("/")[3])
@@ -140,9 +150,11 @@ def test_kit_backend_client_reads_status_and_scene_plan():
         client = module.EdmgBackendClient(base_url=base_url)
 
         status = client.nvidia_status()
+        projects = client.projects()
         usda = client.scene_plan_usda({"project_id": "sample", "scenes": []})
 
         assert status["nvidia"]["enabled"] is True
+        assert projects["projects"][0]["name"] == "Project One"
         assert usda.startswith("#usda 1.0")
     finally:
         server.shutdown()
