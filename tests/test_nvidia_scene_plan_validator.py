@@ -68,5 +68,8 @@ def test_nvidia_scene_plan_exporter_writes_usda(tmp_path):
     assert text.startswith("#usda 1.0")
     assert 'custom string edmg:projectId = "sample-audio-reactive-stage"' in text
     assert 'def Scope "AudioTimeline"' in text
+    assert 'def Scope "BeatGrid"' in text
     assert "double3 xformOp:translate.timeSamples" in text
+    assert "double3 xformOp:scale.timeSamples" in text
+    assert "token visibility.timeSamples" in text
     assert 'def Xform "drop"' in text

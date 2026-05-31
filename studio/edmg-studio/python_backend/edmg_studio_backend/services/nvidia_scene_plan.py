@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -69,6 +70,36 @@ def _frame_at_seconds(seconds: Any, fps: float = 24.0) -> int:
     except Exception:
         value = 0.0
     return max(0, int(round(value * fps)))
+
+
+def _beat_frames(duration_s: float, bpm: float | None, fps: float = 24.0, *, limit: int = 96) -> list[int]:
+    if bpm is None or bpm <= 0 or duration_s <= 0:
+        return []
+    seconds_per_beat = 60.0 / float(bpm)
+    estimated_count = max(1, int(math.floor(duration_s / seconds_per_beat)) + 1)
+    stride = max(1, int(math.ceil(estimated_count / max(1, limit))))
+    frames: list[int] = []
+    for beat_index in range(0, estimated_count, stride):
+        frame = _frame_at_seconds(beat_index * seconds_per_beat, fps)
+        if frame not in frames:
+            frames.append(frame)
+    return frames
+
+
+def _timeline_x(seconds: float, duration_s: float) -> float:
+    if duration_s <= 0:
+        return 0.0
+    return -3.4 + (max(0.0, min(seconds, duration_s)) / duration_s) * 6.8
+
+
+def _dedupe_samples(samples: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    deduped: list[tuple[int, str]] = []
+    for frame, value in samples:
+        if deduped and deduped[-1][0] == frame:
+            deduped[-1] = (frame, value)
+        else:
+            deduped.append((frame, value))
+    return deduped
 
 
 def _camera_translate_sample(index: int, total: int) -> tuple[float, float, float]:
@@ -311,6 +342,8 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
     provider = normalized["provider"]
     end_frame = max(1, int(round(duration_s * 24.0)))
     scene_count = max(1, len(normalized["scenes"]))
+    beat_frames = _beat_frames(duration_s, bpm)
+    seconds_per_beat = 60.0 / float(bpm) if bpm else None
 
     lines = [
         "#usda 1.0",
@@ -336,6 +369,8 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         "    {",
         f"        custom double edmg:durationSeconds = {_usd_number(duration_s)}",
         f"        custom double edmg:bpm = {_usd_number(bpm)}",
+        f"        custom double edmg:secondsPerBeat = {_usd_number(seconds_per_beat)}",
+        f"        custom int edmg:beatMarkerCount = {len(beat_frames)}",
         "        custom double edmg:framesPerSecond = 24",
         f"        custom int edmg:endFrame = {end_frame}",
         "    }",
@@ -408,6 +443,18 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
             "                token outputs:surface",
             "            }",
             "        }",
+            '        def Material "BeatMaterial"',
+            "        {",
+            '            token outputs:surface.connect = </EDMGScenePlan/Looks/BeatMaterial/PreviewSurface.outputs:surface>',
+            '            def Shader "PreviewSurface"',
+            "            {",
+            '                uniform token info:id = "UsdPreviewSurface"',
+            "                color3f inputs:diffuseColor = (0.78, 0.9, 1)",
+            "                color3f inputs:emissiveColor = (0.18, 0.5, 1)",
+            "                float inputs:roughness = 0.28",
+            "                token outputs:surface",
+            "            }",
+            "        }",
         ]
     )
 
@@ -446,6 +493,32 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         ]
     )
 
+    if beat_frames:
+        lines.extend(
+            [
+                '        def Scope "BeatGrid"',
+                "        {",
+            ]
+        )
+        for beat_index, frame in enumerate(beat_frames, start=1):
+            seconds = float(frame) / 24.0
+            x_offset = _timeline_x(seconds, duration_s)
+            height = 0.16 if beat_index % 4 == 1 else 0.09
+            lines.extend(
+                [
+                    f'            def Cube "Beat_{beat_index:03d}"',
+                    "            {",
+                    "                rel material:binding = </EDMGScenePlan/Looks/BeatMaterial>",
+                    f"                double3 xformOp:translate = ({_usd_number(x_offset)}, {_usd_number(height / 2.0)}, -1.92)",
+                    f"                double3 xformOp:scale = (0.012, {_usd_number(height)}, 0.025)",
+                    '                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
+                    f"                custom int edmg:frame = {frame}",
+                    f"                custom double edmg:seconds = {_usd_number(seconds)}",
+                    "            }",
+                ]
+            )
+        lines.extend(["        }", ""])
+
     for index, scene in enumerate(normalized["scenes"], start=1):
         prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
         x_offset = (index - (scene_count + 1) / 2.0) * 1.15
@@ -453,6 +526,23 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         z_offset = -0.16 * (index % 3)
         scene_duration = float(scene.get("end_s") or 0) - float(scene.get("start_s") or 0)
         scale_y = max(0.8, min(1.8, scene_duration / max(duration_s, 1.0) * 6.0))
+        start_frame = _frame_at_seconds(scene.get("start_s"))
+        end_scene_frame = _frame_at_seconds(scene.get("end_s"))
+        mid_frame = _frame_at_seconds((float(scene.get("start_s") or 0) + float(scene.get("end_s") or 0)) / 2.0)
+        pulse_scale = f"(0.56, {_usd_number(scale_y * 1.08)}, 0.08)"
+        rest_scale = f"(0.46, {_usd_number(scale_y)}, 0.05)"
+        scale_samples = _dedupe_samples(
+            [
+                (start_frame, rest_scale),
+                (mid_frame, pulse_scale),
+                (end_scene_frame, rest_scale),
+            ]
+        )
+        visibility_samples = []
+        if start_frame > 0:
+            visibility_samples.append((0, '"invisible"'))
+        visibility_samples.extend([(start_frame, '"inherited"'), (end_scene_frame, '"invisible"')])
+        visibility_samples = _dedupe_samples(visibility_samples)
         lines.extend(
             [
                 f'        def Cube "Preview_{prim_name}"',
@@ -460,8 +550,28 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
                 f"            rel material:binding = </EDMGScenePlan/Looks/SceneMaterial_{index:03d}>",
                 f"            double3 xformOp:translate = ({_usd_number(x_offset)}, {_usd_number(y_offset)}, {_usd_number(z_offset)})",
                 f"            double3 xformOp:scale = (0.46, {_usd_number(scale_y)}, 0.05)",
+                "            double3 xformOp:scale.timeSamples = {",
+            ]
+        )
+        for sample_index, (frame, value) in enumerate(scale_samples):
+            suffix = "," if sample_index < len(scale_samples) - 1 else ""
+            lines.append(f"                {frame}: {value}{suffix}")
+        lines.extend(
+            [
+                "            }",
+                "            token visibility.timeSamples = {",
+            ]
+        )
+        for sample_index, (frame, value) in enumerate(visibility_samples):
+            suffix = "," if sample_index < len(visibility_samples) - 1 else ""
+            lines.append(f"                {frame}: {value}{suffix}")
+        lines.extend(
+            [
+                "            }",
                 '            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
                 f"            custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"            custom int edmg:startFrame = {start_frame}",
+                f"            custom int edmg:endFrame = {end_scene_frame}",
                 "        }",
             ]
         )

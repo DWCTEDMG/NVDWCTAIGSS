@@ -441,6 +441,7 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
         "project_id": "quoted-project",
         "title": 'A "quoted" title',
         "duration_s": 4,
+        "bpm": 120,
         "scenes": [
             {
                 "id": "1 drop.scene",
@@ -456,8 +457,12 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
     assert 'custom string edmg:title = "A \\"quoted\\" title"' in text
     assert 'upAxis = "Y"' in text
     assert 'def Scope "AudioTimeline"' in text
+    assert 'def Scope "BeatGrid"' in text
+    assert "custom double edmg:secondsPerBeat = 0.5" in text
     assert 'def Camera "MainCamera"' in text
     assert "double3 xformOp:translate.timeSamples" in text
+    assert "double3 xformOp:scale.timeSamples" in text
+    assert "token visibility.timeSamples" in text
     assert 'def Cube "Preview__1_drop_scene"' in text
     assert 'def Xform "_1_drop_scene"' in text
     assert "custom int edmg:startFrame = 0" in text
