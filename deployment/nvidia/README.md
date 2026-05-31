@@ -115,7 +115,8 @@ When the generate request includes an existing Studio `project_id`, the backend
 also saves `last_nvidia_scene_plan` and a capped `nvidia_scene_plan_history`
 entry in that project metadata. The smoke command uses a standalone sample ID,
 so it remains a non-mutating contract check by default.
-Use `--project-id YOUR_PROJECT_ID` to exercise the project-scoped route, then
+On this workstation, use `--project-id 4af898d1ebb24a0d8ed2d59a337dd965` to
+exercise the project-scoped route, then
 call `/v1/projects/{project_id}/nvidia/scene-plan/export` or use the Workspace
 Handoff button to write the USDA preview into `outputs/nvidia/`.
 The Omniverse Kit `edmg.ai_director` panel uses those same routes for

@@ -245,7 +245,7 @@ generate-and-persist path:
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
   --backend-url http://127.0.0.1:8000 `
   --generate `
-  --project-id YOUR_PROJECT_ID `
+  --project-id 4af898d1ebb24a0d8ed2d59a337dd965 `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_project.usda
 ```
 
@@ -261,7 +261,7 @@ local faster-whisper path when `EDMG_NVIDIA_RIVA_ASR_FALLBACK=1`. You can also
 call the direct project route without changing the default ASR provider:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/riva/transcribe `
+curl -X POST http://127.0.0.1:8000/v1/projects/4af898d1ebb24a0d8ed2d59a337dd965/nvidia/riva/transcribe `
   -H "Content-Type: application/json" `
   -d '{"language_code":"en-US"}'
 ```
@@ -269,7 +269,7 @@ curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/riva/trans
 To generate the render-worker handoff from the saved NVIDIA scene plan:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/projects/YOUR_PROJECT_ID/nvidia/render-job `
+curl -X POST http://127.0.0.1:8000/v1/projects/4af898d1ebb24a0d8ed2d59a337dd965/nvidia/render-job `
   -H "Content-Type: application/json" `
   -d '{"fps":24,"width":1920,"height":1080}'
 ```

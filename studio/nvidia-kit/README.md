@@ -89,7 +89,7 @@ Launch against a local Kit SDK by passing the SDK root that contains `kit.exe`:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
-  -KitSdkRoot "C:\path\to\kit-sdk-public" `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectsRoot "C:\NVDWCTAIGSS\studio\edmg-studio\python_backend\data\projects"
 ```
 
@@ -105,7 +105,7 @@ To check extension resolution without opening the UI:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
-  -KitSdkRoot "C:\path\to\kit-sdk-public" `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ListExtensions
 ```
 
@@ -170,7 +170,7 @@ Studio project id:
 ```powershell
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
   --backend-url http://127.0.0.1:8000 `
-  --project-id YOUR_PROJECT_ID `
+  --project-id 4af898d1ebb24a0d8ed2d59a337dd965 `
   --generate `
   --fetch-persisted `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_project.usda
