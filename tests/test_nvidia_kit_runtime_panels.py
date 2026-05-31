@@ -117,29 +117,27 @@ def test_render_queue_discovers_pending_rtx_jobs(tmp_path):
     stage.parent.mkdir(parents=True, exist_ok=True)
     stage.write_text("#usda 1.0\n", encoding="utf-8")
     job_path = render_jobs / "project_job.json"
-    job_path.write_text(
-        json.dumps(
+    job_payload = {
+        "schema_version": "edmg.nvidia.render_job.v1",
+        "kind": "nvidia_rtx_render_job",
+        "project": {"id": "project-one", "title": "Project One"},
+        "renderer": {"fps": 24, "resolution": {"width": 1280, "height": 720}, "output_format": "mp4"},
+        "inputs": {"usda_path": "outputs/nvidia/project.usda"},
+        "timeline": [
             {
-                "schema_version": "edmg.nvidia.render_job.v1",
-                "kind": "nvidia_rtx_render_job",
-                "project": {"id": "project-one", "title": "Project One"},
-                "renderer": {"fps": 24, "resolution": {"width": 1280, "height": 720}, "output_format": "mp4"},
-                "inputs": {"usda_path": "outputs/nvidia/project.usda"},
-                "timeline": [
-                    {
-                        "id": "scene-1",
-                        "start_frame": 0,
-                        "output": {
-                            "sequence_dir": "outputs/nvidia/renders/001_scene-1",
-                            "movie": "outputs/nvidia/renders/001_scene-1.mp4",
-                        },
-                    }
-                ],
-                "status": "ready_for_kit_worker",
+                "id": "scene-1",
+                "start_frame": 0,
+                "output": {
+                    "sequence_dir": "outputs/nvidia/renders/001_scene-1",
+                    "movie": "outputs/nvidia/renders/001_scene-1.mp4",
+                },
             }
-        ),
-        encoding="utf-8",
-    )
+        ],
+        "status": "ready_for_kit_worker",
+    }
+    job_path.write_text(json.dumps(job_payload), encoding="utf-8")
+    job_path.with_name(f"{job_path.name}.json").write_text(json.dumps(job_payload), encoding="utf-8")
+    job_path.with_name(f"{job_path.stem}.result.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
 
     records = panel.discover_render_jobs(tmp_path)
     result_payload = panel.build_render_job_result_payload(records[0], status="completed", outputs={"frames": ["a.png"]})

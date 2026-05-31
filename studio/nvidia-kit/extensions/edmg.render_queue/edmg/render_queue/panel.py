@@ -185,7 +185,7 @@ def discover_render_jobs(projects_root: Path, *, include_terminal: bool = False,
         reverse=True,
     )
     for job_path in candidates:
-        if job_path.name.endswith(".result.json"):
+        if job_path.name.endswith(".result.json") or job_path.name.endswith(".json.json"):
             continue
         try:
             record = load_render_job_record(job_path)
