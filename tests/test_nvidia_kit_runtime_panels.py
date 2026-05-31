@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import asyncio
 import json
 import subprocess
 import sys
@@ -232,3 +233,32 @@ def test_render_queue_extension_starts_headless_with_fake_backend(monkeypatch):
     ext.on_shutdown()
 
     assert ext._backend.base_url == "http://127.0.0.1:8000"
+
+
+def test_render_queue_autorun_loop_repeats_until_cancelled(monkeypatch):
+    extension = _import_extension_module("edmg.render_queue", "render_queue", "extension")
+    ext = extension.EdmgRenderQueueExtension()
+    ext._autorun_poll_s = 0.5
+    calls = []
+    sleeps = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    async def fake_run_next_job_async(*, emit_idle_log: bool = True) -> bool:
+        assert emit_idle_log is False
+        calls.append("run")
+        if len(calls) >= 2:
+            raise asyncio.CancelledError()
+        return False
+
+    monkeypatch.setattr(extension.asyncio, "sleep", fake_sleep)
+    ext._run_next_job_async = fake_run_next_job_async
+
+    try:
+        asyncio.run(ext._autorun_loop())
+    except asyncio.CancelledError:
+        pass
+
+    assert calls == ["run", "run"]
+    assert sleeps == [2.0, 0.5]

@@ -55,6 +55,14 @@ def _truthy(value: str) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _float_setting(path: str, default: float) -> float:
+    try:
+        value = float(_setting(path, str(default)))
+    except Exception:
+        return default
+    return max(0.25, value)
+
+
 def _default_projects_root() -> str:
     try:
         repo_root = Path(__file__).resolve().parents[6]
@@ -69,9 +77,11 @@ class EdmgRenderQueueExtension(omni.ext.IExt):  # type: ignore[name-defined]
         backend_url = _setting("/edmg/nvidia/backend_url", "http://127.0.0.1:8000")
         projects_root = _setting("/edmg/nvidia/projects_root", _default_projects_root())
         auto_run = _truthy(_setting("/edmg/nvidia/render_worker_autorun", "0"))
+        poll_s = _float_setting("/edmg/nvidia/render_worker_poll_s", 5.0)
         self._backend = RenderQueueBackendClient(base_url=backend_url)
         self._projects_root = Path(projects_root) if projects_root else Path()
         self._auto_run = auto_run
+        self._autorun_poll_s = poll_s
         self._window = None
         self._status_label = None
         self._worker_label = None
@@ -82,12 +92,14 @@ class EdmgRenderQueueExtension(omni.ext.IExt):  # type: ignore[name-defined]
         self._running_task = None
         print(f"[edmg.render_queue] startup backend={backend_url}")
         print(f"[edmg.render_queue] projects_root={self._projects_root}")
+        if self._auto_run:
+            print(f"[edmg.render_queue] autorun polling every {self._autorun_poll_s:g}s")
         self._build_window()
         self._refresh()
         self._scan_jobs()
         if self._auto_run:
             try:
-                self._running_task = asyncio.ensure_future(self._autorun_after_startup())
+                self._running_task = asyncio.ensure_future(self._autorun_loop())
             except Exception as exc:
                 print(f"[edmg.render_queue] could not schedule autorun: {exc}")
 
@@ -144,10 +156,11 @@ class EdmgRenderQueueExtension(omni.ext.IExt):  # type: ignore[name-defined]
             print(f"[edmg.render_queue] {message}")
             self._set_label("_status_label", message)
 
-    def _scan_jobs(self) -> None:
+    def _scan_jobs(self, *, emit_log: bool = True) -> None:
         self._queued_jobs = discover_render_jobs(self._projects_root, include_terminal=False, limit=20)
         message = summarize_render_jobs(self._queued_jobs)
-        print(f"[edmg.render_queue] {message}")
+        if emit_log:
+            print(f"[edmg.render_queue] {message}")
         self._set_label("_queue_label", message)
 
     def _run_next_job(self) -> None:
@@ -162,15 +175,17 @@ class EdmgRenderQueueExtension(omni.ext.IExt):  # type: ignore[name-defined]
             print(f"[edmg.render_queue] {message}")
             self._set_label("_result_label", message)
 
-    async def _autorun_after_startup(self) -> None:
+    async def _autorun_loop(self) -> None:
         await asyncio.sleep(2.0)
-        await self._run_next_job_async()
+        while True:
+            ran_job = await self._run_next_job_async(emit_idle_log=False)
+            await asyncio.sleep(0.25 if ran_job else self._autorun_poll_s)
 
-    async def _run_next_job_async(self) -> None:
-        self._scan_jobs()
+    async def _run_next_job_async(self, *, emit_idle_log: bool = True) -> bool:
+        self._scan_jobs(emit_log=emit_idle_log)
         if not self._queued_jobs:
             self._set_label("_result_label", "No pending Kit RTX jobs to run")
-            return
+            return False
         record = self._queued_jobs[0]
         started_at = timestamp()
         worker = worker_identity()
@@ -229,5 +244,6 @@ class EdmgRenderQueueExtension(omni.ext.IExt):  # type: ignore[name-defined]
             print(f"[edmg.render_queue] {message}")
             self._set_label("_result_label", message)
         finally:
-            self._scan_jobs()
+            self._scan_jobs(emit_log=True)
+        return True
 

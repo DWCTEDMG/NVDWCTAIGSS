@@ -2761,6 +2761,9 @@ def create_project_nvidia_render_job(project_id: str, payload: dict[str, Any] | 
     while out_path.exists():
         out_path = out_root / f"{stem}_{stamp}_{suffix}.json"
         suffix += 1
+    job_outputs = job.get("outputs") if isinstance(job.get("outputs"), dict) else {}
+    job_outputs["movie"] = f"outputs/nvidia/renders/{out_path.stem}.mp4"
+    job["outputs"] = job_outputs
     out_path.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
 
     export_entry = {

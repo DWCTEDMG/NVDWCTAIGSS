@@ -160,16 +160,16 @@ $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Sil
 if ($null -ne $existing) {
   $existingUrl = "http://$HostName`:$Port"
   $existingNvidiaEnabled = Get-ExistingBackendNvidiaEnabled -Url $existingUrl
-  if ($existingNvidiaEnabled -or $ReuseExisting) {
+  if ($StopExisting) {
+    $modeText = if ($existingNvidiaEnabled) { "NVIDIA-enabled" } else { "non-NVIDIA" }
+    Write-Step "Stopping existing $modeText listener on port $Port, PID $($existing.OwningProcess)."
+    Stop-Process -Id $existing.OwningProcess -Force
+    Start-Sleep -Seconds 2
+  } elseif ($existingNvidiaEnabled -or $ReuseExisting) {
     $modeText = if ($existingNvidiaEnabled) { "NVIDIA-enabled" } else { "non-NVIDIA" }
     Write-Step "Port $Port is already listening on PID $($existing.OwningProcess). Reusing $modeText backend."
     Write-Step "Health: $existingUrl/health"
     exit 0
-  }
-  if ($StopExisting) {
-    Write-Step "Stopping existing non-NVIDIA listener on port $Port, PID $($existing.OwningProcess)."
-    Stop-Process -Id $existing.OwningProcess -Force
-    Start-Sleep -Seconds 2
   } else {
     throw "Port $Port is already listening on PID $($existing.OwningProcess), but NVIDIA mode is not enabled. Stop that process, rerun with -StopExisting, or pass -ReuseExisting to keep it."
   }
