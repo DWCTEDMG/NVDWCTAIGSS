@@ -121,19 +121,28 @@ function Initialize-BackendVenv {
   if ([string]::IsNullOrWhiteSpace($SeedPython)) {
     throw "No compatible Python found. Install Python 3.10, 3.11, 3.12, or 3.13 and rerun this script."
   }
-  Write-Step "Creating backend virtual environment: $venvRoot"
-  & $SeedPython -m venv $venvRoot
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to create backend virtual environment with $SeedPython"
+  if (-not (Test-Path -LiteralPath $venvPython)) {
+    Write-Step "Creating backend virtual environment: $venvRoot"
+    & $SeedPython -m venv $venvRoot
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to create backend virtual environment with $SeedPython"
+    }
+  } else {
+    Write-Step "Using existing backend virtual environment: $venvRoot"
   }
   Write-Step "Installing backend dependencies into .venv"
-  & $venvPython -m pip install --upgrade pip
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to upgrade pip in $venvRoot"
-  }
-  & $venvPython -m pip install -e .
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to install backend package into $venvRoot"
+  Push-Location $backendRoot
+  try {
+    & $venvPython -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to upgrade pip in $venvRoot"
+    }
+    & $venvPython -m pip install -e .
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to install backend package into $venvRoot"
+    }
+  } finally {
+    Pop-Location
   }
 }
 
