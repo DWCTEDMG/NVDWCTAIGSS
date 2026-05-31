@@ -127,7 +127,9 @@ frames into `outputs/nvidia/renders/`, assembles MP4 output with FFmpeg, and
 reports completion or failure through
 `/v1/projects/{project_id}/nvidia/render-job/result`. FFmpeg must be available
 on `PATH`, passed to the Kit launcher with `-FfmpegPath`, or set with
-`EDMG_FFMPEG_PATH`.
+`EDMG_FFMPEG_PATH`. Launch Kit with `-AutoRunRenderWorker` to keep the queue
+consumer polling for newly created jobs; the default poll interval is five
+seconds and can be changed with `-RenderWorkerPollSeconds`.
 
 ## Environment knobs
 
@@ -185,7 +187,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
    `EDMG_NVIDIA_RIVA_ASR=1` only after the Riva Python client and service are
    available.
 6. Launch the Kit app and use the AI Director panel to fetch, regenerate,
-   export, and open the same project-scoped USDA preview.
+   export, and open the same project-scoped USDA preview. Keep
+   `-AutoRunRenderWorker` enabled for unattended RTX queue consumption.
 7. Wire Audio2Face/ACE after planner, USD, and speech paths are stable.
 
 ## Official image policy

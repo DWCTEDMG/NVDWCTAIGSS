@@ -252,12 +252,15 @@ and the starter stage. The first panels are loaded by the EDMG extensions:
 - `edmg.timeline` reads `/edmg/nvidia/sample_scene_plan` and summarizes scene
   cues.
 - `edmg.render_queue` checks `/v1/worker/status` and
-  `/v1/nvidia/diagnostics`, scans pending RTX render jobs, and can run the next
-  job from the Kit UI.
+  `/v1/nvidia/diagnostics`, scans pending RTX render jobs, and can either run
+  the next job from the Kit UI or continuously consume jobs when launched with
+  `-AutoRunRenderWorker`.
 
 The launcher auto-detects `ffmpeg` from `PATH` and passes it to Kit as
 `/edmg/nvidia/ffmpeg_path`. You can also set `EDMG_FFMPEG_PATH` before launching
-Kit when you need to pin a specific FFmpeg binary.
+Kit when you need to pin a specific FFmpeg binary. The autorun queue consumer
+polls every five seconds by default; pass `-RenderWorkerPollSeconds 1` when you
+want a tighter local smoke-test loop.
 
 In the AI Director panel:
 
@@ -281,6 +284,17 @@ In the Render Queue panel:
    contract.
 3. Check the Studio Outputs page for the job status, result sidecar, and
    rendered frame and movie paths.
+
+For unattended local handoff testing, launch Kit with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
+  -KitSdkRoot $env:OMNI_KIT_SDK_ROOT `
+  -ProjectId YOUR_PROJECT_ID `
+  -AutoRunRenderWorker `
+  -RenderWorkerPollSeconds 5
+```
 
 ## Current implementation target
 

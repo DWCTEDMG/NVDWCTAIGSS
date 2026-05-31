@@ -40,7 +40,9 @@ work:
   worker status plus NVIDIA diagnostics/readiness, scans the Studio
   `outputs/nvidia/render_jobs/*.json` handoff files, opens the referenced USDA
   stage, captures RTX viewport frames, assembles MP4 output with FFmpeg when the
-  job requests it, and reports the result back to the backend.
+  job requests it, and reports the result back to the backend. When Kit is
+  launched with `-AutoRunRenderWorker`, the extension stays alive as a queue
+  consumer and picks up new jobs on the configured poll interval.
 
 A full Kit App Template checkout, launcher scripts, and redistributable runtime
 packaging should be added only after selecting and verifying a specific
@@ -90,7 +92,10 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 The launcher auto-detects `ffmpeg` from `PATH` for MP4 assembly and sends it to
 Kit through `/edmg/nvidia/ffmpeg_path`. Set `EDMG_FFMPEG_PATH` or pass
-`-FfmpegPath` only when you need to force a specific FFmpeg binary.
+`-FfmpegPath` only when you need to force a specific FFmpeg binary. Pass
+`-AutoRunRenderWorker` to continuously consume project render jobs, and tune
+the idle interval with `-RenderWorkerPollSeconds` when a faster smoke-test loop
+is useful.
 
 To check extension resolution without opening the UI:
 

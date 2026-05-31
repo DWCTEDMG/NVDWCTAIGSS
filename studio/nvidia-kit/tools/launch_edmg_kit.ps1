@@ -4,6 +4,7 @@ param(
   [string]$FfmpegPath = "",
   [string]$ProjectsRoot = "",
   [string]$ProjectId = "",
+  [double]$RenderWorkerPollSeconds = 5.0,
   [switch]$AutoRunRenderWorker,
   [switch]$ListExtensions
 )
@@ -47,6 +48,7 @@ $args = @(
   "--/edmg/nvidia/ffmpeg_path=$FfmpegPath",
   "--/edmg/nvidia/projects_root=$ProjectsRoot",
   "--/edmg/nvidia/render_worker_autorun=$([bool]$AutoRunRenderWorker)",
+  "--/edmg/nvidia/render_worker_poll_s=$RenderWorkerPollSeconds",
   "--/edmg/nvidia/sample_stage=$($sampleStage.Path)",
   "--/edmg/nvidia/sample_scene_plan=$($sampleScenePlan.Path)"
 )
@@ -68,6 +70,7 @@ if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
   Write-Host "[edmg-kit] Project ID: $ProjectId"
 }
 Write-Host "[edmg-kit] Auto-run render worker: $([bool]$AutoRunRenderWorker)"
+Write-Host "[edmg-kit] Render worker poll seconds: $RenderWorkerPollSeconds"
 Write-Host "[edmg-kit] Sample stage: $($sampleStage.Path)"
 
 & $kitExe @args
