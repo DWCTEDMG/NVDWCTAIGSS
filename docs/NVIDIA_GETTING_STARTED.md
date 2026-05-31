@@ -73,6 +73,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
 The NGC login helper reads `NGC_API_KEY` from the shell or ignored `.env.local`
 file and never prints the key value.
 
+The local backend helper uses `studio/edmg-studio/python_backend/.venv` when it
+is ready, or bootstraps that virtual environment from an installed Python
+3.10-3.13 interpreter. The backend package declares `<3.14`, so do not launch
+the backend directly with Python 3.14.
+
 ## 4. Start the NVIDIA-aware stack
 
 Base backend override:

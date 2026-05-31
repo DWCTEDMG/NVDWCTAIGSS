@@ -167,7 +167,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvid
   `--gpus all`.
 - `start_nvidia_backend_local.ps1` starts the local dev backend on port `8000`
   with the NVIDIA env file loaded, while leaving NIM free to use host port
-  `8001`.
+  `8001`. It reuses an existing listener, otherwise it uses or bootstraps
+  `studio/edmg-studio/python_backend/.venv` from Python 3.10-3.13 so the backend
+  does not accidentally start with unsupported Python 3.14.
 
 ## First validation target
 
