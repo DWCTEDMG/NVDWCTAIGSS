@@ -119,10 +119,40 @@ def _camera_rotate_sample(index: int, total: int) -> tuple[float, float, float]:
     return pitch, yaw, 0.0
 
 
+def _shot_camera_translate_sample(index: int, total: int, phase: float = 0.0) -> tuple[float, float, float]:
+    total = max(1, total)
+    center = (total + 1) / 2.0
+    x_offset = (index - center) * 0.58
+    y_offset = 2.6 + (0.18 if index % 2 == 0 else 0.0)
+    z_offset = 8.8 - min(1.8, index * 0.18) - (0.52 * max(0.0, min(1.0, phase)))
+    return x_offset, y_offset, z_offset
+
+
+def _shot_camera_rotate_sample(index: int, total: int, phase: float = 0.0) -> tuple[float, float, float]:
+    total = max(1, total)
+    center = (total + 1) / 2.0
+    yaw = (center - index) * 2.4 + (0.9 * max(0.0, min(1.0, phase)))
+    pitch = -13.0 - (0.6 if index % 2 == 0 else 0.0)
+    return pitch, yaw, 0.0
+
+
+def _shot_light_translate_sample(index: int, total: int) -> tuple[float, float, float]:
+    total = max(1, total)
+    center = (total + 1) / 2.0
+    x_offset = (index - center) * 0.9
+    return x_offset, 4.2, 1.8
+
+
 def _slug(value: Any, fallback: str) -> str:
     raw = str(value or "").strip().lower()
     slug = _SLUG_RE.sub("-", raw).strip("-")
     return slug or fallback
+
+
+def _render_product_path(project_id: str, scene_id: Any, index: int) -> str:
+    project_slug = _slug(project_id, "project")
+    scene_slug = _slug(scene_id, f"scene-{index:03d}")
+    return f"outputs/nvidia/renders/{project_slug}/{index:03d}_{scene_slug}.mp4"
 
 
 def _as_optional_number(value: Any) -> float | None:
@@ -330,6 +360,8 @@ def scene_plan_usd_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         "edmg:bpm": normalized["bpm"],
         "edmg:provider": normalized["provider"],
         "edmg:sceneCount": len(normalized["scenes"]),
+        "edmg:usdGeneration": "production-shot-graph-v1",
+        "edmg:renderProductCount": len(normalized["scenes"]),
     }
 
 
@@ -344,6 +376,8 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
     scene_count = max(1, len(normalized["scenes"]))
     beat_frames = _beat_frames(duration_s, bpm)
     seconds_per_beat = 60.0 / float(bpm) if bpm else None
+    project_slug = _slug(project_id, "project")
+    render_output_dir = f"outputs/nvidia/renders/{project_slug}"
 
     lines = [
         "#usda 1.0",
@@ -364,25 +398,223 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
         f"    custom double edmg:bpm = {_usd_number(bpm)}",
         f"    custom string edmg:provider = {_usd_string(provider)}",
         f"    custom int edmg:sceneCount = {len(normalized['scenes'])}",
+        '    custom string edmg:usdGeneration = "production-shot-graph-v1"',
+        f"    custom string edmg:renderOutputDir = {_usd_string(render_output_dir)}",
         "",
-        '    def Scope "AudioTimeline"',
+        '    def Scope "Production"',
         "    {",
-        f"        custom double edmg:durationSeconds = {_usd_number(duration_s)}",
-        f"        custom double edmg:bpm = {_usd_number(bpm)}",
-        f"        custom double edmg:secondsPerBeat = {_usd_number(seconds_per_beat)}",
-        f"        custom int edmg:beatMarkerCount = {len(beat_frames)}",
-        "        custom double edmg:framesPerSecond = 24",
-        f"        custom int edmg:endFrame = {end_frame}",
-        "    }",
-        "",
-        '    def Scope "Cameras"',
-        "    {",
-        '        def Camera "MainCamera"',
+        '        def Scope "RenderSettings"',
         "        {",
-        "            double3 xformOp:translate = (0, 3.2, 10.5)",
-        "            double3 xformOp:rotateXYZ = (-16, 0, 0)",
-        "            double3 xformOp:translate.timeSamples = {",
+        '            custom string edmg:renderer = "RTX"',
+        "            custom int edmg:width = 1920",
+        "            custom int edmg:height = 1080",
+        "            custom double edmg:framesPerSecond = 24",
+        f"            custom int edmg:startFrame = 0",
+        f"            custom int edmg:endFrame = {end_frame}",
+        f"            custom string edmg:defaultOutputDir = {_usd_string(render_output_dir)}",
+        '            custom string edmg:primaryCamera = "/EDMGScenePlan/Cameras/MainCamera"',
+        "        }",
+        "",
+        '        def Scope "RenderProducts"',
+        "        {",
     ]
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        product_path = _render_product_path(project_id, scene.get("id"), index)
+        start_frame = _frame_at_seconds(scene.get("start_s"))
+        end_scene_frame = _frame_at_seconds(scene.get("end_s"))
+        lines.extend(
+            [
+                f'            def Xform "Product_{prim_name}"',
+                "            {",
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                custom int edmg:startFrame = {start_frame}",
+                f"                custom int edmg:endFrame = {end_scene_frame}",
+                f"                custom string edmg:filePath = {_usd_string(product_path)}",
+                f'                custom string edmg:cameraPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotCameras/Camera_{prim_name}")}',
+                f'                custom string edmg:shotPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotGraph/Shot_{prim_name}")}',
+                "            }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "        }",
+            "",
+            '        def Scope "AssetSlots"',
+            "        {",
+        ]
+    )
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        lines.extend(
+            [
+                f'            def Xform "Slot_{prim_name}"',
+                "            {",
+                '                custom string edmg:assetRole = "generated-set-piece"',
+                '                custom string edmg:assetStatus = "pending-generation"',
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                custom string edmg:prompt = {_usd_string(scene.get('prompt'))}",
+                f"                custom string edmg:look = {_usd_string(scene.get('look'))}",
+                f"                custom string edmg:motion = {_usd_string(scene.get('motion'))}",
+                "            }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "        }",
+            "",
+            '        def Scope "ShotCameras"',
+            "        {",
+        ]
+    )
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        start_frame = _frame_at_seconds(scene.get("start_s"))
+        end_scene_frame = _frame_at_seconds(scene.get("end_s"))
+        translate_samples = _dedupe_samples(
+            [
+                (start_frame, _usd_color(_shot_camera_translate_sample(index, scene_count, 0.0))),
+                (end_scene_frame, _usd_color(_shot_camera_translate_sample(index, scene_count, 1.0))),
+            ]
+        )
+        rotate_samples = _dedupe_samples(
+            [
+                (start_frame, _usd_color(_shot_camera_rotate_sample(index, scene_count, 0.0))),
+                (end_scene_frame, _usd_color(_shot_camera_rotate_sample(index, scene_count, 1.0))),
+            ]
+        )
+        lines.extend(
+            [
+                f'            def Camera "Camera_{prim_name}"',
+                "            {",
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                custom string edmg:cameraNotes = {_usd_string(scene.get('camera'))}",
+                "                double3 xformOp:translate.timeSamples = {",
+            ]
+        )
+        for sample_index, (frame, value) in enumerate(translate_samples):
+            suffix = "," if sample_index < len(translate_samples) - 1 else ""
+            lines.append(f"                    {frame}: {value}{suffix}")
+        lines.extend(
+            [
+                "                }",
+                "                double3 xformOp:rotateXYZ.timeSamples = {",
+            ]
+        )
+        for sample_index, (frame, value) in enumerate(rotate_samples):
+            suffix = "," if sample_index < len(rotate_samples) - 1 else ""
+            lines.append(f"                    {frame}: {value}{suffix}")
+        lines.extend(
+            [
+                "                }",
+                '                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ"]',
+                "                float focalLength = 38",
+                "                float horizontalAperture = 20.955",
+                "            }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "        }",
+            "",
+            '        def Scope "ShotLights"',
+            "        {",
+        ]
+    )
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        color = _scene_color(index)
+        key_translate = _shot_light_translate_sample(index, scene_count)
+        rim_translate = (-key_translate[0], 2.9, -2.2)
+        lines.extend(
+            [
+                f'            def SphereLight "Key_{prim_name}"',
+                "            {",
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                double3 xformOp:translate = {_usd_color(key_translate)}",
+                '                uniform token[] xformOpOrder = ["xformOp:translate"]',
+                f"                color3f color = {_usd_color(color)}",
+                "                float intensity = 950",
+                "                float radius = 1.15",
+                "            }",
+                f'            def SphereLight "Rim_{prim_name}"',
+                "            {",
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                double3 xformOp:translate = {_usd_color(rim_translate)}",
+                '                uniform token[] xformOpOrder = ["xformOp:translate"]',
+                "                color3f color = (0.98, 0.78, 0.42)",
+                "                float intensity = 420",
+                "                float radius = 0.72",
+                "            }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "        }",
+            "",
+            '        def Scope "ShotGraph"',
+            "        {",
+        ]
+    )
+
+    for index, scene in enumerate(normalized["scenes"], start=1):
+        prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        start_frame = _frame_at_seconds(scene.get("start_s"))
+        end_scene_frame = _frame_at_seconds(scene.get("end_s"))
+        product_path = _render_product_path(project_id, scene.get("id"), index)
+        lines.extend(
+            [
+                f'            def Xform "Shot_{prim_name}"',
+                "            {",
+                f"                custom string edmg:sceneId = {_usd_string(scene.get('id'))}",
+                f"                custom int edmg:shotIndex = {index}",
+                f"                custom int edmg:startFrame = {start_frame}",
+                f"                custom int edmg:endFrame = {end_scene_frame}",
+                f"                custom double edmg:startSeconds = {_usd_number(scene.get('start_s'))}",
+                f"                custom double edmg:endSeconds = {_usd_number(scene.get('end_s'))}",
+                f"                custom string edmg:prompt = {_usd_string(scene.get('prompt'))}",
+                f"                custom string edmg:look = {_usd_string(scene.get('look'))}",
+                f"                custom string edmg:motion = {_usd_string(scene.get('motion'))}",
+                f"                custom string edmg:renderProduct = {_usd_string(product_path)}",
+                f'                custom string edmg:cameraPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotCameras/Camera_{prim_name}")}',
+                f'                custom string edmg:keyLightPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotLights/Key_{prim_name}")}',
+                f'                custom string edmg:assetSlotPrim = {_usd_string(f"/EDMGScenePlan/Production/AssetSlots/Slot_{prim_name}")}',
+                "            }",
+            ]
+        )
+
+    lines.extend(
+        [
+            "        }",
+            "    }",
+            "",
+            '    def Scope "AudioTimeline"',
+            "    {",
+            f"        custom double edmg:durationSeconds = {_usd_number(duration_s)}",
+            f"        custom double edmg:bpm = {_usd_number(bpm)}",
+            f"        custom double edmg:secondsPerBeat = {_usd_number(seconds_per_beat)}",
+            f"        custom int edmg:beatMarkerCount = {len(beat_frames)}",
+            "        custom double edmg:framesPerSecond = 24",
+            f"        custom int edmg:endFrame = {end_frame}",
+            "    }",
+            "",
+            '    def Scope "Cameras"',
+            "    {",
+            '        def Camera "MainCamera"',
+            "        {",
+            "            double3 xformOp:translate = (0, 3.2, 10.5)",
+            "            double3 xformOp:rotateXYZ = (-16, 0, 0)",
+            "            double3 xformOp:translate.timeSamples = {",
+        ]
+    )
 
     for index, scene in enumerate(normalized["scenes"], start=1):
         frame = _frame_at_seconds(scene.get("start_s"))
@@ -587,6 +819,7 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
 
     for index, scene in enumerate(normalized["scenes"], start=1):
         prim_name = _usd_identifier(scene.get("id"), f"Scene_{index:03d}")
+        product_path = _render_product_path(project_id, scene.get("id"), index)
         lines.extend(
             [
                 f'        def Xform "{prim_name}"',
@@ -601,6 +834,10 @@ def scene_plan_usda_text(payload: dict[str, Any]) -> str:
                 f"            custom string edmg:look = {_usd_string(scene.get('look'))}",
                 f"            custom string edmg:motion = {_usd_string(scene.get('motion'))}",
                 f"            custom string edmg:variant = {_usd_string(scene.get('usd_variant'))}",
+                f"            custom string edmg:renderProduct = {_usd_string(product_path)}",
+                f'            custom string edmg:cameraPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotCameras/Camera_{prim_name}")}',
+                f'            custom string edmg:keyLightPrim = {_usd_string(f"/EDMGScenePlan/Production/ShotLights/Key_{prim_name}")}',
+                f'            custom string edmg:assetSlotPrim = {_usd_string(f"/EDMGScenePlan/Production/AssetSlots/Slot_{prim_name}")}',
                 "        }",
             ]
         )

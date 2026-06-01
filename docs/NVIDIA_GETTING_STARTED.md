@@ -278,8 +278,10 @@ python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
 ```
 
 The Studio Workspace Handoff section also shows the saved NVIDIA/OpenUSD plan
-and can export the persisted USDA artifact into the project's `outputs/nvidia/`
-folder. It can also build an RTX render-job JSON handoff in
+and can export the persisted production USDA artifact into the project's
+`outputs/nvidia/` folder. The generated USDA includes a `Production` scope with
+render settings, per-shot cameras/lights, asset slots, render products, and
+scene-level render output metadata. It can also build an RTX render-job JSON handoff in
 `outputs/nvidia/render_jobs/` for the Omniverse Kit RTX worker.
 
 If Riva is running and you want it to handle project transcription, set
@@ -373,7 +375,7 @@ In the AI Director panel:
 2. Use `Fetch Project Plan` to load the saved NVIDIA/OpenUSD plan, or
    `Generate Plan` to call the configured NVIDIA/NIM-compatible planner through
    the project-scoped backend route.
-3. Use `Export USDA` to persist the saved preview into the project
+3. Use `Export USDA` to persist the saved production USDA into the project
    `outputs/nvidia/` folder.
 4. Use `Open Preview` to write the USDA text to a temporary local file and open
    it as the active Kit stage.
@@ -404,9 +406,9 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 
 The `nvidia-nim-planner` backend path is wired: `/v1/nvidia/scene-plan` calls the
 configured OpenAI-compatible planner, converts the selected variant into the
-normalized NVIDIA scene-plan contract, returns a USDA preview, and saves the
-normalized scene plan into existing Studio project metadata when `project_id`
-matches a project.
+normalized NVIDIA scene-plan contract, returns a production USDA shot graph, and
+saves the normalized scene plan into existing Studio project metadata when
+`project_id` matches a project.
 
 On this Windows workstation, the local NVIDIA lane has been validated end to
 end: backend health, NVIDIA diagnostics readiness, NIM/OpenAI-compatible
@@ -416,6 +418,7 @@ command is `deployment/nvidia/smoke_nvidia_kit_render_job.ps1`. A repeatable
 Kit source bundle can now be staged with
 `deployment/nvidia/stage_nvidia_kit_app.ps1`.
 
-The remaining build work is Windows installer/runtime redistribution decisions,
-richer USD scene authoring, and optional live integrations for Riva,
+The remaining build work is service-specific UI/payload templates for
+Audio2Face/ACE/Cosmos, richer asset generation from the production USD shot
+graph, and live GPU runner hardening for release promotion.
 Audio2Face/ACE, Triton, Cosmos, and remote GPU service profiles.

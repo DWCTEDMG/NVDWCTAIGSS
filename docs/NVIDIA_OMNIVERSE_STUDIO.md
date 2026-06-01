@@ -136,9 +136,9 @@ Current local lane status:
   official local NVIDIA service stack.
 - `/v1/nvidia/scene-plan` asks the configured NVIDIA/NIM-compatible planner for
   a plan, converts the selected variant into the normalized NVIDIA scene-plan
-  contract, returns a generated USDA preview, and saves the normalized result
-  into existing Studio project metadata when the request includes a matching
-  `project_id`.
+  contract, returns a production USDA shot graph, and saves the normalized
+  result into existing Studio project metadata when the request includes a
+  matching `project_id`.
 - `/v1/projects/{project_id}/nvidia/scene-plan` provides the project-scoped
   generate-and-fetch path for the persisted NVIDIA scene plan.
 - `/v1/projects/{project_id}/nvidia/scene-plan/export` writes the persisted USDA
@@ -160,7 +160,9 @@ Current local lane status:
   Omniverse Kit RTX render-job JSON handoff from the saved NVIDIA scene plan and
   writes it into `outputs/nvidia/render_jobs/`.
 - `/v1/usd/scene-plan` validates a scene plan and returns normalized USD-style
-  metadata keys plus a generated USDA text preview.
+  metadata keys plus generated USDA text with a `Production` scope containing
+  render settings, render products, asset slots, shot cameras, shot lights, and
+  per-shot metadata.
 - `studio/nvidia-kit/apps/edmg.nvidia.studio.kit` declares the first Kit app
   shell and four EDMG extensions.
 - `edmg.ai_director` opens the first Kit-side AI Director panel. It can refresh
@@ -177,7 +179,8 @@ Current local lane status:
   result back to the backend, and can keep polling as an unattended queue
   consumer when Kit is launched with `-AutoRunRenderWorker`.
 - `studio/nvidia-kit/tools/export_scene_plan_usda.py` writes a scene-plan JSON
-  artifact to a starter `.usda` file without requiring Omniverse locally.
+  artifact to a production-oriented `.usda` shot graph without requiring
+  Omniverse locally.
 - `studio/nvidia-kit/tools/smoke_ai_director_backend.py` validates the same
   backend contract from the Kit workspace, including project-scoped generate and
   fetch checks when a real Studio `project_id` is supplied.

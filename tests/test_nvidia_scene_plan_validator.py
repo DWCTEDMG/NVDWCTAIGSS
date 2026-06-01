@@ -67,8 +67,16 @@ def test_nvidia_scene_plan_exporter_writes_usda(tmp_path):
     text = out_path.read_text(encoding="utf-8")
     assert text.startswith("#usda 1.0")
     assert 'custom string edmg:projectId = "sample-audio-reactive-stage"' in text
+    assert 'custom string edmg:usdGeneration = "production-shot-graph-v1"' in text
+    assert 'def Scope "Production"' in text
+    assert 'def Scope "RenderProducts"' in text
+    assert 'def Scope "ShotCameras"' in text
+    assert 'def Scope "ShotLights"' in text
+    assert 'def Scope "ShotGraph"' in text
     assert 'def Scope "AudioTimeline"' in text
     assert 'def Scope "BeatGrid"' in text
+    assert 'custom string edmg:renderProduct = "outputs/nvidia/renders/sample-audio-reactive-stage/002_drop.mp4"' in text
+    assert 'def SphereLight "Key_drop"' in text
     assert "double3 xformOp:translate.timeSamples" in text
     assert "double3 xformOp:scale.timeSamples" in text
     assert "token visibility.timeSamples" in text

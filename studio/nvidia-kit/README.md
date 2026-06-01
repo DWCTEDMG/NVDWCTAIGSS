@@ -32,7 +32,7 @@ work:
 - `edmg.ai_director` opens a Kit panel for the first project-scoped workflow.
   From that panel you can enter a Studio `project_id` or visible project name,
   fetch the saved NVIDIA scene plan, ask the backend/NIM planner for a refreshed
-  plan, export the persisted USDA, and open the generated USDA preview as a
+  plan, export the persisted production USDA, and open the generated stage as a
   local Kit stage.
 - `edmg.timeline` opens a scene timeline panel from the configured starter
   scene-plan JSON and summarizes the OpenUSD cue boundaries.
@@ -148,6 +148,10 @@ python studio/nvidia-kit/tools/export_scene_plan_usda.py `
   studio/nvidia-kit/sample_projects/audio_reactive_stage/scene_plan.json `
   studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_scene_plan.usda
 ```
+
+The generated USDA is no longer only a preview rig. It includes a `Production`
+scope with render settings, render products, asset slots, shot cameras, shot
+lights, and per-shot render output metadata for the RTX queue handoff.
 
 The `edmg.ai_director` extension includes a dependency-free backend client and a
 Kit UI panel for the first API contracts:

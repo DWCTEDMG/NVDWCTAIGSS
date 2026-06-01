@@ -120,7 +120,9 @@ so it remains a non-mutating contract check by default.
 On this workstation, use `--project-id 4af898d1ebb24a0d8ed2d59a337dd965` to
 exercise the project-scoped route, then
 call `/v1/projects/{project_id}/nvidia/scene-plan/export` or use the Workspace
-Handoff button to write the USDA preview into `outputs/nvidia/`.
+Handoff button to write the USDA stage into `outputs/nvidia/`. Generated USDA
+now includes a `Production` scope with render settings, render products, asset
+slots, shot cameras, shot lights, and per-shot render product metadata.
 The Omniverse Kit `edmg.ai_director` panel uses those same routes for
 project-scoped fetch, generate, export, and OpenUSD preview actions.
 The Kit `edmg.render_queue` panel reads `/v1/worker/status` and
@@ -269,7 +271,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
    `EDMG_NVIDIA_RIVA_ASR=1` only after the Riva Python client and service are
    available.
 6. Launch the Kit app and use the AI Director panel to fetch, regenerate,
-   export, and open the same project-scoped USDA preview. Keep
+   export, and open the same project-scoped production USDA. Keep
    `-AutoRunRenderWorker` enabled for unattended RTX queue consumption.
 7. Add service-specific Audio2Face/ACE panels and payload templates on top of
    the generic invoke bridge after the planner, USD, and speech paths are

@@ -236,9 +236,15 @@ def test_nvidia_usd_scene_plan_route_returns_normalized_metadata(monkeypatch):
     assert response["scene_plan"]["bpm"] == 128.0
     assert response["usd_metadata"]["edmg:projectId"] == "sample"
     assert response["usd_metadata"]["edmg:sceneCount"] == 1
+    assert response["usd_metadata"]["edmg:usdGeneration"] == "production-shot-graph-v1"
     assert response["usd_stage"]["format"] == "usda"
+    assert 'def Scope "Production"' in response["usd_stage"]["text"]
+    assert 'def Scope "ShotGraph"' in response["usd_stage"]["text"]
+    assert 'def Camera "Camera_intro"' in response["usd_stage"]["text"]
+    assert 'def SphereLight "Key_intro"' in response["usd_stage"]["text"]
     assert 'def Xform "intro"' in response["usd_stage"]["text"]
     assert 'custom string edmg:variant = "intro_neon"' in response["usd_stage"]["text"]
+    assert 'custom string edmg:renderProduct = "outputs/nvidia/renders/sample/001_intro.mp4"' in response["usd_stage"]["text"]
     assert response["nvidia"]["enabled"] is True
 
 
@@ -315,7 +321,11 @@ def test_nvidia_generate_scene_plan_route_calls_planner_and_returns_usda(monkeyp
     assert payload["scene_plan"]["project_id"] == "generated-stage"
     assert payload["scene_plan"]["provider"] == "nvidia-profile:openai_compat:nvidia/test-nim"
     assert payload["usd_metadata"]["edmg:sceneCount"] == 2
+    assert payload["usd_metadata"]["edmg:usdGeneration"] == "production-shot-graph-v1"
+    assert 'def Scope "Production"' in payload["usd_stage"]["text"]
+    assert 'def Scope "ShotCameras"' in payload["usd_stage"]["text"]
     assert 'def Xform "scene_1"' in payload["usd_stage"]["text"]
+    assert 'custom string edmg:renderProduct = "outputs/nvidia/renders/generated-stage/001_scene-1.mp4"' in payload["usd_stage"]["text"]
     assert "planner-secret-token" not in repr(payload)
 
 
@@ -421,8 +431,12 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert exported["export"]["absolute_path"] == str((project_store.project_dir(project.id) / exported["export"]["path"]).resolve())
     assert exported["export"]["metadata_absolute_path"] == str((project_store.project_dir(project.id) / exported["export"]["metadata_path"]).resolve())
     exported_text = (project_store.project_dir(project.id) / exported["export"]["path"]).read_text(encoding="utf-8")
+    assert 'def Scope "Production"' in exported_text
+    assert 'def Scope "RenderProducts"' in exported_text
+    assert 'def Scope "ShotGraph"' in exported_text
     assert 'def Scope "AudioTimeline"' in exported_text
     assert "double3 xformOp:translate.timeSamples" in exported_text
+    assert f'custom string edmg:renderProduct = "outputs/nvidia/renders/{project.id}/001_scene-1.mp4"' in exported_text
     assert render_job["ok"] is True
     assert render_job["job"]["kind"] == "nvidia_rtx_render_job"
     assert render_job["job"]["renderer"]["fps"] == 30
@@ -462,6 +476,7 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert saved_job["result"]["worker"]["name"] == "edmg.render_queue"
     saved = project_store.get(project.id)
     assert saved is not None
+    assert 'def Scope "Production"' in saved.meta["last_nvidia_scene_plan"]["usd_stage"]["text"]
     assert 'def Scope "AudioTimeline"' in saved.meta["last_nvidia_scene_plan"]["usd_stage"]["text"]
     assert saved.meta["exports"]["nvidia_scene_plans"][-1]["path"] == exported["export"]["path"]
     assert saved.meta["exports"]["nvidia_render_jobs"][-1]["path"] == render_job["export"]["path"]
@@ -513,15 +528,27 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
 
     assert 'custom string edmg:title = "A \\"quoted\\" title"' in text
     assert 'upAxis = "Y"' in text
+    assert 'custom string edmg:usdGeneration = "production-shot-graph-v1"' in text
+    assert 'def Scope "Production"' in text
+    assert 'def Scope "RenderSettings"' in text
+    assert 'def Scope "RenderProducts"' in text
+    assert 'def Scope "AssetSlots"' in text
+    assert 'def Scope "ShotCameras"' in text
+    assert 'def Scope "ShotLights"' in text
+    assert 'def Scope "ShotGraph"' in text
     assert 'def Scope "AudioTimeline"' in text
     assert 'def Scope "BeatGrid"' in text
     assert "custom double edmg:secondsPerBeat = 0.5" in text
     assert 'def Camera "MainCamera"' in text
+    assert 'def Camera "Camera__1_drop_scene"' in text
+    assert 'def SphereLight "Key__1_drop_scene"' in text
+    assert 'def Xform "Shot__1_drop_scene"' in text
     assert "double3 xformOp:translate.timeSamples" in text
     assert "double3 xformOp:scale.timeSamples" in text
     assert "token visibility.timeSamples" in text
     assert 'def Cube "Preview__1_drop_scene"' in text
     assert 'def Xform "_1_drop_scene"' in text
+    assert 'custom string edmg:renderProduct = "outputs/nvidia/renders/quoted-project/001_1-drop-scene.mp4"' in text
     assert "custom int edmg:startFrame = 0" in text
     assert "custom int edmg:endFrame = 96" in text
     assert 'custom string edmg:prompt = "laser \\"wall\\"\\nwith haze"' in text
