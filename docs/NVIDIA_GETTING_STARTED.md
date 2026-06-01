@@ -2,6 +2,11 @@
 
 This is the local setup path for the NVIDIA-first branch.
 
+The Kit runtime packaging decision is documented in
+[`NVIDIA_KIT_RUNTIME_DECISION.md`](NVIDIA_KIT_RUNTIME_DECISION.md): default
+distribution is a thin EDMG Kit app bundle that resolves an installed Kit SDK,
+while SDK-included bundles are internal/licensed only.
+
 ## 1. Stay on the NVIDIA branch
 
 ```powershell
@@ -70,6 +75,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docke
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_gpu_smoke.ps1
 ```
 
 The NGC login helper reads `NGC_API_KEY` from the shell or ignored `.env.local`
@@ -107,6 +113,7 @@ the selected SDK. Known-good staging command:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -PackageMode thin `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
@@ -231,6 +238,22 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 That command exports the saved NVIDIA scene plan to USDA, writes a render-job
 JSON file under the project `outputs/nvidia/render_jobs/` folder, waits for Kit
 to report completion, and validates the returned MP4 metadata.
+
+The CI/live GPU wrapper runs preflight, starts/restarts the backend and Kit, and
+then runs the same RTX handoff smoke:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/run_live_gpu_smoke.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+```
+
+The same command is available as the manual
+`.github/workflows/nvidia-live-smoke.yml` workflow on a self-hosted Windows GPU
+runner labeled `nvidia`.
 
 The Kit workspace has an equivalent AI Director smoke:
 

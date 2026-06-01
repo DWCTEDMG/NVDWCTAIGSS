@@ -6,6 +6,8 @@ param(
   [string]$ProjectId = "",
   [string]$FfmpegPath = "",
   [double]$RenderWorkerPollSeconds = 5.0,
+  [ValidateSet("thin", "internal-fat")]
+  [string]$PackageMode = "thin",
   [switch]$IncludeKitSdk,
   [switch]$NoZip,
   [switch]$Clean
@@ -77,6 +79,11 @@ $zipPath = Join-Path $outputRootResolved "edmg-nvidia-kit.zip"
 $resolvedProjectsRoot = Resolve-RepoPath -PathValue $ProjectsRoot
 $resolvedKitSdkRoot = Resolve-OptionalPath -PathValue $KitSdkRoot
 $resolvedFfmpegPath = Resolve-OptionalPath -PathValue $FfmpegPath
+$includeSdkInBundle = $PackageMode -eq "internal-fat" -or [bool]$IncludeKitSdk
+if ($IncludeKitSdk -and $PackageMode -ne "internal-fat") {
+  Write-Step "Treating -IncludeKitSdk as -PackageMode internal-fat."
+  $PackageMode = "internal-fat"
+}
 $gitCommit = ""
 try {
   $gitCommit = (git rev-parse --short HEAD 2>$null).Trim()
@@ -115,15 +122,17 @@ foreach ($script in @(
 Copy-Item -LiteralPath "deployment\nvidia\.env.example" -Destination (Join-Path $deploymentDest ".env.example") -Force
 Copy-Item -LiteralPath "deployment\nvidia\README.md" -Destination (Join-Path $deploymentDest "README.md") -Force
 
-if ($IncludeKitSdk) {
+if ($includeSdkInBundle) {
   if ([string]::IsNullOrWhiteSpace($resolvedKitSdkRoot) -or -not (Test-Path -LiteralPath (Join-Path $resolvedKitSdkRoot "kit.exe"))) {
-    throw "IncludeKitSdk was requested, but no Kit SDK root containing kit.exe was resolved."
+    throw "PackageMode internal-fat was requested, but no Kit SDK root containing kit.exe was resolved."
   }
   Write-Step "Including Kit SDK from $resolvedKitSdkRoot"
   Copy-DirectoryClean -Source $resolvedKitSdkRoot -Destination (Join-Path $bundleRoot "kit-sdk")
+} else {
+  Write-Step "Package mode thin: not copying Kit SDK into the bundle."
 }
 
-$defaultKitRoot = if ($IncludeKitSdk) { "__BUNDLED_KIT_SDK__" } else { $resolvedKitSdkRoot }
+$defaultKitRoot = if ($includeSdkInBundle) { "__BUNDLED_KIT_SDK__" } else { $resolvedKitSdkRoot }
 $launchLines = @(
   "param(",
   "  [string]`$KitSdkRoot = $(Quote-PowerShellString -Value $defaultKitRoot),",
@@ -159,7 +168,13 @@ $manifest = [ordered]@{
   backend_url = $BackendUrl
   projects_root = $resolvedProjectsRoot
   kit_sdk_root = $resolvedKitSdkRoot
-  kit_sdk_included = [bool]$IncludeKitSdk
+  kit_sdk_included = [bool]$includeSdkInBundle
+  package_mode = $PackageMode
+  kit_sdk_policy = if ($includeSdkInBundle) {
+    "internal-fat: SDK copied into bundle for internal/licensed use only"
+  } else {
+    "thin: SDK is not redistributed; launcher resolves an installed SDK path"
+  }
   ffmpeg_path = $resolvedFfmpegPath
   project_id = $ProjectId
   render_worker_poll_seconds = $RenderWorkerPollSeconds
@@ -184,10 +199,11 @@ Launch the staged Kit app with:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-EDMG-NVIDIA-Kit.ps1
 ````
 
-Use `-ListExtensions` for a fast Kit extension resolution check. The bundle does
-not include the Kit SDK unless it was created with `-IncludeKitSdk`; otherwise
-the launcher uses the Kit SDK path recorded in `bundle-manifest.json` or a path
-you pass with `-KitSdkRoot`.
+Use `-ListExtensions` for a fast Kit extension resolution check. Default bundles
+are thin: they do not include the Kit SDK and launch against the SDK path
+recorded in `bundle-manifest.json` or a path you pass with `-KitSdkRoot`.
+Internal fat bundles can be created with `-PackageMode internal-fat` only after
+confirming the selected Kit SDK can be copied for the intended audience.
 "@
 $bundleReadme | Set-Content -LiteralPath (Join-Path $bundleRoot "README.md") -Encoding UTF8
 

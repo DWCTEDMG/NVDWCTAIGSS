@@ -46,7 +46,10 @@ work:
 
 A full Kit App Template checkout and redistributable runtime packaging should be
 added only after selecting and verifying a specific Omniverse Kit SDK/App
-Template version on the target Windows build machine. For local handoff builds,
+Template version on the target Windows build machine. The current packaging
+decision is documented in
+[`../../docs/NVIDIA_KIT_RUNTIME_DECISION.md`](../../docs/NVIDIA_KIT_RUNTIME_DECISION.md):
+local handoff builds are thin by default and resolve an installed Kit SDK.
 `deployment/nvidia/stage_nvidia_kit_app.ps1` stages this Kit app, its EDMG
 extensions, tools, deployment helpers, a generated launch script, and a manifest
 into `dist/nvidia-kit-app/`.
@@ -114,6 +117,7 @@ Stage a local Kit app bundle with this workstation's verified paths:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -PackageMode thin `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
@@ -121,8 +125,21 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 The staged `Start-EDMG-NVIDIA-Kit.ps1` can launch the bundle against that SDK.
-Only pass `-IncludeKitSdk` when the selected Kit SDK can be copied into the
-bundle for the intended distribution.
+Only use `-PackageMode internal-fat` or legacy `-IncludeKitSdk` when the
+selected Kit SDK can be copied into the bundle for the intended internal
+audience.
+
+Run the local RTX render-job smoke through the same wrapper used by the manual
+self-hosted GPU workflow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/run_live_gpu_smoke.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+```
 
 Export the starter scene plan into a generated USDA file with:
 

@@ -5,6 +5,8 @@ rework.
 
 For the larger official NVIDIA product map and Windows packaging boundary, see
 [`docs/NVIDIA_OFFICIAL_OPTIONS.md`](../../docs/NVIDIA_OFFICIAL_OPTIONS.md).
+For the Kit runtime packaging decision, see
+[`docs/NVIDIA_KIT_RUNTIME_DECISION.md`](../../docs/NVIDIA_KIT_RUNTIME_DECISION.md).
 For the step-by-step local setup path, see
 [`docs/NVIDIA_GETTING_STARTED.md`](../../docs/NVIDIA_GETTING_STARTED.md).
 
@@ -178,6 +180,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docke
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_gpu_smoke.ps1
 ```
 
 - `login_ngc.ps1` logs Docker into `nvcr.io` with `$oauthtoken` and a masked
@@ -199,18 +202,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvid
 - `stage_nvidia_kit_app.ps1` creates a local distributable source bundle for
   the EDMG NVIDIA Kit app under `dist/nvidia-kit-app/`, including app config,
   extensions, tools, deployment helpers, a manifest, and a generated launch
-  script. It does not copy the Kit SDK unless you explicitly pass
-  `-IncludeKitSdk` after confirming the selected SDK can be redistributed.
+  script. It defaults to `-PackageMode thin` and does not copy the Kit SDK.
+  `-PackageMode internal-fat` or legacy `-IncludeKitSdk` copies the SDK only for
+  licensed/internal testing.
+- `run_live_gpu_smoke.ps1` wraps preflight, runtime startup, and the Kit RTX
+  render-job smoke. The matching GitHub Actions workflow is
+  `.github/workflows/nvidia-live-smoke.yml` and requires a self-hosted Windows
+  runner labeled `nvidia`.
 
 Known-good staging command for this workstation:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
+  -PackageMode thin `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -Clean
+```
+
+Known-good live smoke command for this workstation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/run_live_gpu_smoke.ps1 `
+  -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
+  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
 ```
 
 ## First validation target

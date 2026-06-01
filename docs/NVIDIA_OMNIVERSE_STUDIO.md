@@ -8,6 +8,8 @@ services are the default runtime assumptions.
 For the broader product/service map, see
 [`docs/NVIDIA_OFFICIAL_OPTIONS.md`](NVIDIA_OFFICIAL_OPTIONS.md).
 For local setup, see [`docs/NVIDIA_GETTING_STARTED.md`](NVIDIA_GETTING_STARTED.md).
+For the Kit runtime packaging decision, see
+[`docs/NVIDIA_KIT_RUNTIME_DECISION.md`](NVIDIA_KIT_RUNTIME_DECISION.md).
 
 ## Product thesis
 
@@ -66,7 +68,8 @@ EDMG NVIDIA Studio
 
 The Windows installer should include:
 
-- Omniverse Kit runtime package or thin launcher setup.
+- Thin EDMG Kit app bundle plus an installer-managed or preinstalled Kit SDK
+  path.
 - EDMG Kit app configuration.
 - EDMG Kit extensions.
 - connection profiles for local and remote GPU services.
@@ -75,6 +78,8 @@ The Windows installer should include:
 
 The Windows installer should not include:
 
+- local Kit SDK binaries unless the package is an internal/licensed
+  `-PackageMode internal-fat` build.
 - full NeMo training containers.
 - full NIM service fleet.
 - Cosmos checkpoints.
@@ -178,8 +183,11 @@ Current local lane status:
   for Kit completion, and probing the MP4 result.
 - `deployment/nvidia/stage_nvidia_kit_app.ps1` stages the Kit app config,
   extensions, tools, deployment helpers, generated launch script, and manifest
-  into `dist/nvidia-kit-app/` for local distribution testing. It only copies a
-  Kit SDK when explicitly requested with `-IncludeKitSdk`.
+  into `dist/nvidia-kit-app/` for local distribution testing. It defaults to
+  `-PackageMode thin`; SDK-included bundles require explicit
+  `-PackageMode internal-fat` or legacy `-IncludeKitSdk` and are internal only.
+- `.github/workflows/nvidia-live-smoke.yml` exposes the RTX render-job smoke as
+  a manual workflow for a self-hosted Windows GPU runner labeled `nvidia`.
 
 ## First milestone
 
@@ -214,8 +222,9 @@ studio/nvidia-kit/
 This branch now has a verified local workstation path for AI Director, Timeline,
 Render Queue execution, RTX frame capture, FFmpeg MP4 assembly, and backend
 result reporting. A local Kit source bundle can be staged from the repo, but
-runtime packaging still depends on choosing the exact Kit SDK/template version
-and verifying Windows installer/distribution locally.
+public runtime packaging is intentionally thin by default and still depends on
+choosing the exact Kit SDK/template installer path for the target Windows build
+machine.
 
 ## Risks to settle early
 
