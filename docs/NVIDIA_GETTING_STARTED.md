@@ -188,6 +188,11 @@ From the desktop app:
 - `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
   direct no-secret status checks for NIM, Riva, Omniverse, NeMo, Triton,
   Audio2Face, ACE, and Cosmos.
+- `/v1/nvidia/services/{service_id}/invoke` sends controlled HTTP requests to
+  configured Audio2Face, ACE, Cosmos, Omniverse, NeMo, or NIM-style services
+  through relative paths only.
+- `/v1/nvidia/triton/infer` posts a Triton v2 inference request to the
+  configured `EDMG_NVIDIA_TRITON_URL` and model.
 - Dashboard and Setup page: NVIDIA Runtime Readiness shows a single ready,
   partial, blocked, or disabled state plus the next actions needed for the
   official local stack.
@@ -287,6 +292,30 @@ call the direct project route without changing the default ASR provider:
 curl -X POST http://127.0.0.1:8000/v1/projects/4af898d1ebb24a0d8ed2d59a337dd965/nvidia/riva/transcribe `
   -H "Content-Type: application/json" `
   -d '{"language_code":"en-US"}'
+```
+
+For HTTP optional services, configure the service URL first. For example:
+
+```powershell
+$env:EDMG_NVIDIA_AUDIO2FACE_URL="http://127.0.0.1:8011"
+$env:EDMG_NVIDIA_TRITON_URL="http://127.0.0.1:8002"
+$env:EDMG_NVIDIA_TRITON_MODEL="edmg_ensemble"
+```
+
+Then call the functional bridges:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/v1/nvidia/services/audio2face/invoke `
+  -H "Content-Type: application/json" `
+  -d '{"method":"GET","path":"/v1/health"}'
+
+curl -X POST http://127.0.0.1:8000/v1/nvidia/services/ace/invoke `
+  -H "Content-Type: application/json" `
+  -d '{"path":"/v1/characters","payload":{"project_id":"4af898d1ebb24a0d8ed2d59a337dd965"}}'
+
+curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
+  -H "Content-Type: application/json" `
+  -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
 
 To generate the render-worker handoff from the saved NVIDIA scene plan:

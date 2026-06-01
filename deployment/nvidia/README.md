@@ -130,6 +130,10 @@ stays alive as the RTX render queue consumer.
 Direct optional-service checks are available at `/v1/nvidia/services` and
 `/v1/nvidia/services/{service_id}/status` for `nim`, `riva`, `omniverse`,
 `nemo`, `triton`, `audio2face`, `ace`, and `cosmos`.
+Configured HTTP services can also be invoked through
+`/v1/nvidia/services/{service_id}/invoke`; this is the first functional bridge
+for Audio2Face, ACE, Cosmos, Omniverse, NeMo, and NIM-style services. Triton has
+a dedicated `/v1/nvidia/triton/infer` wrapper for the v2 inference protocol.
 Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 `/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend
@@ -163,6 +167,11 @@ $env:EDMG_NVIDIA_PROFILE="omniverse"
 
 For remote services, use the remote base URL instead of
 `host.docker.internal`.
+Optional bearer keys are read from service-specific environment variables such
+as `EDMG_NVIDIA_AUDIO2FACE_API_KEY`, `EDMG_NVIDIA_ACE_API_KEY`,
+`EDMG_NVIDIA_TRITON_API_KEY`, and `EDMG_NVIDIA_COSMOS_API_KEY`. The backend uses
+them for outbound requests but does not return them from status or invoke
+responses.
 
 Credential split:
 
@@ -171,6 +180,22 @@ Credential split:
   endpoint requires bearer authentication.
 - Both values must stay in the shell, OS secret store, or an ignored
   `.env.local` file.
+
+Functional service-call smoke examples:
+
+```powershell
+curl -X POST http://127.0.0.1:8000/v1/nvidia/services/audio2face/invoke `
+  -H "Content-Type: application/json" `
+  -d '{"method":"GET","path":"/v1/health"}'
+
+curl -X POST http://127.0.0.1:8000/v1/nvidia/services/cosmos/invoke `
+  -H "Content-Type: application/json" `
+  -d '{"path":"/v1/generate","payload":{"prompt":"audio-reactive stage world","duration_s":4}}'
+
+curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
+  -H "Content-Type: application/json" `
+  -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
+```
 
 ## Local helper scripts
 
@@ -246,7 +271,9 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 6. Launch the Kit app and use the AI Director panel to fetch, regenerate,
    export, and open the same project-scoped USDA preview. Keep
    `-AutoRunRenderWorker` enabled for unattended RTX queue consumption.
-7. Wire Audio2Face/ACE after planner, USD, and speech paths are stable.
+7. Add service-specific Audio2Face/ACE panels and payload templates on top of
+   the generic invoke bridge after the planner, USD, and speech paths are
+   stable.
 
 ## Official image policy
 

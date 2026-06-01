@@ -150,6 +150,12 @@ Current local lane status:
 - `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
   direct no-secret status payloads for configured optional NVIDIA services such
   as Triton, Audio2Face/ACE, Cosmos, NeMo, Omniverse, NIM, and Riva.
+- `/v1/nvidia/services/{service_id}/invoke` provides the first real HTTP bridge
+  for configured Audio2Face, ACE, Cosmos, Omniverse, NeMo, and NIM-compatible
+  services. It accepts only relative downstream paths and keeps service bearer
+  keys out of responses.
+- `/v1/nvidia/triton/infer` posts Triton v2 inference payloads to the configured
+  Triton endpoint and model.
 - `/v1/projects/{project_id}/nvidia/render-job` builds a project-scoped
   Omniverse Kit RTX render-job JSON handoff from the saved NVIDIA scene plan and
   writes it into `outputs/nvidia/render_jobs/`.

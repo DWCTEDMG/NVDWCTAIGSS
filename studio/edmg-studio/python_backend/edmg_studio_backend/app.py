@@ -92,6 +92,12 @@ from .services.render_settings import (
 )
 from .services.nvidia_profile import nvidia_profile_status
 from .services.nvidia_diagnostics import nvidia_diagnostics
+from .services.nvidia_optional_services import (
+    NvidiaOptionalServiceError,
+    invoke_nvidia_service,
+    normalize_nvidia_service_id,
+    triton_infer,
+)
 from .services.nvidia_riva import RivaTranscriptionError, riva_asr_status, transcribe_with_riva
 from .services.nvidia_render_job import build_rtx_render_job
 from .services.nvidia_scene_plan import (
@@ -2350,17 +2356,9 @@ def nvidia_services_route():
 
 @app.get("/v1/nvidia/services/{service_id}/status")
 def nvidia_service_status_route(service_id: str):
-    normalized = str(service_id or "").strip().lower().replace("-", "_")
+    normalized = normalize_nvidia_service_id(service_id)
     diagnostics = nvidia_diagnostics()
     services = diagnostics.get("services", {}) if isinstance(diagnostics.get("services"), dict) else {}
-    aliases = {
-        "nim_llm": "nim",
-        "nvidia_nim": "nim",
-        "nvidia_riva": "riva",
-        "audio_2_face": "audio2face",
-        "a2f": "audio2face",
-    }
-    normalized = aliases.get(normalized, normalized)
     service = services.get(normalized)
     if not isinstance(service, dict):
         raise HTTPException(404, f"NVIDIA service '{service_id}' was not found")
@@ -2370,6 +2368,53 @@ def nvidia_service_status_route(service_id: str):
         "service": service,
         "profile": diagnostics.get("profile", {}),
     }
+
+
+@app.post("/v1/nvidia/services/{service_id}/invoke")
+def nvidia_service_invoke_route(service_id: str, payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "NVIDIA service invoke request root must be an object")
+    path = str(body.get("path") or body.get("endpoint") or "").strip()
+    method = str(body.get("method") or "POST").strip().upper()
+    request_payload = body.get("payload", body.get("body"))
+    try:
+        timeout_s = float(body.get("timeout_s") or 30.0)
+    except Exception as exc:
+        raise HTTPException(400, "timeout_s must be numeric") from exc
+    try:
+        result = invoke_nvidia_service(
+            service_id,
+            path,
+            payload=request_payload,
+            method=method,
+            timeout_s=timeout_s,
+        )
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "result": result, "service_id": result.get("service_id")}
+
+
+@app.post("/v1/nvidia/triton/infer")
+def nvidia_triton_infer_route(payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Triton inference request root must be an object")
+    try:
+        timeout_s = float(body.get("timeout_s") or 30.0)
+    except Exception as exc:
+        raise HTTPException(400, "timeout_s must be numeric") from exc
+    try:
+        result = triton_infer(
+            model=str(body.get("model") or "").strip(),
+            inputs=body.get("inputs"),
+            outputs=body.get("outputs"),
+            parameters=body.get("parameters"),
+            timeout_s=timeout_s,
+        )
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "triton": result}
 
 
 @app.get("/v1/nvidia/riva/status")
