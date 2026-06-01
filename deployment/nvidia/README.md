@@ -235,7 +235,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_g
 - `run_live_gpu_smoke.ps1` wraps preflight, runtime startup, and the Kit RTX
   render-job smoke. The matching GitHub Actions workflow is
   `.github/workflows/nvidia-live-smoke.yml` and requires a self-hosted Windows
-  runner labeled `nvidia`.
+  runner labeled `nvidia`. Pass `-SeedProjectIfMissing` for clean runner data
+  directories.
 
 Known-good staging command for this workstation:
 
@@ -257,7 +258,8 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
-  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
+  -SeedProjectIfMissing
 ```
 
 ## First validation target
@@ -265,7 +267,9 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 1. Start the existing backend with this override.
 2. Confirm `/health` returns the configured OpenAI-compatible provider.
 3. Send a small `/v1/plan` request through the current AI service contract.
-4. Send `/v1/nvidia/scene-plan` with a real Studio `project_id` and confirm
+4. Send `/v1/nvidia/scene-plan` with a real Studio `project_id` or save a
+   deterministic scene plan through
+   `/v1/projects/{project_id}/nvidia/scene-plan/save`, then confirm
    `last_nvidia_scene_plan` is saved in that project metadata.
 5. Confirm `/v1/nvidia/riva/status` reports the expected Riva URI and enable
    `EDMG_NVIDIA_RIVA_ASR=1` only after the Riva Python client and service are

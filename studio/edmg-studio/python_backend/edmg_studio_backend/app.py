@@ -2694,6 +2694,59 @@ def generate_project_nvidia_scene_plan(project_id: str, payload: dict[str, Any])
     return nvidia_generate_scene_plan(request_payload)
 
 
+@app.post("/v1/projects/{project_id}/nvidia/scene-plan/save")
+def save_project_nvidia_scene_plan(project_id: str, payload: dict[str, Any] | None = None):
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "NVIDIA scene-plan save request root must be an object")
+
+    scene_plan = body.get("scene_plan") if isinstance(body.get("scene_plan"), dict) else body
+    if not isinstance(scene_plan, dict):
+        raise HTTPException(400, "scene_plan must be an object")
+    scene_plan = {**scene_plan, "project_id": project_id}
+    if not str(scene_plan.get("title") or "").strip():
+        scene_plan["title"] = proj.name
+
+    errors = validate_scene_plan(scene_plan)
+    if errors:
+        raise HTTPException(400, {"message": "Invalid NVIDIA scene plan", "errors": errors})
+
+    normalized_scene_plan = normalize_scene_plan(scene_plan)
+    usd_metadata = scene_plan_usd_metadata(normalized_scene_plan)
+    usd_stage = {
+        "format": "usda",
+        "text": scene_plan_usda_text(normalized_scene_plan),
+    }
+    planner_payload = body.get("planner") if isinstance(body.get("planner"), dict) else {}
+    planner_summary = {
+        "provider": str(planner_payload.get("provider") or body.get("provider") or "manual-scene-plan").strip(),
+        "model": str(planner_payload.get("model") or body.get("model") or "").strip(),
+        "variant_index": int(planner_payload.get("variant_index") or 0),
+        "variant_count": int(planner_payload.get("variant_count") or 1),
+    }
+    request_payload = body.get("request") if isinstance(body.get("request"), dict) else scene_plan
+    project_status = _persist_nvidia_scene_plan(
+        project_id,
+        request_payload=request_payload,
+        planner_summary=planner_summary,
+        scene_plan=normalized_scene_plan,
+        usd_metadata=usd_metadata,
+        usd_stage=usd_stage,
+    )
+    return {
+        "ok": True,
+        "project": project_status,
+        "planner": planner_summary,
+        "scene_plan": normalized_scene_plan,
+        "usd_metadata": usd_metadata,
+        "usd_stage": usd_stage,
+        "nvidia": nvidia_profile_status(),
+    }
+
+
 @app.post("/v1/projects/{project_id}/nvidia/scene-plan/export")
 def export_project_nvidia_scene_plan(project_id: str, _payload: dict[str, Any] | None = None):
     proj = store.get(project_id)

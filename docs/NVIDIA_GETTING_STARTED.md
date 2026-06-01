@@ -193,6 +193,9 @@ From the desktop app:
   through relative paths only.
 - `/v1/nvidia/triton/infer` posts a Triton v2 inference request to the
   configured `EDMG_NVIDIA_TRITON_URL` and model.
+- `/v1/projects/{project_id}/nvidia/scene-plan/save` persists a supplied
+  validated NVIDIA scene plan without calling the planner. The live GPU smoke
+  uses this to seed clean runners when no project exists.
 - Dashboard and Setup page: NVIDIA Runtime Readiness shows a single ready,
   partial, blocked, or disabled state plus the next actions needed for the
   official local stack.
@@ -237,7 +240,8 @@ handoff smoke:
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/smoke_nvidia_kit_render_job.ps1 `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
-  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
+  -SeedProjectIfMissing
 ```
 
 That command exports the saved NVIDIA scene plan to USDA, writes a render-job
@@ -253,12 +257,15 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
-  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
+  -SeedProjectIfMissing
 ```
 
 The same command is available as the manual
 `.github/workflows/nvidia-live-smoke.yml` workflow on a self-hosted Windows GPU
-runner labeled `nvidia`.
+runner labeled `nvidia`. If no project id is supplied, the smoke creates a
+temporary Studio project and saves a deterministic production NVIDIA scene plan
+through `/v1/projects/{project_id}/nvidia/scene-plan/save`.
 
 The Kit workspace has an equivalent AI Director smoke:
 

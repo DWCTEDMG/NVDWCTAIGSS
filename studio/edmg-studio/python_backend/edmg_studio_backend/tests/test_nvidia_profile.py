@@ -496,6 +496,42 @@ def test_project_nvidia_scene_plan_routes_generate_and_read(monkeypatch, tmp_pat
     assert nvidia_job_entry["result"]["outputs_absolute"]["still"] == expected_still_path
 
 
+def test_project_nvidia_scene_plan_save_route_persists_without_planner(tmp_path, monkeypatch):
+    project_store = ProjectStore(tmp_path)
+    project = project_store.create("Manual NVIDIA Scene")
+    monkeypatch.setattr(backend_app, "store", project_store)
+    payload = {
+        "scene_plan": {
+            "project_id": "wrong-id-is-overridden",
+            "title": "Manual NVIDIA Scene",
+            "duration_s": 8,
+            "bpm": 120,
+            "provider": "manual-test",
+            "scenes": [
+                {
+                    "id": "manual-shot",
+                    "start_s": 0,
+                    "end_s": 8,
+                    "prompt": "manual shot graph seed",
+                }
+            ],
+        },
+        "planner": {"provider": "manual", "model": "seed"},
+    }
+
+    response = backend_app.save_project_nvidia_scene_plan(project.id, payload)
+    fetched = backend_app.get_project_nvidia_scene_plan(project.id)
+
+    assert any(getattr(route, "path", None) == "/v1/projects/{project_id}/nvidia/scene-plan/save" for route in backend_app.app.routes)
+    assert response["ok"] is True
+    assert response["project"]["persisted"] is True
+    assert response["scene_plan"]["project_id"] == project.id
+    assert response["planner"]["provider"] == "manual"
+    assert 'def Scope "Production"' in response["usd_stage"]["text"]
+    assert 'custom string edmg:renderProduct = ' in response["usd_stage"]["text"]
+    assert fetched["scene_plan"]["scenes"][0]["id"] == "manual-shot"
+
+
 def test_project_nvidia_scene_plan_read_404_when_missing(tmp_path, monkeypatch):
     project_store = ProjectStore(tmp_path)
     project = project_store.create("No NVIDIA Plan")

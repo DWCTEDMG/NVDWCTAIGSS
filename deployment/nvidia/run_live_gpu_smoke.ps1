@@ -7,6 +7,7 @@ param(
   [string]$FfprobePath = "",
   [int]$TimeoutSeconds = 240,
   [double]$RenderWorkerPollSeconds = 2.0,
+  [switch]$SeedProjectIfMissing,
   [switch]$ReuseExistingBackend,
   [switch]$ReuseExistingKit
 )
@@ -91,6 +92,9 @@ if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
 }
 if (-not [string]::IsNullOrWhiteSpace($FfprobePath)) {
   $smokeArgs += @("-FfprobePath", $FfprobePath)
+}
+if ($SeedProjectIfMissing) {
+  $smokeArgs += "-SeedProjectIfMissing"
 }
 
 Write-Step "Running Kit render-job smoke"

@@ -141,8 +141,12 @@ Current local lane status:
   matching `project_id`.
 - `/v1/projects/{project_id}/nvidia/scene-plan` provides the project-scoped
   generate-and-fetch path for the persisted NVIDIA scene plan.
-- `/v1/projects/{project_id}/nvidia/scene-plan/export` writes the persisted USDA
-  preview into `outputs/nvidia/` and registers it in project exports.
+- `/v1/projects/{project_id}/nvidia/scene-plan/save` persists a supplied
+  validated NVIDIA scene plan without invoking the planner, which gives the live
+  GPU smoke a deterministic seed path on clean runners.
+- `/v1/projects/{project_id}/nvidia/scene-plan/export` writes the persisted
+  production USDA stage into `outputs/nvidia/` and registers it in project
+  exports.
 - `/v1/nvidia/riva/status` and
   `/v1/projects/{project_id}/nvidia/riva/transcribe` add the first Riva ASR
   service-profile adapter while keeping faster-whisper as the default fallback

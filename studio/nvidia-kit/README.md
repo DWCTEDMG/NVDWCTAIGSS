@@ -138,7 +138,8 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
   -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
-  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe"
+  -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
+  -SeedProjectIfMissing
 ```
 
 Export the starter scene plan into a generated USDA file with:
@@ -161,6 +162,7 @@ Kit UI panel for the first API contracts:
 - `POST /v1/nvidia/scene-plan`
 - `GET /v1/projects/{project_id}/nvidia/scene-plan`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan`
+- `POST /v1/projects/{project_id}/nvidia/scene-plan/save`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan/export`
 - `POST /v1/projects/{project_id}/nvidia/render-job/result`
 

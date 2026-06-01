@@ -7,7 +7,9 @@ param(
   [int]$Width = 960,
   [int]$Height = 540,
   [int]$TimeoutSeconds = 180,
-  [string]$FfprobePath = ""
+  [string]$FfprobePath = "",
+  [switch]$SeedProjectIfMissing,
+  [string]$SeedProjectName = "EDMG NVIDIA Live Smoke"
 )
 
 Set-StrictMode -Version Latest
@@ -30,19 +32,101 @@ function Resolve-FfprobePath {
   return ""
 }
 
+function New-SeededSmokeProject {
+  param(
+    [string]$BaseUrl,
+    [string]$Name
+  )
+  Write-Step "Creating smoke project: $Name"
+  $createBody = @{ name = $Name } | ConvertTo-Json -Compress
+  $created = Invoke-RestMethod `
+    -Uri "$BaseUrl/v1/projects" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $createBody `
+    -TimeoutSec 20
+  $id = [string]$created.project.id
+  if ([string]::IsNullOrWhiteSpace($id)) {
+    throw "Backend did not return an id for the smoke project."
+  }
+
+  $scenePlan = @{
+    project_id = $id
+    title = $Name
+    duration_s = 12
+    bpm = 128
+    provider = "local-smoke-seed"
+    scenes = @(
+      @{
+        id = "intro"
+        start_s = 0
+        end_s = 6
+        prompt = "RTX neon stage opening with reactive floor lights"
+        camera = "wide push in"
+        look = "cyan magenta volumetric haze"
+        motion = "four beat pulse"
+        usd_variant = "live-smoke-intro"
+      },
+      @{
+        id = "drop"
+        start_s = 6
+        end_s = 12
+        prompt = "Drop section with brighter light columns and reflective set pieces"
+        camera = "slow orbit"
+        look = "white amber rim light"
+        motion = "strobe hits"
+        usd_variant = "live-smoke-drop"
+      }
+    )
+  }
+  $saveBody = @{
+    scene_plan = $scenePlan
+    planner = @{
+      provider = "local-smoke-seed"
+      model = "seeded-production-usda"
+      variant_index = 0
+      variant_count = 1
+    }
+  } | ConvertTo-Json -Depth 30 -Compress
+  $saved = Invoke-RestMethod `
+    -Uri "$BaseUrl/v1/projects/$id/nvidia/scene-plan/save" `
+    -Method Post `
+    -ContentType "application/json" `
+    -Body $saveBody `
+    -TimeoutSec 30
+  if (-not $saved.ok) {
+    throw "Smoke project scene-plan save failed."
+  }
+  Write-Step "Seeded smoke scene plan: $id"
+  return $id
+}
+
 function Select-ProjectId {
   param(
     [string]$BaseUrl,
     [string]$RequestedId,
-    [string]$RequestedName
+    [string]$RequestedName,
+    [bool]$SeedWhenMissing
   )
   if (-not [string]::IsNullOrWhiteSpace($RequestedId)) {
-    return $RequestedId
+    try {
+      Invoke-RestMethod -Uri "$BaseUrl/v1/projects/$RequestedId" -TimeoutSec 15 | Out-Null
+      return $RequestedId
+    } catch {
+      if (-not $SeedWhenMissing) {
+        return $RequestedId
+      }
+      Write-Step "Requested project was not found; seeding a smoke project instead."
+      return New-SeededSmokeProject -BaseUrl $BaseUrl -Name $SeedProjectName
+    }
   }
   $projectsResponse = Invoke-RestMethod -Uri "$BaseUrl/v1/projects" -TimeoutSec 15
   $projects = @($projectsResponse.projects)
   if ($projects.Count -eq 0) {
-    throw "No Studio projects were returned by $BaseUrl/v1/projects."
+    if ($SeedWhenMissing) {
+      return New-SeededSmokeProject -BaseUrl $BaseUrl -Name $SeedProjectName
+    }
+    throw "No Studio projects were returned by $BaseUrl/v1/projects. Pass -SeedProjectIfMissing to create a smoke project."
   }
   if (-not [string]::IsNullOrWhiteSpace($RequestedName)) {
     $needle = $RequestedName.Trim().ToLowerInvariant()
@@ -52,6 +136,9 @@ function Select-ProjectId {
       if ($id.ToLowerInvariant() -eq $needle -or $name.ToLowerInvariant() -eq $needle) {
         return $id
       }
+    }
+    if ($SeedWhenMissing) {
+      return New-SeededSmokeProject -BaseUrl $BaseUrl -Name $RequestedName
     }
     throw "No project matched '$RequestedName'."
   }
@@ -74,7 +161,7 @@ Set-Location $repoRoot
 
 $base = $BackendUrl.TrimEnd("/")
 $projectsRootResolved = (Resolve-Path -LiteralPath $ProjectsRoot).Path
-$selectedProjectId = Select-ProjectId -BaseUrl $base -RequestedId $ProjectId -RequestedName $ProjectName
+$selectedProjectId = Select-ProjectId -BaseUrl $base -RequestedId $ProjectId -RequestedName $ProjectName -SeedWhenMissing ([bool]$SeedProjectIfMissing)
 Write-Step "Backend: $base"
 Write-Step "Project: $selectedProjectId"
 Write-Step "Projects root: $projectsRootResolved"
