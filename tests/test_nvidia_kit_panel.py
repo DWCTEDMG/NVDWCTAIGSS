@@ -99,6 +99,46 @@ def test_kit_panel_resolves_project_name_to_id():
     assert panel.resolve_project_reference("unknown", projects) == "unknown"
 
 
+def test_kit_panel_builds_and_summarizes_optional_service_payloads():
+    panel = _import_ai_director_module("panel")
+
+    default_payload = panel.build_optional_service_payload("cosmos", "")
+    custom_payload = panel.build_optional_service_payload("audio_2_face", '{"path":"/v1/a2f/jobs","audio_path":"voice.wav"}')
+    services_summary = panel.summarize_nvidia_services_response(
+        {
+            "services": {
+                "nim": {"configured": True, "probe": {"reachable": True}},
+                "audio2face": {"configured": True, "probe": {"reachable": False}},
+                "cosmos": {"configured": False, "probe": {"reachable": False}},
+            },
+            "readiness": {"level": "partial"},
+        }
+    )
+    invoke_summary = panel.summarize_optional_service_response(
+        "cosmos",
+        {"ok": True, "cosmos": {"ok": True, "status_code": 200, "model": "cosmos-test", "response": {"job_id": "1"}}},
+    )
+
+    assert default_payload["prompt"] == "audio-reactive RTX stage world"
+    assert custom_payload["audio_path"] == "voice.wav"
+    assert services_summary.configured == ("audio2face", "nim")
+    assert services_summary.reachable == ("nim",)
+    assert "readiness partial" in services_summary.status_text
+    assert "cosmos ok, HTTP 200, model cosmos-test" in invoke_summary
+    assert "response keys: job_id" in invoke_summary
+
+
+def test_kit_panel_rejects_invalid_optional_service_json():
+    panel = _import_ai_director_module("panel")
+
+    try:
+        panel.build_optional_service_payload("cosmos", "[1, 2, 3]")
+    except ValueError as exc:
+        assert "root must be an object" in str(exc)
+    else:
+        raise AssertionError("Expected invalid service payload JSON to be rejected")
+
+
 def test_kit_ai_director_resolves_project_model_name_to_id():
     extension = _import_ai_director_module("extension")
 
@@ -123,6 +163,40 @@ def test_kit_ai_director_resolves_project_model_name_to_id():
 
     assert ext._resolve_project_id(required=True, action="fetch a persisted scene plan") == "project-id-1"
     assert ext._project_model.value == "project-id-1"
+
+
+def test_kit_ai_director_invokes_typed_service_from_json():
+    extension = _import_ai_director_module("extension")
+
+    class FakeModel:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def get_value_as_string(self) -> str:
+            return self.value
+
+        def set_value(self, value: str) -> None:
+            self.value = value
+
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def invoke_typed_nvidia_service(self, service_id: str, payload: dict) -> dict:
+            self.calls.append((service_id, payload))
+            return {"ok": True, service_id: {"ok": True, "status_code": 200, "response": {"job_id": "svc-1"}}}
+
+    backend = FakeBackend()
+    ext = extension.EdmgAiDirectorExtension()
+    ext._service_model = FakeModel("cosmos")
+    ext._service_payload_model = FakeModel('{"prompt":"stage world"}')
+    ext._service_label = FakeModel("")
+    ext._backend = backend
+
+    ext._invoke_optional_service()
+
+    assert backend.calls == [("cosmos", {"prompt": "stage world"})]
+    assert "cosmos ok, HTTP 200" in ext._service_label.text
 
 
 def test_kit_ai_director_extension_starts_headless_with_fake_backend(monkeypatch):

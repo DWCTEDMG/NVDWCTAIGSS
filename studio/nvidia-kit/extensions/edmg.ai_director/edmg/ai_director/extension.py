@@ -1,7 +1,18 @@
 from __future__ import annotations
 
 from .backend_client import BackendClientError, EdmgBackendClient
-from .panel import build_generation_payload, resolve_project_reference, summarize_scene_plan_response, write_usda_preview
+from .panel import (
+    OPTIONAL_SERVICE_IDS,
+    build_generation_payload,
+    build_optional_service_payload,
+    default_optional_service_payload_text,
+    normalize_optional_service_id,
+    resolve_project_reference,
+    summarize_nvidia_services_response,
+    summarize_optional_service_response,
+    summarize_scene_plan_response,
+    write_usda_preview,
+)
 
 try:
     import carb.settings  # type: ignore
@@ -70,6 +81,9 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
         self._bpm_model = None
         self._max_scenes_model = None
         self._notes_model = None
+        self._service_model = None
+        self._service_payload_model = None
+        self._service_label = None
         self._last_response: dict | None = None
         self._last_preview_path = None
         print(f"[edmg.ai_director] startup backend={backend_url}")
@@ -100,7 +114,9 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._bpm_model = ui.SimpleStringModel("")
             self._max_scenes_model = ui.SimpleStringModel("6")
             self._notes_model = ui.SimpleStringModel("")
-            self._window = ui.Window("EDMG AI Director", width=460, height=560)
+            self._service_model = ui.SimpleStringModel("cosmos")
+            self._service_payload_model = ui.SimpleStringModel(default_optional_service_payload_text("cosmos"))
+            self._window = ui.Window("EDMG AI Director", width=520, height=720)
             with self._window.frame:
                 with ui.VStack(spacing=8):
                     ui.Label("NVIDIA / OpenUSD handoff")
@@ -129,6 +145,16 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
                     with ui.HStack(spacing=6):
                         ui.Button("Export USDA", clicked_fn=self._export_project_scene_plan)
                         ui.Button("Open Preview", clicked_fn=self._open_current_preview)
+                    ui.Label("NVIDIA service bridge")
+                    self._service_label = ui.Label("No service call yet.")
+                    ui.Label("Service ID")
+                    ui.StringField(model=self._service_model)
+                    ui.Label("Service JSON payload")
+                    ui.StringField(model=self._service_payload_model)
+                    with ui.HStack(spacing=6):
+                        ui.Button("Refresh Services", clicked_fn=self._refresh_services)
+                        ui.Button("Load Service Default", clicked_fn=self._load_service_default)
+                        ui.Button("Invoke Typed Service", clicked_fn=self._invoke_optional_service)
         except Exception as exc:
             print(f"[edmg.ai_director] window unavailable: {exc}")
             self._window = None
@@ -149,12 +175,35 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             except Exception:
                 pass
 
+    def _set_service_summary(self, text: str) -> None:
+        print(f"[edmg.ai_director] {text}")
+        if self._service_label is not None:
+            try:
+                self._service_label.text = text
+            except Exception:
+                pass
+
     def _project_id(self) -> str:
         return _model_string(self._project_model).strip()
 
     def _set_project_id(self, project_id: str) -> None:
         try:
             self._project_model.set_value(project_id)
+        except Exception:
+            pass
+
+    def _service_id(self) -> str:
+        return normalize_optional_service_id(_model_string(self._service_model, "cosmos"))
+
+    def _set_service_id(self, service_id: str) -> None:
+        try:
+            self._service_model.set_value(service_id)
+        except Exception:
+            pass
+
+    def _set_service_payload(self, payload_text: str) -> None:
+        try:
+            self._service_payload_model.set_value(payload_text)
         except Exception:
             pass
 
@@ -194,6 +243,43 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             )
         except BackendClientError as exc:
             self._set_status(f"backend status unavailable: {exc}")
+
+    def _refresh_services(self) -> None:
+        try:
+            summary = summarize_nvidia_services_response(self._backend.nvidia_services())
+            self._set_service_summary(summary.status_text)
+        except BackendClientError as exc:
+            self._set_service_summary(f"NVIDIA services unavailable: {exc}")
+
+    def _load_service_default(self) -> None:
+        service_id = self._service_id()
+        if not service_id:
+            self._set_service_summary(f"Unsupported NVIDIA service id. Use one of: {', '.join(OPTIONAL_SERVICE_IDS)}")
+            return
+        self._set_service_id(service_id)
+        try:
+            self._set_service_payload(default_optional_service_payload_text(service_id))
+        except ValueError as exc:
+            self._set_service_summary(str(exc))
+            return
+        self._set_service_summary(f"Loaded {service_id} typed payload default.")
+
+    def _invoke_optional_service(self) -> None:
+        service_id = self._service_id()
+        if not service_id:
+            self._set_service_summary(f"Unsupported NVIDIA service id. Use one of: {', '.join(OPTIONAL_SERVICE_IDS)}")
+            return
+        self._set_service_id(service_id)
+        try:
+            payload = build_optional_service_payload(service_id, _model_string(self._service_payload_model))
+        except ValueError as exc:
+            self._set_service_summary(str(exc))
+            return
+        try:
+            response = self._backend.invoke_typed_nvidia_service(service_id, payload)
+            self._set_service_summary(summarize_optional_service_response(service_id, response))
+        except BackendClientError as exc:
+            self._set_service_summary(f"{service_id} invocation failed: {exc}")
 
     def _fetch_project_plan(self) -> None:
         project_id = self._resolve_project_id(required=True, action="fetch a persisted scene plan")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,55 @@ class ScenePlanSummary:
     usda_bytes: int
     export_path: str
     status_text: str
+
+
+@dataclass(frozen=True)
+class NvidiaServicesSummary:
+    configured: tuple[str, ...]
+    reachable: tuple[str, ...]
+    readiness_level: str
+    status_text: str
+
+
+OPTIONAL_SERVICE_IDS = ("audio2face", "ace", "cosmos", "triton")
+
+DEFAULT_OPTIONAL_SERVICE_PAYLOADS: dict[str, dict[str, Any]] = {
+    "audio2face": {
+        "path": "/v1/a2f/jobs",
+        "audio_path": "outputs/dialogue.wav",
+        "character": "performer",
+        "emotion": "focused",
+    },
+    "ace": {
+        "path": "/v1/avatar/animation",
+        "avatar_id": "performer",
+        "text": "Welcome to the RTX stage.",
+    },
+    "cosmos": {
+        "prompt": "audio-reactive RTX stage world",
+        "negative_prompt": "blurry, low quality",
+        "seed": 4,
+        "guidance_scale": 7.5,
+        "steps": 50,
+        "video_params": {
+            "height": 704,
+            "width": 1280,
+            "frames_count": 121,
+            "frames_per_sec": 24,
+        },
+    },
+    "triton": {
+        "model": "edmg_ensemble",
+        "inputs": [
+            {
+                "name": "prompt",
+                "shape": [1],
+                "datatype": "BYTES",
+                "data": ["neon intro"],
+            }
+        ],
+    },
+}
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -44,6 +94,47 @@ def _safe_filename_tag(value: str, default: str = "scene_plan") -> str:
 
 def _project_match_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+def normalize_optional_service_id(value: Any, default: str = "cosmos") -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return default
+    normalized = re.sub(r"[^a-z0-9]+", "", raw.casefold())
+    aliases = {
+        "audio2face": "audio2face",
+        "audioface": "audio2face",
+        "a2f": "audio2face",
+        "ace": "ace",
+        "cosmos": "cosmos",
+        "triton": "triton",
+    }
+    return aliases.get(normalized, "")
+
+
+def default_optional_service_payload(service_id: Any) -> dict[str, Any]:
+    normalized = normalize_optional_service_id(service_id)
+    if normalized not in DEFAULT_OPTIONAL_SERVICE_PAYLOADS:
+        supported = ", ".join(OPTIONAL_SERVICE_IDS)
+        raise ValueError(f"unsupported NVIDIA service id; use one of: {supported}")
+    return json.loads(json.dumps(DEFAULT_OPTIONAL_SERVICE_PAYLOADS[normalized]))
+
+
+def default_optional_service_payload_text(service_id: Any) -> str:
+    return json.dumps(default_optional_service_payload(service_id), separators=(",", ":"))
+
+
+def build_optional_service_payload(service_id: Any, raw_json: Any) -> dict[str, Any]:
+    text = str(raw_json or "").strip()
+    if not text:
+        return default_optional_service_payload(service_id)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"service payload JSON is invalid: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("service payload JSON root must be an object")
+    return payload
 
 
 def resolve_project_reference(reference: Any, projects_response: dict[str, Any]) -> str:
@@ -147,6 +238,51 @@ def summarize_scene_plan_response(response: dict[str, Any]) -> ScenePlanSummary:
         export_path=export_path,
         status_text=status_text,
     )
+
+
+def summarize_nvidia_services_response(response: dict[str, Any]) -> NvidiaServicesSummary:
+    services = response.get("services") if isinstance(response.get("services"), dict) else {}
+    readiness = response.get("readiness") if isinstance(response.get("readiness"), dict) else {}
+    configured: list[str] = []
+    reachable: list[str] = []
+    for service_id, service in services.items():
+        if not isinstance(service, dict):
+            continue
+        service_name = str(service_id)
+        if service.get("configured"):
+            configured.append(service_name)
+        probe = service.get("probe") if isinstance(service.get("probe"), dict) else {}
+        if probe.get("reachable"):
+            reachable.append(service_name)
+    readiness_level = str(readiness.get("level") or "unknown")
+    configured_text = ", ".join(sorted(configured)) if configured else "none configured"
+    reachable_text = ", ".join(sorted(reachable)) if reachable else "none reachable"
+    return NvidiaServicesSummary(
+        configured=tuple(sorted(configured)),
+        reachable=tuple(sorted(reachable)),
+        readiness_level=readiness_level,
+        status_text=f"NVIDIA services: {configured_text}; reachable: {reachable_text}; readiness {readiness_level}",
+    )
+
+
+def summarize_optional_service_response(service_id: Any, response: dict[str, Any]) -> str:
+    normalized = normalize_optional_service_id(service_id)
+    result = response.get(normalized) if isinstance(response.get(normalized), dict) else response.get("result")
+    if not isinstance(result, dict):
+        result = response
+    ok = bool(response.get("ok") or result.get("ok"))
+    status_code = result.get("status_code")
+    model = str(result.get("model") or "").strip()
+    response_body = result.get("response")
+    response_hint = ""
+    if isinstance(response_body, dict):
+        keys = ", ".join(sorted(str(key) for key in response_body.keys())[:5])
+        response_hint = f", response keys: {keys}" if keys else ""
+    elif isinstance(result.get("raw_text"), str):
+        response_hint = ", raw text response"
+    model_text = f", model {model}" if model else ""
+    code_text = f", HTTP {status_code}" if status_code is not None else ""
+    return f"{normalized} {'ok' if ok else 'failed'}{code_text}{model_text}{response_hint}"
 
 
 def write_usda_preview(response: dict[str, Any], *, root: str | Path | None = None) -> Path:

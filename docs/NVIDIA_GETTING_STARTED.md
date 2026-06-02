@@ -342,6 +342,11 @@ curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
 
+The Kit AI Director panel exposes the same typed bridge. Use service id
+`audio2face`, `ace`, `cosmos`, or `triton`, load or edit the JSON payload, then
+press `Invoke Typed Service`. The panel calls the typed backend routes above, so
+service-specific validation still happens in the backend.
+
 To generate the render-worker handoff from the saved NVIDIA scene plan:
 
 ```powershell

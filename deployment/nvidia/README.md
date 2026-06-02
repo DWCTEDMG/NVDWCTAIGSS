@@ -209,6 +209,10 @@ curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
 
+The Omniverse Kit `edmg.ai_director` panel includes the same typed bridge for
+`audio2face`, `ace`, `cosmos`, and `triton`; it sends the edited JSON payload to
+the typed backend route instead of the generic invoke endpoint.
+
 ## Local helper scripts
 
 ```powershell

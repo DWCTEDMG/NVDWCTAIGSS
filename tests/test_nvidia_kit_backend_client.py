@@ -56,6 +56,29 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/nvidia/status":
             self._send_json({"ok": True, "nvidia": {"enabled": True, "profile": "omniverse"}})
             return
+        if self.path == "/v1/nvidia/services":
+            self._send_json(
+                {
+                    "ok": True,
+                    "services": {
+                        "cosmos": {"configured": True, "probe": {"reachable": True}},
+                        "triton": {"configured": True, "probe": {"reachable": True}},
+                    },
+                    "readiness": {"level": "ready"},
+                }
+            )
+            return
+        parsed = urlparse(self.path)
+        if parsed.path.startswith("/v1/nvidia/services/") and parsed.path.endswith("/status"):
+            service_id = unquote(parsed.path.split("/")[4])
+            self._send_json(
+                {
+                    "ok": True,
+                    "service_id": service_id,
+                    "service": {"configured": True, "probe": {"reachable": True}},
+                }
+            )
+            return
         if self.path == "/v1/projects":
             self._send_json(
                 {
@@ -66,7 +89,6 @@ class _Handler(BaseHTTPRequestHandler):
                 }
             )
             return
-        parsed = urlparse(self.path)
         if parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan"):
             project_id = unquote(parsed.path.split("/")[3])
             self._send_json(
@@ -95,11 +117,36 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         is_project_generate = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan")
         is_project_export = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan/export")
-        if self.path not in {"/v1/usd/scene-plan", "/v1/nvidia/scene-plan"} and not is_project_generate and not is_project_export:
+        typed_service = parsed.path in {
+            "/v1/nvidia/audio2face/generate",
+            "/v1/nvidia/ace/generate",
+            "/v1/nvidia/cosmos/infer",
+            "/v1/nvidia/triton/infer",
+        }
+        if self.path not in {"/v1/usd/scene-plan", "/v1/nvidia/scene-plan"} and not is_project_generate and not is_project_export and not typed_service:
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length") or "0")
         payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        if typed_service:
+            service_id = {
+                "/v1/nvidia/audio2face/generate": "audio2face",
+                "/v1/nvidia/ace/generate": "ace",
+                "/v1/nvidia/cosmos/infer": "cosmos",
+                "/v1/nvidia/triton/infer": "triton",
+            }[parsed.path]
+            self._send_json(
+                {
+                    "ok": True,
+                    service_id: {
+                        "ok": True,
+                        "status_code": 200,
+                        "model": payload.get("model") or f"{service_id}-test",
+                        "response": {"job_id": f"{service_id}-1", "echo": payload},
+                    },
+                }
+            )
+            return
         if is_project_export:
             project_id = unquote(parsed.path.split("/")[3])
             self._send_json(
@@ -161,6 +208,30 @@ def test_kit_backend_client_reads_status_and_scene_plan():
         assert status["nvidia"]["enabled"] is True
         assert projects["projects"][0]["name"] == "Project One"
         assert usda.startswith("#usda 1.0")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_kit_backend_client_invokes_typed_nvidia_services():
+    module = _load_client_module()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        client = module.EdmgBackendClient(base_url=base_url)
+
+        services = client.nvidia_services()
+        cosmos_status = client.nvidia_service_status("cosmos")
+        cosmos = client.cosmos_infer({"prompt": "stage world"})
+        triton = client.invoke_typed_nvidia_service("triton", {"model": "edmg_ensemble", "inputs": []})
+
+        assert services["readiness"]["level"] == "ready"
+        assert cosmos_status["service_id"] == "cosmos"
+        assert cosmos["cosmos"]["response"]["job_id"] == "cosmos-1"
+        assert cosmos["cosmos"]["response"]["echo"]["prompt"] == "stage world"
+        assert triton["triton"]["model"] == "edmg_ensemble"
     finally:
         server.shutdown()
         thread.join(timeout=5)

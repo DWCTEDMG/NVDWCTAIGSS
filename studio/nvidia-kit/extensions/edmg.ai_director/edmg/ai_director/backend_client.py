@@ -58,6 +58,13 @@ class EdmgBackendClient:
     def nvidia_diagnostics(self) -> dict[str, Any]:
         return self._json_request("GET", "/v1/nvidia/diagnostics")
 
+    def nvidia_services(self) -> dict[str, Any]:
+        return self._json_request("GET", "/v1/nvidia/services")
+
+    def nvidia_service_status(self, service_id: str) -> dict[str, Any]:
+        encoded_service_id = quote(str(service_id), safe="")
+        return self._json_request("GET", f"/v1/nvidia/services/{encoded_service_id}/status")
+
     def projects(self) -> dict[str, Any]:
         return self._json_request("GET", "/v1/projects")
 
@@ -75,6 +82,30 @@ class EdmgBackendClient:
     def export_project_scene_plan(self, project_id: str) -> dict[str, Any]:
         encoded_project_id = quote(str(project_id), safe="")
         return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/scene-plan/export", {})
+
+    def audio2face_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._json_request("POST", "/v1/nvidia/audio2face/generate", payload)
+
+    def ace_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._json_request("POST", "/v1/nvidia/ace/generate", payload)
+
+    def cosmos_infer(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._json_request("POST", "/v1/nvidia/cosmos/infer", payload)
+
+    def triton_infer(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._json_request("POST", "/v1/nvidia/triton/infer", payload)
+
+    def invoke_typed_nvidia_service(self, service_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized = str(service_id or "").strip().lower().replace("_", "").replace("-", "")
+        if normalized in {"audio2face", "a2f"}:
+            return self.audio2face_generate(payload)
+        if normalized == "ace":
+            return self.ace_generate(payload)
+        if normalized == "cosmos":
+            return self.cosmos_infer(payload)
+        if normalized == "triton":
+            return self.triton_infer(payload)
+        raise BackendClientError(f"unsupported typed NVIDIA service `{service_id}`")
 
     def scene_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/usd/scene-plan", payload)

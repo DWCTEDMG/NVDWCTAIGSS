@@ -33,7 +33,9 @@ work:
   From that panel you can enter a Studio `project_id` or visible project name,
   fetch the saved NVIDIA scene plan, ask the backend/NIM planner for a refreshed
   plan, export the persisted production USDA, and open the generated stage as a
-  local Kit stage.
+  local Kit stage. The same panel now includes a typed NVIDIA service bridge for
+  `audio2face`, `ace`, `cosmos`, and `triton`: enter the service id, edit the
+  JSON payload, then invoke the backend's typed route for the configured service.
 - `edmg.timeline` opens a scene timeline panel from the configured starter
   scene-plan JSON and summarizes the OpenUSD cue boundaries.
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio
