@@ -108,7 +108,7 @@ provider:
 
 ```powershell
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
-  --backend-url http://127.0.0.1:8000 `
+  --backend-url http://127.0.0.1:7863 `
   --generate `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_nim.usda
 ```
@@ -117,8 +117,9 @@ When the generate request includes an existing Studio `project_id`, the backend
 also saves `last_nvidia_scene_plan` and a capped `nvidia_scene_plan_history`
 entry in that project metadata. The smoke command uses a standalone sample ID,
 so it remains a non-mutating contract check by default.
-On this workstation, use `--project-id 4af898d1ebb24a0d8ed2d59a337dd965` to
-exercise the project-scoped route, then
+On this workstation, use backend URL `http://127.0.0.1:7863` and
+`--project-id febd7dcbeb464b79bf4db78a7b6151c4` to exercise the
+project-scoped route, then
 call `/v1/projects/{project_id}/nvidia/scene-plan/export` or use the Workspace
 Handoff button to write the USDA stage into `outputs/nvidia/`. Generated USDA
 now includes a `Production` scope with render settings, render products, asset
@@ -191,19 +192,19 @@ Credential split:
 Functional service-call smoke examples:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/nvidia/services/audio2face/invoke `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/services/audio2face/invoke `
   -H "Content-Type: application/json" `
   -d '{"method":"GET","path":"/v1/health"}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/audio2face/generate `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/audio2face/generate `
   -H "Content-Type: application/json" `
   -d '{"path":"/v1/a2f/jobs","audio_path":"outputs/dialogue.wav","character":"metahuman","emotion":"focused"}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/cosmos/infer `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/cosmos/infer `
   -H "Content-Type: application/json" `
   -d '{"prompt":"audio-reactive RTX stage world","negative_prompt":"blurry, low quality","seed":4,"guidance_scale":7.5,"steps":50,"video_params":{"height":704,"width":1280,"frames_count":121,"frames_per_sec":24}}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -H "Content-Type: application/json" `
   -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
@@ -254,7 +255,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
   -PackageMode thin `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -Clean
 ```
@@ -264,8 +265,9 @@ Known-good live smoke command for this workstation:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/run_live_gpu_smoke.ps1 `
+  -BackendUrl "http://127.0.0.1:7863" `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
   -SeedProjectIfMissing

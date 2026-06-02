@@ -63,9 +63,12 @@ EDMG_AI_OPENAI_COMPAT_API_KEY=
 is separate and belongs in `EDMG_AI_OPENAI_COMPAT_API_KEY` only when the target
 endpoint requires bearer authentication.
 
-For local development, keep the EDMG backend on `127.0.0.1:8000` and map a local
-NIM container to host port `8001`. That keeps the app backend and the NIM
-OpenAI-compatible endpoint from fighting over the same port.
+For local development, the default is to keep the EDMG backend on
+`127.0.0.1:8000` and map a local NIM container to host port `8001`. That keeps
+the app backend and the NIM OpenAI-compatible endpoint from fighting over the
+same port. This workstation is currently validated on backend URL
+`http://127.0.0.1:7863`; pass that URL to the helper scripts when reproducing
+the live setup here.
 
 Optional helpers:
 
@@ -91,14 +94,16 @@ you intentionally want to keep it.
 
 The local runtime helper wraps the backend helper and the Kit launcher: it waits
 for backend health, prints NVIDIA diagnostics readiness, detects FFmpeg, then
-launches Kit with the RTX render queue autorun enabled. On this workstation the
+launches Kit with the RTX render queue autorun enabled. If `-Port` is omitted,
+the helper derives the backend port from `-BackendUrl`. On this workstation the
 known-good command is:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/start_nvidia_runtime_local.ps1 `
+  -BackendUrl "http://127.0.0.1:7863" `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -StopExistingKit
 ```
@@ -115,7 +120,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
   -PackageMode thin `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -Clean
 ```
@@ -169,11 +174,11 @@ OpenAI-compatible NIM endpoint used by the Studio planner.
 From the backend:
 
 ```powershell
-curl http://127.0.0.1:8000/v1/nvidia/status
-curl http://127.0.0.1:8000/v1/nvidia/diagnostics
-curl http://127.0.0.1:8000/v1/nvidia/services
-curl http://127.0.0.1:8000/v1/nvidia/services/audio2face/status
-curl http://127.0.0.1:8000/v1/config
+curl http://127.0.0.1:7863/v1/nvidia/status
+curl http://127.0.0.1:7863/v1/nvidia/diagnostics
+curl http://127.0.0.1:7863/v1/nvidia/services
+curl http://127.0.0.1:7863/v1/nvidia/services/audio2face/status
+curl http://127.0.0.1:7863/v1/config
 ```
 
 From the desktop app:
@@ -219,7 +224,7 @@ studio/nvidia-kit/sample_projects/audio_reactive_stage/stage.usda
 The backend also exposes the same first contract as an API:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/usd/scene-plan `
+curl -X POST http://127.0.0.1:7863/v1/usd/scene-plan `
   -H "Content-Type: application/json" `
   --data-binary "@studio/nvidia-kit/sample_projects/audio_reactive_stage/scene_plan.json"
 ```
@@ -239,7 +244,8 @@ handoff smoke:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/smoke_nvidia_kit_render_job.ps1 `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -BackendUrl "http://127.0.0.1:7863" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
   -SeedProjectIfMissing
 ```
@@ -254,8 +260,9 @@ then runs the same RTX handoff smoke:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/run_live_gpu_smoke.ps1 `
+  -BackendUrl "http://127.0.0.1:7863" `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -FfprobePath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffprobe.exe" `
   -SeedProjectIfMissing
@@ -270,7 +277,7 @@ through `/v1/projects/{project_id}/nvidia/scene-plan/save`.
 The Kit workspace has an equivalent AI Director smoke:
 
 ```powershell
-python studio/nvidia-kit/tools/smoke_ai_director_backend.py --backend-url http://127.0.0.1:8000
+python studio/nvidia-kit/tools/smoke_ai_director_backend.py --backend-url http://127.0.0.1:7863
 ```
 
 With a real Studio project id, the same smoke can verify the project-scoped
@@ -278,9 +285,9 @@ generate-and-persist path:
 
 ```powershell
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
-  --backend-url http://127.0.0.1:8000 `
+  --backend-url http://127.0.0.1:7863 `
   --generate `
-  --project-id 4af898d1ebb24a0d8ed2d59a337dd965 `
+  --project-id febd7dcbeb464b79bf4db78a7b6151c4 `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_project.usda
 ```
 
@@ -298,7 +305,7 @@ local faster-whisper path when `EDMG_NVIDIA_RIVA_ASR_FALLBACK=1`. You can also
 call the direct project route without changing the default ASR provider:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/projects/4af898d1ebb24a0d8ed2d59a337dd965/nvidia/riva/transcribe `
+curl -X POST http://127.0.0.1:7863/v1/projects/febd7dcbeb464b79bf4db78a7b6151c4/nvidia/riva/transcribe `
   -H "Content-Type: application/json" `
   -d '{"language_code":"en-US"}'
 ```
@@ -314,23 +321,23 @@ $env:EDMG_NVIDIA_TRITON_MODEL="edmg_ensemble"
 Then call the functional bridges:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/nvidia/services/audio2face/invoke `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/services/audio2face/invoke `
   -H "Content-Type: application/json" `
   -d '{"method":"GET","path":"/v1/health"}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/audio2face/generate `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/audio2face/generate `
   -H "Content-Type: application/json" `
   -d '{"path":"/v1/a2f/jobs","audio_path":"outputs/dialogue.wav","character":"metahuman","emotion":"focused"}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/ace/generate `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/ace/generate `
   -H "Content-Type: application/json" `
   -d '{"path":"/v1/avatar/animation","avatar_id":"performer","text":"Welcome to the RTX stage."}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/cosmos/infer `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/cosmos/infer `
   -H "Content-Type: application/json" `
   -d '{"prompt":"audio-reactive RTX stage world","negative_prompt":"blurry, low quality","seed":4,"guidance_scale":7.5,"steps":50,"video_params":{"height":704,"width":1280,"frames_count":121,"frames_per_sec":24}}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
+curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -H "Content-Type: application/json" `
   -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
@@ -338,7 +345,7 @@ curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
 To generate the render-worker handoff from the saved NVIDIA scene plan:
 
 ```powershell
-curl -X POST http://127.0.0.1:8000/v1/projects/4af898d1ebb24a0d8ed2d59a337dd965/nvidia/render-job `
+curl -X POST http://127.0.0.1:7863/v1/projects/febd7dcbeb464b79bf4db78a7b6151c4/nvidia/render-job `
   -H "Content-Type: application/json" `
   -d '{"fps":24,"width":1920,"height":1080}'
 ```
@@ -411,7 +418,8 @@ For unattended local handoff testing, launch Kit with:
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File studio/nvidia-kit/tools/launch_edmg_kit.ps1 `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -BackendUrl "http://127.0.0.1:7863" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -AutoRunRenderWorker `
   -RenderWorkerPollSeconds 5

@@ -97,8 +97,32 @@ function Wait-BackendHealth {
   throw "Backend did not become healthy at $Url within $TimeoutSeconds seconds."
 }
 
+function Resolve-BackendPort {
+  param(
+    [string]$Url,
+    [int]$FallbackPort
+  )
+  if ([string]::IsNullOrWhiteSpace($Url)) {
+    return $FallbackPort
+  }
+  try {
+    $uri = [Uri]$Url
+    if ($uri.IsAbsoluteUri -and $uri.Port -gt 0) {
+      return $uri.Port
+    }
+  } catch {
+    return $FallbackPort
+  }
+  return $FallbackPort
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $repoRoot
+$effectivePort = if ($PSBoundParameters.ContainsKey("Port")) {
+  $Port
+} else {
+  Resolve-BackendPort -Url $BackendUrl -FallbackPort $Port
+}
 
 $logRoot = Join-Path $env:TEMP "edmg-nvidia-runtime"
 New-Item -ItemType Directory -Force -Path $logRoot | Out-Null
@@ -119,7 +143,7 @@ $backendArgs = @(
   "-HostName",
   $HostName,
   "-Port",
-  $Port
+  $effectivePort
 )
 if ($NoBootstrapBackend) {
   $backendArgs += "-NoBootstrap"
@@ -131,6 +155,7 @@ if ($StopExistingBackend) {
 }
 
 Write-Step "Starting or reusing backend at $BackendUrl"
+Write-Step "Backend helper bind target: $HostName`:$effectivePort"
 Remove-Item -LiteralPath $backendStdout,$backendStderr -ErrorAction SilentlyContinue
 $backendProcess = Start-Process `
   -WindowStyle Hidden `
