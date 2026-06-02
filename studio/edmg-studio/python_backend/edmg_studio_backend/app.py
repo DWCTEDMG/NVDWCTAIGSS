@@ -100,6 +100,7 @@ from .services.nvidia_optional_services import (
     invoke_nvidia_service,
     normalize_nvidia_service_id,
     triton_infer,
+    triton_shot_features,
 )
 from .services.nvidia_riva import RivaTranscriptionError, riva_asr_status, transcribe_with_riva
 from .services.nvidia_render_job import build_rtx_render_job
@@ -2458,6 +2459,18 @@ def nvidia_triton_infer_route(payload: dict[str, Any] | None = None):
             parameters=body.get("parameters"),
             timeout_s=timeout_s,
         )
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "triton": result}
+
+
+@app.post("/v1/nvidia/triton/shot-features")
+def nvidia_triton_shot_features_route(payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Triton shot-feature request root must be an object")
+    try:
+        result = triton_shot_features(body, timeout_s=_nvidia_timeout(body, 30.0))
     except NvidiaOptionalServiceError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
     return {"ok": bool(result.get("ok")), "triton": result}

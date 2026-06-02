@@ -241,7 +241,7 @@ $effectiveTritonModel = if (-not [string]::IsNullOrWhiteSpace($TritonModel)) {
 } elseif (-not [string]::IsNullOrWhiteSpace($currentTritonModel)) {
   $currentTritonModel
 } else {
-  "edmg_echo"
+  "edmg_shot_features"
 }
 $currentTritonImage = [Environment]::GetEnvironmentVariable("EDMG_TRITON_IMAGE", "Process")
 $effectiveTritonImage = if ([string]::IsNullOrWhiteSpace($currentTritonImage) -or $currentTritonImage -eq "nvcr.io/nvidia/tritonserver:26.04-py3-min") {
@@ -285,6 +285,7 @@ $definitions = @{
     Env = @{
       EDMG_NVIDIA_TRITON_URL = "http://127.0.0.1:$tritonHttpPort"
       EDMG_NVIDIA_TRITON_MODEL = $effectiveTritonModel
+      EDMG_NVIDIA_TRITON_SHOT_MODEL = "edmg_shot_features"
       EDMG_TRITON_IMAGE = $effectiveTritonImage
     }
   }

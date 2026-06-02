@@ -230,3 +230,57 @@ def test_nvidia_triton_infer_route_requires_inputs(monkeypatch):
 
     assert exc.value.status_code == 400
     assert "inputs" in str(exc.value.detail)
+
+
+def test_nvidia_triton_shot_features_route_posts_scene_plan_contract(monkeypatch):
+    monkeypatch.setenv("EDMG_NVIDIA_TRITON_URL", "http://triton.local:8000")
+    monkeypatch.setenv("EDMG_NVIDIA_TRITON_SHOT_MODEL", "edmg_shot_features")
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=0):
+        seen["url"] = req.full_url
+        seen["method"] = req.get_method()
+        seen["timeout"] = timeout
+        seen["body"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse(
+            {
+                "model_name": "edmg_shot_features",
+                "outputs": [
+                    {
+                        "name": "features_json",
+                        "datatype": "BYTES",
+                        "shape": [1],
+                        "data": ['{"schema_version":"edmg.triton.shot_features.v1","scene_count":2}'],
+                    },
+                    {"name": "energy_score", "datatype": "FP32", "shape": [1], "data": [0.82]},
+                    {"name": "scene_count", "datatype": "INT32", "shape": [1], "data": [2]},
+                ],
+            }
+        )
+
+    monkeypatch.setattr(nvidia_optional_services.request, "urlopen", fake_urlopen)
+
+    payload = backend_app.nvidia_triton_shot_features_route(
+        {
+            "scene_plan": {
+                "title": "RTX stage plan",
+                "bpm": 128,
+                "scenes": [
+                    {"title": "Intro pulse", "duration_s": 8},
+                    {"title": "Laser drop", "duration_s": 16},
+                ],
+            },
+            "timeout_s": 4,
+        }
+    )
+
+    assert any(getattr(route, "path", None) == "/v1/nvidia/triton/shot-features" for route in backend_app.app.routes)
+    assert payload["ok"] is True
+    assert seen["url"] == "http://triton.local:8000/v2/models/edmg_shot_features/infer"
+    assert seen["method"] == "POST"
+    assert seen["timeout"] == 4
+    assert seen["body"]["inputs"][0]["name"] == "scene_plan"
+    assert seen["body"]["inputs"][0]["datatype"] == "BYTES"
+    assert json.loads(seen["body"]["inputs"][0]["data"][0])["scenes"][1]["title"] == "Laser drop"
+    assert seen["body"]["outputs"][0]["name"] == "features_json"
+    assert payload["triton"]["response"]["model_name"] == "edmg_shot_features"

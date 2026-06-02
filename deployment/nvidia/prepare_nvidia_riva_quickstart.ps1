@@ -2,6 +2,7 @@ param(
   [string]$Version = "2.19.0",
   [string]$DestRoot = "starlift-data/nvidia/riva-quickstart",
   [string]$ModelRepository = "starlift-data/nvidia/riva-models",
+  [string]$EnvFile = "deployment/nvidia/.env.local",
   [string]$WslDistro = "Ubuntu",
   [switch]$SkipDownload,
   [switch]$RunInit,
@@ -10,6 +11,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+$script:NgcApiKey = ""
 
 function Write-Step {
   param([string]$Message)
@@ -23,6 +25,27 @@ function Resolve-RepoPath {
     return [System.IO.Path]::GetFullPath($Path)
   }
   return [System.IO.Path]::GetFullPath((Join-Path $repoRoot.Path $Path))
+}
+
+function Get-EnvFileValue {
+  param(
+    [string]$Path,
+    [string]$Name
+  )
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return ""
+  }
+  foreach ($line in Get-Content -LiteralPath $Path) {
+    $trimmed = $line.Trim()
+    if (-not $trimmed -or $trimmed.StartsWith("#") -or -not $trimmed.Contains("=")) {
+      continue
+    }
+    $key, $value = $trimmed.Split("=", 2)
+    if ($key.Trim() -eq $Name) {
+      return $value.Trim().Trim('"').Trim("'")
+    }
+  }
+  return ""
 }
 
 function ConvertTo-WslPath {
@@ -71,7 +94,20 @@ function Set-ShAssignment {
   if (-not $updated) {
     $out += $assignment
   }
-  $out | Set-Content -LiteralPath $Path -Encoding UTF8
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, (($out -join "`n") + "`n"), $utf8NoBom)
+}
+
+function Write-DockerWrapper {
+  param([string]$QuickstartPath)
+  $wrapperDir = Join-Path $QuickstartPath ".wsl-bin"
+  New-Item -ItemType Directory -Force -Path $wrapperDir | Out-Null
+  $wrapperPath = Join-Path $wrapperDir "docker"
+  $content = @(
+    "#!/usr/bin/env bash",
+    'exec "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" "$@"'
+  )
+  [System.IO.File]::WriteAllText($wrapperPath, (($content -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
 }
 
 function Invoke-WslBash {
@@ -80,16 +116,49 @@ function Invoke-WslBash {
     [string]$ScriptName
   )
   $quotedDir = Quote-Bash $WorkingDirectory
-  $command = "cd $quotedDir && bash ./$ScriptName"
+  $wrapperDir = "$WorkingDirectory/.wsl-bin"
+  $quotedWrapperDir = Quote-Bash $wrapperDir
+  $command = "chmod +x $quotedWrapperDir/docker && export PATH=`"$wrapperDir`:`$PATH`" && cd $quotedDir && bash ./$ScriptName"
   Write-Step "Running in WSL ${WslDistro}: $command"
-  & wsl.exe -d $WslDistro -- bash -lc $command
-  if ($LASTEXITCODE -ne 0) {
-    throw "WSL command failed: $ScriptName"
+  $oldNgcApiKey = $env:NGC_API_KEY
+  $oldWslEnv = $env:WSLENV
+  try {
+    if (-not [string]::IsNullOrWhiteSpace($script:NgcApiKey)) {
+      $env:NGC_API_KEY = $script:NgcApiKey
+      $wslEntries = @()
+      if (-not [string]::IsNullOrWhiteSpace($oldWslEnv)) {
+        $wslEntries += $oldWslEnv
+      }
+      if ($wslEntries -notcontains "NGC_API_KEY/u") {
+        $wslEntries += "NGC_API_KEY/u"
+      }
+      $env:WSLENV = ($wslEntries -join ":")
+    }
+    & wsl.exe -d $WslDistro -- bash -lc $command
+    if ($LASTEXITCODE -ne 0) {
+      throw "WSL command failed: $ScriptName"
+    }
+  } finally {
+    if ($null -eq $oldNgcApiKey) {
+      Remove-Item Env:\NGC_API_KEY -ErrorAction SilentlyContinue
+    } else {
+      $env:NGC_API_KEY = $oldNgcApiKey
+    }
+    if ($null -eq $oldWslEnv) {
+      Remove-Item Env:\WSLENV -ErrorAction SilentlyContinue
+    } else {
+      $env:WSLENV = $oldWslEnv
+    }
   }
 }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $repoRoot
+$envPath = Resolve-RepoPath $EnvFile
+$script:NgcApiKey = Get-EnvFileValue -Path $envPath -Name "NGC_API_KEY"
+if (-not [string]::IsNullOrWhiteSpace($script:NgcApiKey)) {
+  Write-Step "Loaded NGC_API_KEY from $EnvFile for WSL Riva scripts."
+}
 
 $destRootPath = Resolve-RepoPath $DestRoot
 $modelRepoPath = Resolve-RepoPath $ModelRepository
@@ -130,11 +199,13 @@ if (-not (Test-Path -LiteralPath $configPath)) {
 $wslModelRepo = ConvertTo-WslPath $modelRepoPath
 Write-Step "Configuring ASR-only Riva quickstart: $configPath"
 Set-ShAssignment -Path $configPath -Name "service_enabled_asr" -Value "true"
+Set-ShAssignment -Path $configPath -Name "service_enabled_nlp" -Value "false"
 Set-ShAssignment -Path $configPath -Name "service_enabled_tts" -Value "false"
 Set-ShAssignment -Path $configPath -Name "service_enabled_nmt" -Value "false"
 Set-ShAssignment -Path $configPath -Name "riva_model_loc" -Value $wslModelRepo -Quoted
 
 $wslQuickstart = ConvertTo-WslPath $quickstart.FullName
+Write-DockerWrapper -QuickstartPath $quickstart.FullName
 Write-Step "Quickstart directory: $($quickstart.FullName)"
 Write-Step "WSL quickstart directory: $wslQuickstart"
 Write-Step "Model repository: $modelRepoPath"

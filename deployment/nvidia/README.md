@@ -137,14 +137,17 @@ Configured HTTP services can also be invoked through
 `/v1/nvidia/services/{service_id}/invoke`; this is the generic functional bridge
 for Audio2Face, ACE, Cosmos, Omniverse, NeMo, and NIM-style services. Typed
 wrappers are available for `/v1/nvidia/audio2face/generate`,
-`/v1/nvidia/ace/generate`, `/v1/nvidia/cosmos/infer`, and
-`/v1/nvidia/triton/infer`. Cosmos uses the official NIM `/v1/infer` path by
-default. Audio2Face/ACE gateway paths are deployment-specific, so pass `path` or
-set `EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH` / `EDMG_NVIDIA_ACE_GENERATE_PATH`.
+`/v1/nvidia/ace/generate`, `/v1/nvidia/cosmos/infer`,
+`/v1/nvidia/triton/shot-features`, and `/v1/nvidia/triton/infer`. Cosmos uses
+the official NIM `/v1/infer` path by default. Audio2Face/ACE gateway paths are
+deployment-specific, so pass `path` or set
+`EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH` / `EDMG_NVIDIA_ACE_GENERATE_PATH`.
 Triton uses the v2 inference protocol. The repository includes a tiny
-`edmg_echo` Triton Python-backend model under
-`deployment/nvidia/triton-model-repository/` so the local Triton profile can
-prove real `/v2/models/{model}/infer` calls before production models are added.
+`edmg_echo` smoke model and the default app-specific `edmg_shot_features`
+Triton Python-backend model under `deployment/nvidia/triton-model-repository/`.
+`edmg_shot_features` accepts a scene-plan JSON tensor and returns render-facing
+shot features, aggregate energy, scene count, and render hints through real
+`/v2/models/{model}/infer` calls.
 Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 `/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend
@@ -189,7 +192,8 @@ $env:EDMG_NVIDIA_RIVA_URL="host.docker.internal:50051"
 $env:EDMG_NVIDIA_RIVA_ASR="0"
 $env:EDMG_TRITON_IMAGE="nvcr.io/nvidia/tritonserver:26.04-py3"
 $env:EDMG_TRITON_MODEL_REPOSITORY="./deployment/nvidia/triton-model-repository"
-$env:EDMG_NVIDIA_TRITON_MODEL="edmg_echo"
+$env:EDMG_NVIDIA_TRITON_MODEL="edmg_shot_features"
+$env:EDMG_NVIDIA_TRITON_SHOT_MODEL="edmg_shot_features"
 $env:EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH="/v1/a2f/jobs"
 $env:EDMG_NVIDIA_ACE_GENERATE_PATH="/v1/avatar/animation"
 $env:EDMG_NVIDIA_COSMOS_INFER_PATH="/v1/infer"
@@ -230,14 +234,20 @@ curl -X POST http://127.0.0.1:7863/v1/nvidia/cosmos/infer `
 
 curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -H "Content-Type: application/json" `
-  -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
+  -d '{"model":"edmg_shot_features","inputs":[{"name":"scene_plan","shape":[1],"datatype":"BYTES","data":["{\"title\":\"RTX stage\",\"bpm\":128,\"scenes\":[{\"title\":\"Intro pulse\",\"duration_s\":8},{\"title\":\"Laser drop\",\"duration_s\":16}]}"]}],"outputs":[{"name":"features_json"},{"name":"energy_score"},{"name":"scene_count"}]}'
+
+curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/shot-features `
+  -H "Content-Type: application/json" `
+  -d '{"scene_plan":{"title":"RTX stage","bpm":128,"scenes":[{"title":"Intro pulse","duration_s":8},{"title":"Laser drop","duration_s":16}]}}'
 ```
 
-For the committed `edmg_echo` model, the Triton response includes an `echo`
-output with the submitted string tensor. Use the full `26.04-py3` Triton server
-image for this smoke model; the `py3-min` image is not a runnable server image
-for this profile. Replace `EDMG_NVIDIA_TRITON_MODEL` and
-`EDMG_TRITON_MODEL_REPOSITORY` when you add production Triton models.
+For `edmg_shot_features`, the Triton response includes `features_json`,
+`energy_score`, and `scene_count` outputs. The committed `edmg_echo` model is
+kept only for low-level connectivity debugging. Use the full `26.04-py3` Triton
+server image; the `py3-min` image is not a runnable server image for this
+profile. Replace `EDMG_NVIDIA_TRITON_MODEL`, `EDMG_NVIDIA_TRITON_SHOT_MODEL`,
+and `EDMG_TRITON_MODEL_REPOSITORY` when swapping in heavier production Triton
+models.
 
 The Omniverse Kit `edmg.ai_director` panel includes the same typed bridge for
 `audio2face`, `ace`, `cosmos`, and `triton`; it sends the edited JSON payload to

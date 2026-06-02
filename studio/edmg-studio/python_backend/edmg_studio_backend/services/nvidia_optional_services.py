@@ -11,6 +11,7 @@ from .nvidia_profile import nvidia_profile_status
 
 HTTP_SERVICE_IDS = {"nim", "nemo", "triton", "audio2face", "ace", "cosmos", "omniverse"}
 SENSITIVE_QUERY_MARKERS = ("key", "token", "secret", "auth", "password")
+DEFAULT_TRITON_SHOT_FEATURES_MODEL = "edmg_shot_features"
 
 
 class NvidiaOptionalServiceError(RuntimeError):
@@ -289,5 +290,44 @@ def triton_infer(
         f"/v2/models/{safe_model}/infer",
         payload=body,
         method="POST",
+        timeout_s=timeout_s,
+    )
+
+
+def triton_shot_features(body: dict[str, Any], *, timeout_s: float = 30.0) -> dict[str, Any]:
+    """Invoke the EDMG shot-feature Triton model with a scene-plan JSON payload."""
+
+    if not isinstance(body, dict):
+        raise NvidiaOptionalServiceError("Triton shot-feature request root must be an object.", status_code=400)
+    if "scene_plan" in body:
+        scene_plan = body.get("scene_plan")
+        model = str(body.get("model") or _env("EDMG_NVIDIA_TRITON_SHOT_MODEL") or DEFAULT_TRITON_SHOT_FEATURES_MODEL).strip()
+        parameters = body.get("parameters")
+    else:
+        scene_plan = body
+        model = str(_env("EDMG_NVIDIA_TRITON_SHOT_MODEL") or DEFAULT_TRITON_SHOT_FEATURES_MODEL).strip()
+        parameters = None
+    if not isinstance(scene_plan, dict):
+        raise NvidiaOptionalServiceError("Triton `scene_plan` must be an object.", status_code=400)
+    if parameters is not None and not isinstance(parameters, dict):
+        raise NvidiaOptionalServiceError("Triton `parameters` must be an object when provided.", status_code=400)
+
+    scene_plan_json = json.dumps(scene_plan, ensure_ascii=False, separators=(",", ":"))
+    return triton_infer(
+        model=model,
+        inputs=[
+            {
+                "name": "scene_plan",
+                "shape": [1],
+                "datatype": "BYTES",
+                "data": [scene_plan_json],
+            }
+        ],
+        outputs=[
+            {"name": "features_json"},
+            {"name": "energy_score"},
+            {"name": "scene_count"},
+        ],
+        parameters=parameters,
         timeout_s=timeout_s,
     )

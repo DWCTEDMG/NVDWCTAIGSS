@@ -1,0 +1,35 @@
+name: "edmg_shot_features"
+backend: "python"
+max_batch_size: 0
+
+input [
+  {
+    name: "scene_plan"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+
+output [
+  {
+    name: "features_json"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  },
+  {
+    name: "energy_score"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  },
+  {
+    name: "scene_count"
+    data_type: TYPE_INT32
+    dims: [ 1 ]
+  }
+]
+
+instance_group [
+  {
+    kind: KIND_CPU
+  }
+]
