@@ -54,8 +54,9 @@ The conservative implementation is therefore:
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File deployment/nvidia/stage_nvidia_kit_app.ps1 `
   -PackageMode thin `
+  -BackendUrl "http://127.0.0.1:7863" `
   -KitSdkRoot "D:\NVIDIA\Omniverse\kit-sdk-110.1.1" `
-  -ProjectId "4af898d1ebb24a0d8ed2d59a337dd965" `
+  -ProjectId "febd7dcbeb464b79bf4db78a7b6151c4" `
   -FfmpegPath "C:\Users\lanak\AppData\Local\Microsoft\WinGet\Links\ffmpeg.exe" `
   -Clean
 ```
