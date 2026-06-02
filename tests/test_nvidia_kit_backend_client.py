@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -48,6 +49,10 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self) -> None:
+        if self.path == "/v1/slow":
+            time.sleep(0.2)
+            self._send_json({"ok": True})
+            return
         if self.path == "/v1/nvidia/status":
             self._send_json({"ok": True, "nvidia": {"enabled": True, "profile": "omniverse"}})
             return
@@ -176,6 +181,33 @@ def test_kit_backend_client_generates_scene_plan_usda():
         assert response["planner"]["provider"] == "openai_compat"
         assert response["scene_plan"]["provider"] == "nvidia-profile:openai_compat:test-model"
         assert usda.startswith("#usda 1.0")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_kit_backend_client_defaults_to_nim_generation_timeout():
+    module = _load_client_module()
+    client = module.EdmgBackendClient()
+
+    assert client.timeout_s >= 120
+
+
+def test_kit_backend_client_reports_timeout_cleanly():
+    module = _load_client_module()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        client = module.EdmgBackendClient(base_url=base_url, timeout_s=0.01)
+
+        try:
+            client._json_request("GET", "/v1/slow")
+        except module.BackendClientError as exc:
+            assert "timed out after" in str(exc)
+        else:
+            raise AssertionError("Expected BackendClientError for timeout")
     finally:
         server.shutdown()
         thread.join(timeout=5)

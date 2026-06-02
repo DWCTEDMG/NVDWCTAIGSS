@@ -15,7 +15,7 @@ class BackendClientError(RuntimeError):
 @dataclass(frozen=True)
 class EdmgBackendClient:
     base_url: str = "http://127.0.0.1:8000"
-    timeout_s: float = 15.0
+    timeout_s: float = 180.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
@@ -39,6 +39,8 @@ class EdmgBackendClient:
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise BackendClientError(f"{method} {path} failed with HTTP {exc.code}: {detail}") from exc
+        except TimeoutError as exc:
+            raise BackendClientError(f"{method} {path} timed out after {self.timeout_s:g}s") from exc
         except error.URLError as exc:
             raise BackendClientError(f"{method} {path} failed: {exc.reason}") from exc
 

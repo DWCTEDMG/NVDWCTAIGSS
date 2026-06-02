@@ -29,11 +29,12 @@ def main() -> int:
     parser.add_argument("--style-prefs", default="RTX stage lighting, OpenUSD-ready camera moves, audio-reactive motion")
     parser.add_argument("--user-notes", default="Build a short NVIDIA Studio scene plan that can be previewed in Kit.")
     parser.add_argument("--max-scenes", type=int, default=4)
+    parser.add_argument("--timeout-s", type=float, default=180.0, help="Backend request timeout for local NIM generation.")
     parser.add_argument("--project-id", default="", help="Existing Studio project id for generate-and-persist or fetch-persisted checks.")
     parser.add_argument("--fetch-persisted", action="store_true", help="Fetch the persisted NVIDIA scene plan for --project-id.")
     args = parser.parse_args()
 
-    client = EdmgBackendClient(base_url=args.backend_url)
+    client = EdmgBackendClient(base_url=args.backend_url, timeout_s=args.timeout_s)
     status = client.nvidia_status()
     nvidia = status.get("nvidia") if isinstance(status.get("nvidia"), dict) else {}
     print(f"[kit-ai-director] Backend: {args.backend_url.rstrip('/')}")
