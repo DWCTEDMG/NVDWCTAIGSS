@@ -169,6 +169,9 @@ $env:EDMG_AI_OPENAI_COMPAT_BASE_URL="http://host.docker.internal:8001/v1"
 $env:EDMG_AI_OPENAI_COMPAT_MODEL="your-nim-model"
 $env:EDMG_NVIDIA_RIVA_URL="host.docker.internal:50051"
 $env:EDMG_NVIDIA_RIVA_ASR="0"
+$env:EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH="/v1/a2f/jobs"
+$env:EDMG_NVIDIA_ACE_GENERATE_PATH="/v1/avatar/animation"
+$env:EDMG_NVIDIA_COSMOS_INFER_PATH="/v1/infer"
 $env:EDMG_NVIDIA_MODE="1"
 $env:EDMG_NVIDIA_PROFILE="omniverse"
 ```
@@ -220,6 +223,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_optional_service.ps1 -Service triton -ConfigureEnv
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_gpu_smoke.ps1
 ```
@@ -240,6 +244,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_g
   into one local runtime command. It waits for `/health`, prints NVIDIA
   diagnostics readiness, detects FFmpeg, and launches Kit with
   `-AutoRunRenderWorker`.
+- `start_nvidia_optional_service.ps1` starts one optional NVIDIA Compose
+  service profile at a time, can write the local service URL/path into the
+  ignored `.env.local`, and probes the exposed endpoint without printing
+  secrets. Use `-ConfigureOnly` to update `.env.local` without pulling or
+  starting the service. Use it service-by-service on this 6 GB RTX workstation.
 - `stage_nvidia_kit_app.ps1` creates a local distributable source bundle for
   the EDMG NVIDIA Kit app under `dist/nvidia-kit-app/`, including app config,
   extensions, tools, deployment helpers, a manifest, and a generated launch

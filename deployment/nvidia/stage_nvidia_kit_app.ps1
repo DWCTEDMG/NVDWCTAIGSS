@@ -110,6 +110,7 @@ New-Item -ItemType Directory -Force -Path $deploymentDest | Out-Null
 foreach ($script in @(
   "start_nvidia_backend_local.ps1",
   "start_nvidia_runtime_local.ps1",
+  "start_nvidia_optional_service.ps1",
   "stage_nvidia_kit_app.ps1",
   "smoke_nvidia_backend.ps1",
   "smoke_nvidia_kit_render_job.ps1",

@@ -77,6 +77,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/login_ngc.
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docker_gpu.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_optional_service.ps1 -Service triton -ConfigureEnv
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_gpu_smoke.ps1
 ```
@@ -141,13 +142,35 @@ docker compose `
 Optional local NVIDIA services:
 
 ```powershell
-docker compose `
-  --profile nvidia-local `
-  --env-file deployment/nvidia/.env.local `
-  -f docker-compose.starlift.yml `
-  -f deployment/nvidia/docker-compose.nvidia.yml `
-  up
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_optional_service.ps1 `
+  -Service triton `
+  -ConfigureEnv
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_optional_service.ps1 `
+  -Service riva `
+  -ConfigureEnv `
+  -EnableRivaAsr
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_optional_service.ps1 `
+  -Service audio2face `
+  -ConfigureEnv `
+  -Audio2FaceGeneratePath "/v1/a2f/jobs"
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_optional_service.ps1 `
+  -Service cosmos `
+  -ConfigureEnv `
+  -CosmosInferPath "/v1/infer"
 ```
+
+Start optional services one at a time on this workstation. The RTX 4050 laptop
+GPU has limited VRAM for running multiple official NVIDIA service containers
+beside the NIM planner and Kit RTX viewport. Add `-ConfigureOnly` to any command
+above when you only want to fill `.env.local` with the local URL/path values
+before pulling or starting the service image.
 
 The example profile uses explicit NGC image tags for a first local workstation
 pass:
@@ -160,6 +183,9 @@ EDMG_NEMO_IMAGE=nvcr.io/nvidia/nemo:26.04.01
 EDMG_TRITON_IMAGE=nvcr.io/nvidia/tritonserver:26.04-py3-min
 EDMG_AUDIO2FACE_IMAGE=nvcr.io/nim/nvidia/audio2face-3d:2.0
 EDMG_COSMOS_IMAGE=nvcr.io/nim/nvidia/cosmos-reason2-2b:latest
+EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH=/v1/a2f/jobs
+EDMG_NVIDIA_ACE_GENERATE_PATH=/v1/avatar/animation
+EDMG_NVIDIA_COSMOS_INFER_PATH=/v1/infer
 ```
 
 You can narrow the stack with specific profiles such as `nim`, `riva`, `nemo`,

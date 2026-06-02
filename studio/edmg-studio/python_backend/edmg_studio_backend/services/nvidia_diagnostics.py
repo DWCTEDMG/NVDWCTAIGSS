@@ -120,7 +120,13 @@ def _http_probe(url: str, *, api_key: str | None = None, timeout_s: float = 3.0)
                 out["model_count"] = len(payload["data"])
             return out
     except error.HTTPError as exc:
-        return {"configured": True, "reachable": False, "status_code": exc.code, "error": exc.reason}
+        return {
+            "configured": True,
+            "reachable": True,
+            "status_code": exc.code,
+            "error": exc.reason,
+            "http_response": True,
+        }
     except error.URLError as exc:
         return {"configured": True, "reachable": False, "error": str(exc.reason)}
     except Exception as exc:
@@ -327,12 +333,17 @@ def nvidia_diagnostics() -> dict[str, Any]:
     for service_id in ("nemo", "triton", "audio2face", "ace", "cosmos"):
         service = profile_services.get(service_id, {})
         base_url = str(service.get("base_url") or "").strip()
-        services[service_id] = {
+        service_payload: dict[str, Any] = {
             "configured": bool(service.get("configured")),
             "base_url": base_url,
             "model": service.get("model") or "",
             "probe": _http_probe(base_url, timeout_s=3.0) if base_url else {"configured": False, "skipped": True},
         }
+        if service.get("generate_path"):
+            service_payload["generate_path"] = service.get("generate_path")
+        if service.get("infer_path"):
+            service_payload["infer_path"] = service.get("infer_path")
+        services[service_id] = service_payload
 
     return {
         "profile": profile,

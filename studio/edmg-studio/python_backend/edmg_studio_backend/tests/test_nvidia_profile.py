@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from urllib import error as url_error
 
 import pytest
 from fastapi import HTTPException
@@ -111,8 +112,11 @@ def test_nvidia_service_status_routes_report_optional_services(monkeypatch):
     monkeypatch.setenv("EDMG_NVIDIA_NIM_URL", "http://nim.local:8000")
     monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/model")
     monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_URL", "http://audio2face.local:8011")
+    monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH", "/v1/a2f/jobs")
     monkeypatch.setenv("EDMG_NVIDIA_TRITON_URL", "http://triton.local:8000")
     monkeypatch.setenv("EDMG_NVIDIA_TRITON_MODEL", "edmg_ensemble")
+    monkeypatch.setenv("EDMG_NVIDIA_COSMOS_URL", "http://cosmos.local:8000")
+    monkeypatch.setenv("EDMG_NVIDIA_COSMOS_INFER_PATH", "/v1/infer")
 
     monkeypatch.setattr(
         diagnostics_module,
@@ -144,9 +148,31 @@ def test_nvidia_service_status_routes_report_optional_services(monkeypatch):
     assert services_payload["services"]["audio2face"]["probe"]["url_seen"] == "http://audio2face.local:8011"
     assert audio2face_payload["service_id"] == "audio2face"
     assert audio2face_payload["service"]["configured"] is True
+    assert audio2face_payload["service"]["generate_path"] == "/v1/a2f/jobs"
     assert triton_payload["service"]["model"] == "edmg_ensemble"
+    assert services_payload["services"]["cosmos"]["infer_path"] == "/v1/infer"
     assert "service-secret-token" not in repr(services_payload)
     assert "service-secret-token" not in repr(audio2face_payload)
+
+
+def test_nvidia_http_probe_treats_http_response_as_reachable(monkeypatch):
+    def fake_urlopen(*_args, **_kwargs):
+        raise url_error.HTTPError(
+            url="http://service.local/",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=None,
+        )
+
+    monkeypatch.setattr(diagnostics_module.request, "urlopen", fake_urlopen)
+
+    probe = diagnostics_module._http_probe("http://service.local")
+
+    assert probe["configured"] is True
+    assert probe["reachable"] is True
+    assert probe["status_code"] == 404
+    assert probe["http_response"] is True
 
 
 def test_nvidia_diagnostics_readiness_flags_placeholder_nim(monkeypatch):

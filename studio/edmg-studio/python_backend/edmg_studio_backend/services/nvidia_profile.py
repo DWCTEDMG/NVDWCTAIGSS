@@ -69,8 +69,17 @@ def nvidia_profile_status() -> dict[str, Any]:
             },
             "nemo": _service("EDMG_NVIDIA_NEMO_URL"),
             "triton": _service("EDMG_NVIDIA_TRITON_URL", model_env="EDMG_NVIDIA_TRITON_MODEL"),
-            "audio2face": _service("EDMG_NVIDIA_AUDIO2FACE_URL"),
-            "ace": _service("EDMG_NVIDIA_ACE_URL"),
-            "cosmos": _service("EDMG_NVIDIA_COSMOS_URL", model_env="EDMG_NVIDIA_COSMOS_MODEL"),
+            "audio2face": {
+                **_service("EDMG_NVIDIA_AUDIO2FACE_URL"),
+                "generate_path": _env("EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH"),
+            },
+            "ace": {
+                **_service("EDMG_NVIDIA_ACE_URL"),
+                "generate_path": _env("EDMG_NVIDIA_ACE_GENERATE_PATH"),
+            },
+            "cosmos": {
+                **_service("EDMG_NVIDIA_COSMOS_URL", model_env="EDMG_NVIDIA_COSMOS_MODEL"),
+                "infer_path": _env("EDMG_NVIDIA_COSMOS_INFER_PATH", "/v1/infer") or "/v1/infer",
+            },
         },
     }

@@ -97,6 +97,7 @@ studio/edmg-studio/output/
 studio/edmg-studio/external/
 studio/edmg-studio/_legacy_migrations/
 studio/edmg-studio/python_backend/external/
+studio/edmg-studio/python_backend/models/
 studio/edmg-studio/python_backend/.codex-pyinstaller-build/
 studio/edmg-studio/python_backend/.codex-pyinstaller-dist/
 studio/edmg-studio/launcher_env.json
