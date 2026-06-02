@@ -94,6 +94,9 @@ from .services.nvidia_profile import nvidia_profile_status
 from .services.nvidia_diagnostics import nvidia_diagnostics
 from .services.nvidia_optional_services import (
     NvidiaOptionalServiceError,
+    ace_generate,
+    audio2face_generate,
+    cosmos_infer,
     invoke_nvidia_service,
     normalize_nvidia_service_id,
     triton_infer,
@@ -2393,6 +2396,49 @@ def nvidia_service_invoke_route(service_id: str, payload: dict[str, Any] | None 
     except NvidiaOptionalServiceError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
     return {"ok": bool(result.get("ok")), "result": result, "service_id": result.get("service_id")}
+
+
+def _nvidia_timeout(body: dict[str, Any], default: float) -> float:
+    try:
+        return float(body.get("timeout_s") or default)
+    except Exception as exc:
+        raise HTTPException(400, "timeout_s must be numeric") from exc
+
+
+@app.post("/v1/nvidia/audio2face/generate")
+def nvidia_audio2face_generate_route(payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Audio2Face request root must be an object")
+    try:
+        result = audio2face_generate(body, timeout_s=_nvidia_timeout(body, 60.0))
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "audio2face": result}
+
+
+@app.post("/v1/nvidia/ace/generate")
+def nvidia_ace_generate_route(payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "ACE request root must be an object")
+    try:
+        result = ace_generate(body, timeout_s=_nvidia_timeout(body, 60.0))
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "ace": result}
+
+
+@app.post("/v1/nvidia/cosmos/infer")
+def nvidia_cosmos_infer_route(payload: dict[str, Any] | None = None):
+    body = payload or {}
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Cosmos inference request root must be an object")
+    try:
+        result = cosmos_infer(body, timeout_s=_nvidia_timeout(body, 120.0))
+    except NvidiaOptionalServiceError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    return {"ok": bool(result.get("ok")), "cosmos": result}
 
 
 @app.post("/v1/nvidia/triton/infer")

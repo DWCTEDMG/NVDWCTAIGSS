@@ -133,9 +133,14 @@ Direct optional-service checks are available at `/v1/nvidia/services` and
 `/v1/nvidia/services/{service_id}/status` for `nim`, `riva`, `omniverse`,
 `nemo`, `triton`, `audio2face`, `ace`, and `cosmos`.
 Configured HTTP services can also be invoked through
-`/v1/nvidia/services/{service_id}/invoke`; this is the first functional bridge
-for Audio2Face, ACE, Cosmos, Omniverse, NeMo, and NIM-style services. Triton has
-a dedicated `/v1/nvidia/triton/infer` wrapper for the v2 inference protocol.
+`/v1/nvidia/services/{service_id}/invoke`; this is the generic functional bridge
+for Audio2Face, ACE, Cosmos, Omniverse, NeMo, and NIM-style services. Typed
+wrappers are available for `/v1/nvidia/audio2face/generate`,
+`/v1/nvidia/ace/generate`, `/v1/nvidia/cosmos/infer`, and
+`/v1/nvidia/triton/infer`. Cosmos uses the official NIM `/v1/infer` path by
+default. Audio2Face/ACE gateway paths are deployment-specific, so pass `path` or
+set `EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH` / `EDMG_NVIDIA_ACE_GENERATE_PATH`.
+Triton uses the v2 inference protocol.
 Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 `/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend
@@ -190,9 +195,13 @@ curl -X POST http://127.0.0.1:8000/v1/nvidia/services/audio2face/invoke `
   -H "Content-Type: application/json" `
   -d '{"method":"GET","path":"/v1/health"}'
 
-curl -X POST http://127.0.0.1:8000/v1/nvidia/services/cosmos/invoke `
+curl -X POST http://127.0.0.1:8000/v1/nvidia/audio2face/generate `
   -H "Content-Type: application/json" `
-  -d '{"path":"/v1/generate","payload":{"prompt":"audio-reactive stage world","duration_s":4}}'
+  -d '{"path":"/v1/a2f/jobs","audio_path":"outputs/dialogue.wav","character":"metahuman","emotion":"focused"}'
+
+curl -X POST http://127.0.0.1:8000/v1/nvidia/cosmos/infer `
+  -H "Content-Type: application/json" `
+  -d '{"prompt":"audio-reactive RTX stage world","negative_prompt":"blurry, low quality","seed":4,"guidance_scale":7.5,"steps":50,"video_params":{"height":704,"width":1280,"frames_count":121,"frames_per_sec":24}}'
 
 curl -X POST http://127.0.0.1:8000/v1/nvidia/triton/infer `
   -H "Content-Type: application/json" `

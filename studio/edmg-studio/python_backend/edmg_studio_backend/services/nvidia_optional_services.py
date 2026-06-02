@@ -41,6 +41,22 @@ def _env(name: str) -> str:
     return str(os.getenv(name, "") or "").strip()
 
 
+def _reserved_payload_keys() -> set[str]:
+    return {"path", "endpoint", "method", "timeout_s"}
+
+
+def _invoke_payload(body: dict[str, Any]) -> Any:
+    if "payload" in body:
+        return body.get("payload")
+    if "body" in body:
+        return body.get("body")
+    return {key: value for key, value in body.items() if key not in _reserved_payload_keys()}
+
+
+def _configured_path(body: dict[str, Any], env_name: str, fallback: str = "") -> str:
+    return str(body.get("path") or body.get("endpoint") or _env(env_name) or fallback).strip()
+
+
 def _service_profile(service_id: str) -> dict[str, Any]:
     normalized = normalize_nvidia_service_id(service_id)
     if normalized not in HTTP_SERVICE_IDS:
@@ -186,6 +202,57 @@ def invoke_nvidia_service(
         raise NvidiaOptionalServiceError(f"NVIDIA service '{normalized}' request timed out.", status_code=504) from exc
     except Exception as exc:
         raise NvidiaOptionalServiceError(f"NVIDIA service '{normalized}' request failed: {exc}", status_code=502) from exc
+
+
+def audio2face_generate(body: dict[str, Any], *, timeout_s: float = 30.0) -> dict[str, Any]:
+    """Invoke a configured Audio2Face/Audio2Face gateway generation endpoint."""
+
+    if not isinstance(body, dict):
+        raise NvidiaOptionalServiceError("Audio2Face request root must be an object.", status_code=400)
+    path = _configured_path(body, "EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH")
+    if not path:
+        raise NvidiaOptionalServiceError(
+            "Audio2Face gateway path is required; pass `path` or set EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH.",
+            status_code=400,
+        )
+    return invoke_nvidia_service("audio2face", path, payload=_invoke_payload(body), method="POST", timeout_s=timeout_s)
+
+
+def ace_generate(body: dict[str, Any], *, timeout_s: float = 30.0) -> dict[str, Any]:
+    """Invoke a configured ACE gateway generation endpoint."""
+
+    if not isinstance(body, dict):
+        raise NvidiaOptionalServiceError("ACE request root must be an object.", status_code=400)
+    path = _configured_path(body, "EDMG_NVIDIA_ACE_GENERATE_PATH")
+    if not path:
+        raise NvidiaOptionalServiceError(
+            "ACE gateway path is required; pass `path` or set EDMG_NVIDIA_ACE_GENERATE_PATH.",
+            status_code=400,
+        )
+    return invoke_nvidia_service("ace", path, payload=_invoke_payload(body), method="POST", timeout_s=timeout_s)
+
+
+def cosmos_infer(body: dict[str, Any], *, timeout_s: float = 120.0) -> dict[str, Any]:
+    """Invoke Cosmos NIM /v1/infer with a normalized text/image/video-world payload."""
+
+    if not isinstance(body, dict):
+        raise NvidiaOptionalServiceError("Cosmos inference request root must be an object.", status_code=400)
+    prompt = str(body.get("prompt") or "").strip()
+    if not prompt:
+        raise NvidiaOptionalServiceError("Cosmos `prompt` is required.", status_code=400)
+
+    payload: dict[str, Any] = {"prompt": prompt}
+    for key in ("negative_prompt", "image", "video", "prompt_upsampling", "seed", "guidance_scale", "steps", "resolution"):
+        if key in body and body.get(key) not in (None, ""):
+            payload[key] = body.get(key)
+    if isinstance(body.get("video_params"), dict):
+        payload["video_params"] = body["video_params"]
+    for key in ("edge", "depth", "vis", "seg"):
+        if isinstance(body.get(key), dict):
+            payload[key] = body[key]
+
+    path = _configured_path(body, "EDMG_NVIDIA_COSMOS_INFER_PATH", "/v1/infer")
+    return invoke_nvidia_service("cosmos", path, payload=payload, method="POST", timeout_s=timeout_s)
 
 
 def triton_infer(
