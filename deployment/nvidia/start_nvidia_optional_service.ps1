@@ -235,6 +235,20 @@ $rivaGrpcPort = Get-EnvInt -Name "EDMG_RIVA_GRPC_PORT" -Default 50051
 $tritonHttpPort = Get-EnvInt -Name "EDMG_TRITON_HTTP_PORT" -Default 8002
 $audio2facePort = Get-EnvInt -Name "EDMG_AUDIO2FACE_HTTP_PORT" -Default 8011
 $cosmosPort = Get-EnvInt -Name "EDMG_COSMOS_HTTP_PORT" -Default 8012
+$currentTritonModel = [Environment]::GetEnvironmentVariable("EDMG_NVIDIA_TRITON_MODEL", "Process")
+$effectiveTritonModel = if (-not [string]::IsNullOrWhiteSpace($TritonModel)) {
+  $TritonModel
+} elseif (-not [string]::IsNullOrWhiteSpace($currentTritonModel)) {
+  $currentTritonModel
+} else {
+  "edmg_echo"
+}
+$currentTritonImage = [Environment]::GetEnvironmentVariable("EDMG_TRITON_IMAGE", "Process")
+$effectiveTritonImage = if ([string]::IsNullOrWhiteSpace($currentTritonImage) -or $currentTritonImage -eq "nvcr.io/nvidia/tritonserver:26.04-py3-min") {
+  "nvcr.io/nvidia/tritonserver:26.04-py3"
+} else {
+  $currentTritonImage
+}
 $currentRivaAsr = [Environment]::GetEnvironmentVariable("EDMG_NVIDIA_RIVA_ASR", "Process")
 if ([string]::IsNullOrWhiteSpace($currentRivaAsr)) {
   $currentRivaAsr = "0"
@@ -270,6 +284,8 @@ $definitions = @{
     ProbeUrl = "http://127.0.0.1:$tritonHttpPort/v2/health/ready"
     Env = @{
       EDMG_NVIDIA_TRITON_URL = "http://127.0.0.1:$tritonHttpPort"
+      EDMG_NVIDIA_TRITON_MODEL = $effectiveTritonModel
+      EDMG_TRITON_IMAGE = $effectiveTritonImage
     }
   }
   audio2face = @{
@@ -311,10 +327,6 @@ $definitions = @{
     ProbeKind = "none"
     Env = @{}
   }
-}
-
-if (-not [string]::IsNullOrWhiteSpace($TritonModel)) {
-  $definitions.triton.Env["EDMG_NVIDIA_TRITON_MODEL"] = $TritonModel
 }
 
 $requested = New-Object System.Collections.Generic.List[string]

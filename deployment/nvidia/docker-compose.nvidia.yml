@@ -24,9 +24,12 @@ services:
       EDMG_NVIDIA_TRITON_URL: ${EDMG_NVIDIA_TRITON_URL:-}
       EDMG_NVIDIA_TRITON_MODEL: ${EDMG_NVIDIA_TRITON_MODEL:-}
       EDMG_NVIDIA_AUDIO2FACE_URL: ${EDMG_NVIDIA_AUDIO2FACE_URL:-}
+      EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH: ${EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH:-}
       EDMG_NVIDIA_ACE_URL: ${EDMG_NVIDIA_ACE_URL:-}
+      EDMG_NVIDIA_ACE_GENERATE_PATH: ${EDMG_NVIDIA_ACE_GENERATE_PATH:-}
       EDMG_NVIDIA_COSMOS_URL: ${EDMG_NVIDIA_COSMOS_URL:-}
       EDMG_NVIDIA_COSMOS_MODEL: ${EDMG_NVIDIA_COSMOS_MODEL:-}
+      EDMG_NVIDIA_COSMOS_INFER_PATH: ${EDMG_NVIDIA_COSMOS_INFER_PATH:-/v1/infer}
     volumes:
       - ./starlift-data/nvidia:/studio/nvidia
 
@@ -88,8 +91,14 @@ services:
 
   nvidia-triton:
     profiles: ["nvidia-local", "triton"]
-    image: ${EDMG_TRITON_IMAGE:-nvcr.io/nvidia/tritonserver/set-edmg-triton-image}
+    image: ${EDMG_TRITON_IMAGE:-nvcr.io/nvidia/tritonserver:26.04-py3}
     restart: unless-stopped
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --model-control-mode=poll
+      - --repository-poll-secs=30
+      - --strict-model-config=false
     ports:
       - "${EDMG_TRITON_HTTP_PORT:-8002}:8000"
       - "${EDMG_TRITON_GRPC_PORT:-8003}:8001"
@@ -97,7 +106,7 @@ services:
     environment:
       NGC_API_KEY: ${NGC_API_KEY:-}
     volumes:
-      - ./starlift-data/nvidia/triton-model-repository:/models
+      - ${EDMG_TRITON_MODEL_REPOSITORY:-./deployment/nvidia/triton-model-repository}:/models
     deploy:
       resources:
         reservations:

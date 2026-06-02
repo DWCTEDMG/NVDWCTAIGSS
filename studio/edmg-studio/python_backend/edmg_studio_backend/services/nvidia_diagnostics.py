@@ -88,6 +88,13 @@ def _nim_models_url(base_url: str) -> str:
     return f"{base}/v1/models"
 
 
+def _triton_health_url(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    if base.endswith("/v2"):
+        return f"{base}/health/ready"
+    return f"{base}/v2/health/ready"
+
+
 def _looks_placeholder(value: str) -> bool:
     lowered = value.strip().lower()
     return any(marker in lowered for marker in PLACEHOLDER_MARKERS)
@@ -333,11 +340,12 @@ def nvidia_diagnostics() -> dict[str, Any]:
     for service_id in ("nemo", "triton", "audio2face", "ace", "cosmos"):
         service = profile_services.get(service_id, {})
         base_url = str(service.get("base_url") or "").strip()
+        probe_url = _triton_health_url(base_url) if service_id == "triton" and base_url else base_url
         service_payload: dict[str, Any] = {
             "configured": bool(service.get("configured")),
             "base_url": base_url,
             "model": service.get("model") or "",
-            "probe": _http_probe(base_url, timeout_s=3.0) if base_url else {"configured": False, "skipped": True},
+            "probe": _http_probe(probe_url, timeout_s=3.0) if probe_url else {"configured": False, "skipped": True},
         }
         if service.get("generate_path"):
             service_payload["generate_path"] = service.get("generate_path")

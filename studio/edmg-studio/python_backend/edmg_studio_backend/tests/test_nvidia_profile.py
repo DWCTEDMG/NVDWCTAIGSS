@@ -146,10 +146,12 @@ def test_nvidia_service_status_routes_report_optional_services(monkeypatch):
     assert any(getattr(route, "path", None) == "/v1/nvidia/services" for route in backend_app.app.routes)
     assert services_payload["ok"] is True
     assert services_payload["services"]["audio2face"]["probe"]["url_seen"] == "http://audio2face.local:8011"
+    assert services_payload["services"]["triton"]["probe"]["url_seen"] == "http://triton.local:8000/v2/health/ready"
     assert audio2face_payload["service_id"] == "audio2face"
     assert audio2face_payload["service"]["configured"] is True
     assert audio2face_payload["service"]["generate_path"] == "/v1/a2f/jobs"
     assert triton_payload["service"]["model"] == "edmg_ensemble"
+    assert triton_payload["service"]["probe"]["url_seen"] == "http://triton.local:8000/v2/health/ready"
     assert services_payload["services"]["cosmos"]["infer_path"] == "/v1/infer"
     assert "service-secret-token" not in repr(services_payload)
     assert "service-secret-token" not in repr(audio2face_payload)

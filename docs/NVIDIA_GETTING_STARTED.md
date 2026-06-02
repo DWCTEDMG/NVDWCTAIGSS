@@ -180,7 +180,9 @@ EDMG_NIM_LLM_IMAGE=nvcr.io/nim/meta/llama-3.2-1b-instruct:latest
 EDMG_NIM_MAX_MODEL_LEN=8192
 EDMG_RIVA_IMAGE=nvcr.io/nvidia/riva/riva-speech:2.19.0
 EDMG_NEMO_IMAGE=nvcr.io/nvidia/nemo:26.04.01
-EDMG_TRITON_IMAGE=nvcr.io/nvidia/tritonserver:26.04-py3-min
+EDMG_TRITON_IMAGE=nvcr.io/nvidia/tritonserver:26.04-py3
+EDMG_TRITON_MODEL_REPOSITORY=./deployment/nvidia/triton-model-repository
+EDMG_NVIDIA_TRITON_MODEL=edmg_echo
 EDMG_AUDIO2FACE_IMAGE=nvcr.io/nim/nvidia/audio2face-3d:2.0
 EDMG_COSMOS_IMAGE=nvcr.io/nim/nvidia/cosmos-reason2-2b:latest
 EDMG_NVIDIA_AUDIO2FACE_GENERATE_PATH=/v1/a2f/jobs
@@ -191,6 +193,9 @@ EDMG_NVIDIA_COSMOS_INFER_PATH=/v1/infer
 You can narrow the stack with specific profiles such as `nim`, `riva`, `nemo`,
 `triton`, `audio2face`, `ace`, or `cosmos` once the image and model choices are
 known for your NGC account.
+The default Triton model repository contains `edmg_echo`, a small Python-backend
+smoke model that proves the `/v2/models/{model}/infer` path before production
+models are installed.
 
 The NeMo profile is different from NIM: it is a framework/workspace container
 for training, customization, and batch jobs. It does not replace the
@@ -224,7 +229,8 @@ From the desktop app:
   configured Audio2Face, ACE, Cosmos, Omniverse, NeMo, or NIM-style services
   through relative paths only.
 - `/v1/nvidia/triton/infer` posts a Triton v2 inference request to the
-  configured `EDMG_NVIDIA_TRITON_URL` and model.
+  configured `EDMG_NVIDIA_TRITON_URL` and model. With the default local
+  repository, use model `edmg_echo`.
 - `/v1/projects/{project_id}/nvidia/scene-plan/save` persists a supplied
   validated NVIDIA scene plan without calling the planner. The live GPU smoke
   uses this to seed clean runners when no project exists.
@@ -368,6 +374,11 @@ curl -X POST http://127.0.0.1:7863/v1/nvidia/triton/infer `
   -H "Content-Type: application/json" `
   -d '{"inputs":[{"name":"prompt","shape":[1],"datatype":"BYTES","data":["neon intro"]}]}'
 ```
+
+The default `edmg_echo` model returns an `echo` output containing the submitted
+string tensor. Set `EDMG_NVIDIA_TRITON_MODEL` and
+`EDMG_TRITON_MODEL_REPOSITORY` to your production model name and repository when
+you replace the smoke model.
 
 The Kit AI Director panel exposes the same typed bridge. Use service id
 `audio2face`, `ace`, `cosmos`, or `triton`, load or edit the JSON payload, then
