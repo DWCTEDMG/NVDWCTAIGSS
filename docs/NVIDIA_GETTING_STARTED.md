@@ -166,6 +166,33 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -CosmosInferPath "/v1/infer"
 ```
 
+Backend Riva ASR also requires the Riva Python client package. For the default
+Riva `2.19.0` image, install the matching backend extra:
+
+```powershell
+& C:\NVDWCTAIGSS\studio\edmg-studio\python_backend\.venv\Scripts\python.exe -m pip install -e "C:\NVDWCTAIGSS\studio\edmg-studio\python_backend[riva]"
+```
+
+The real local Riva service setup uses NVIDIA's Riva Quick Start scripts, not a
+bare `riva-speech` container. NVIDIA's 2.19 ASR Quick Start flow downloads
+`nvidia/riva/riva_quickstart:2.19.0`, edits `config.sh`, runs
+`bash riva_init.sh`, then runs `bash riva_start.sh`.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File C:\NVDWCTAIGSS\deployment\nvidia\prepare_nvidia_riva_quickstart.ps1
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File C:\NVDWCTAIGSS\deployment\nvidia\prepare_nvidia_riva_quickstart.ps1 `
+  -SkipDownload `
+  -RunInit
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File C:\NVDWCTAIGSS\deployment\nvidia\prepare_nvidia_riva_quickstart.ps1 `
+  -SkipDownload `
+  -RunStart
+```
+
 Start optional services one at a time on this workstation. The RTX 4050 laptop
 GPU has limited VRAM for running multiple official NVIDIA service containers
 beside the NIM planner and Kit RTX viewport. Add `-ConfigureOnly` to any command

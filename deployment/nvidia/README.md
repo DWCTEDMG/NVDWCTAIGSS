@@ -151,6 +151,21 @@ Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 environment has the NVIDIA Riva Python client installed and the Riva gRPC URI is
 reachable; otherwise the normal Studio analysis path keeps using the existing
 local ASR fallback.
+For the default local Riva `2.19.0` lane, install the backend Riva extra and
+prepare NVIDIA's Quick Start scripts before enabling ASR:
+
+```powershell
+& C:\NVDWCTAIGSS\studio\edmg-studio\python_backend\.venv\Scripts\python.exe -m pip install -e "C:\NVDWCTAIGSS\studio\edmg-studio\python_backend[riva]"
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File C:\NVDWCTAIGSS\deployment\nvidia\prepare_nvidia_riva_quickstart.ps1
+```
+
+After the scripts are downloaded/configured, run `riva_init.sh` and
+`riva_start.sh` through the same helper with `-SkipDownload -RunInit` and
+`-SkipDownload -RunStart`. NVIDIA documents the Riva 2.19 Quick Start flow as
+downloading `nvidia/riva/riva_quickstart:2.19.0`, editing `config.sh`, then
+running `bash riva_init.sh` and `bash riva_start.sh`.
 The RTX render-worker lane now has a project-scoped handoff route:
 `/v1/projects/{project_id}/nvidia/render-job`. It writes a JSON contract to
 `outputs/nvidia/render_jobs/`. The Kit `edmg.render_queue` panel now consumes
@@ -236,6 +251,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/test_docke
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_backend_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_runtime_local.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/start_nvidia_optional_service.ps1 -Service triton -ConfigureEnv
+powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/prepare_nvidia_riva_quickstart.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/stage_nvidia_kit_app.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_gpu_smoke.ps1
 ```

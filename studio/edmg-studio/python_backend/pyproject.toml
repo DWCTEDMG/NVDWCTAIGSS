@@ -33,6 +33,9 @@ audio = [
 asr = [
   "faster-whisper>=1.1.0",
 ]
+riva = [
+  "nvidia-riva-client==2.19.0",
+]
 core = [
   "numpy>=1.23.0",
   "scipy>=1.10.0",
@@ -67,6 +70,7 @@ full = [
   "soundfile>=0.12.0",
   "matplotlib>=3.9.0",
   "faster-whisper>=1.1.0",
+  "nvidia-riva-client==2.19.0",
   "diffusers>=0.30.0",
   "transformers>=4.42.0",
   "accelerate>=0.33.0",
@@ -88,6 +92,7 @@ studio_bundle = [
   "soundfile>=0.12.0",
   "matplotlib>=3.9.0",
   "faster-whisper>=1.1.0",
+  "nvidia-riva-client==2.19.0",
   "diffusers>=0.30.0",
   "transformers>=4.42.0",
   "accelerate>=0.33.0",
@@ -109,6 +114,7 @@ studio_bundle_directml = [
   "soundfile>=0.12.0",
   "matplotlib>=3.9.0",
   "faster-whisper>=1.1.0",
+  "nvidia-riva-client==2.19.0",
   "diffusers>=0.30.0",
   "transformers>=4.42.0",
   "accelerate>=0.33.0",
