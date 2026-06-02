@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 backend venv compatibility
+    import tomli as tomllib  # type: ignore[no-redef]
 from typing import Any
 
 
