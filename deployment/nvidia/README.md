@@ -169,6 +169,59 @@ After the scripts are downloaded/configured, run `riva_init.sh` and
 `-SkipDownload -RunStart`. NVIDIA documents the Riva 2.19 Quick Start flow as
 downloading `nvidia/riva/riva_quickstart:2.19.0`, editing `config.sh`, then
 running `bash riva_init.sh` and `bash riva_start.sh`.
+
+### Riva S3 model cache
+
+The local Riva model repository can be backed up to AWS S3 or an S3-compatible
+service such as Cloudflare R2, Wasabi, Backblaze B2, or MinIO. Keep this bucket
+private. Riva-generated TensorRT artifacts are hardware-specific, so only reuse
+the uploaded `models/` artifacts on machines with the same GPU class and Riva
+version.
+
+Configure the ignored env file:
+
+```powershell
+notepad deployment/nvidia/.env.local
+```
+
+Set at least:
+
+```text
+EDMG_RIVA_MODEL_REPOSITORY=D:\Nvidia\NVDWCTAIGSS\riva-models
+EDMG_RIVA_S3_BUCKET=your-private-bucket
+EDMG_RIVA_S3_PREFIX=nvdwctaigss/riva-models
+AWS_REGION=us-east-1
+```
+
+For S3-compatible providers, also set `EDMG_S3_ENDPOINT_URL` to the provider's
+endpoint. Use normal AWS credentials through environment variables,
+`AWS_PROFILE`, or files under `%USERPROFILE%\.aws`. The helper uses local
+`aws` when available, otherwise it runs the official AWS CLI container through
+Docker.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/sync_riva_models_s3.ps1 `
+  -Action Status
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/sync_riva_models_s3.ps1 `
+  -Action Upload `
+  -DryRun
+
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/sync_riva_models_s3.ps1 `
+  -Action Upload
+```
+
+To restore on another matching workstation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/sync_riva_models_s3.ps1 `
+  -Action Download
+```
+
 The RTX render-worker lane now has a project-scoped handoff route:
 `/v1/projects/{project_id}/nvidia/render-job`. It writes a JSON contract to
 `outputs/nvidia/render_jobs/`. The Kit `edmg.render_queue` panel now consumes
@@ -190,6 +243,10 @@ $env:EDMG_AI_OPENAI_COMPAT_BASE_URL="http://host.docker.internal:8001/v1"
 $env:EDMG_AI_OPENAI_COMPAT_MODEL="your-nim-model"
 $env:EDMG_NVIDIA_RIVA_URL="host.docker.internal:50051"
 $env:EDMG_NVIDIA_RIVA_ASR="0"
+$env:EDMG_RIVA_MODEL_REPOSITORY="D:\Nvidia\NVDWCTAIGSS\riva-models"
+$env:EDMG_RIVA_S3_BUCKET="your-private-bucket"
+$env:EDMG_RIVA_S3_PREFIX="nvdwctaigss/riva-models"
+$env:EDMG_S3_ENDPOINT_URL=""
 $env:EDMG_TRITON_IMAGE="nvcr.io/nvidia/tritonserver:26.04-py3"
 $env:EDMG_TRITON_MODEL_REPOSITORY="./deployment/nvidia/triton-model-repository"
 $env:EDMG_NVIDIA_TRITON_MODEL="edmg_shot_features"

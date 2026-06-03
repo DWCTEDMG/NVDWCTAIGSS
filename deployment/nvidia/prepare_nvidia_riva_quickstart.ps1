@@ -1,7 +1,7 @@
 param(
   [string]$Version = "2.19.0",
   [string]$DestRoot = "starlift-data/nvidia/riva-quickstart",
-  [string]$ModelRepository = "starlift-data/nvidia/riva-models",
+  [string]$ModelRepository = "D:/Nvidia/NVDWCTAIGSS/riva-models",
   [string]$EnvFile = "deployment/nvidia/.env.local",
   [string]$WslDistro = "Ubuntu",
   [switch]$SkipDownload,
@@ -105,9 +105,53 @@ function Write-DockerWrapper {
   $wrapperPath = Join-Path $wrapperDir "docker"
   $content = @(
     "#!/usr/bin/env bash",
-    'exec "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" "$@"'
+    "args=()",
+    'for arg in "$@"; do',
+    '  case "$arg" in',
+    '    -it|-ti|-i|-t|--tty|--interactive) ;;',
+    '    *) args+=("$arg") ;;',
+    '  esac',
+    "done",
+    'exec "/mnt/c/Program Files/Docker/Docker/resources/bin/docker.exe" "${args[@]}"'
   )
   [System.IO.File]::WriteAllText($wrapperPath, (($content -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
+}
+
+function Sync-RivaRmirFiles {
+  param([string]$ModelRepositoryPath)
+
+  $rmirRoot = Join-Path $ModelRepositoryPath "rmir"
+  if (-not (Test-Path -LiteralPath $rmirRoot)) {
+    return 0
+  }
+
+  $rootPath = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $rmirRoot).Path)
+  $rmirFiles = @(Get-ChildItem -LiteralPath $rootPath -Recurse -Filter "*.rmir" -File)
+  foreach ($file in $rmirFiles) {
+    $sourcePath = [System.IO.Path]::GetFullPath($file.FullName)
+    if (-not $sourcePath.StartsWith($rootPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "Refusing to copy RMIR outside model repository: $sourcePath"
+    }
+
+    $targetPath = [System.IO.Path]::GetFullPath((Join-Path $rootPath $file.Name))
+    if (-not $targetPath.StartsWith($rootPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "Refusing to copy RMIR outside model repository: $targetPath"
+    }
+    if ($sourcePath -ieq $targetPath) {
+      continue
+    }
+
+    if (Test-Path -LiteralPath $targetPath) {
+      $target = Get-Item -LiteralPath $targetPath
+      if ($target.Length -eq $file.Length) {
+        continue
+      }
+      throw "RMIR name collision with different size: $targetPath"
+    }
+    Copy-Item -LiteralPath $sourcePath -Destination $targetPath
+  }
+
+  return @(Get-ChildItem -LiteralPath $rootPath -Filter "*.rmir" -File).Count
 }
 
 function Invoke-WslBash {
@@ -197,12 +241,19 @@ if (-not (Test-Path -LiteralPath $configPath)) {
 }
 
 $wslModelRepo = ConvertTo-WslPath $modelRepoPath
+$existingRmirCount = Sync-RivaRmirFiles -ModelRepositoryPath $modelRepoPath
 Write-Step "Configuring ASR-only Riva quickstart: $configPath"
 Set-ShAssignment -Path $configPath -Name "service_enabled_asr" -Value "true"
 Set-ShAssignment -Path $configPath -Name "service_enabled_nlp" -Value "false"
 Set-ShAssignment -Path $configPath -Name "service_enabled_tts" -Value "false"
 Set-ShAssignment -Path $configPath -Name "service_enabled_nmt" -Value "false"
 Set-ShAssignment -Path $configPath -Name "riva_model_loc" -Value $wslModelRepo -Quoted
+if ($existingRmirCount -gt 0) {
+  Set-ShAssignment -Path $configPath -Name "use_existing_rmirs" -Value "true"
+  Write-Step "Found $existingRmirCount local RMIR file(s); Riva init will skip NGC model downloads."
+} else {
+  Set-ShAssignment -Path $configPath -Name "use_existing_rmirs" -Value "false"
+}
 
 $wslQuickstart = ConvertTo-WslPath $quickstart.FullName
 Write-DockerWrapper -QuickstartPath $quickstart.FullName
