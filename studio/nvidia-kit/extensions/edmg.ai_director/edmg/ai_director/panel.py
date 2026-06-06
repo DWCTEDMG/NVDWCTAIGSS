@@ -29,6 +29,13 @@ class NvidiaServicesSummary:
     status_text: str
 
 
+@dataclass(frozen=True)
+class ProjectWorkflowSummary:
+    project_id: str
+    name: str
+    status_text: str
+
+
 OPTIONAL_SERVICE_IDS = ("audio2face", "ace", "cosmos", "triton")
 
 DEFAULT_OPTIONAL_SERVICE_PAYLOADS: dict[str, dict[str, Any]] = {
@@ -195,6 +202,104 @@ def build_generation_payload(
     if notes_text:
         payload["user_notes"] = notes_text
     return payload
+
+
+def build_render_job_payload(*, fps: Any, width: Any, height: Any) -> dict[str, int]:
+    return {
+        "fps": max(1, min(240, _int_or_default(fps, 24))),
+        "width": max(1, min(16384, _int_or_default(width, 1920))),
+        "height": max(1, min(16384, _int_or_default(height, 1080))),
+    }
+
+
+def _project_object(response: dict[str, Any]) -> dict[str, Any]:
+    project = response.get("project") if isinstance(response.get("project"), dict) else response
+    return project if isinstance(project, dict) else {}
+
+
+def project_id_from_response(response: dict[str, Any]) -> str:
+    project = _project_object(response)
+    return str(response.get("project_id") or project.get("id") or project.get("project_id") or "").strip()
+
+
+def summarize_project_response(response: dict[str, Any]) -> ProjectWorkflowSummary:
+    project = _project_object(response)
+    project_id = project_id_from_response(response)
+    name = str(project.get("name") or project.get("title") or response.get("name") or "").strip()
+    label = name or project_id or "project"
+    status = f"Project ready: {label}"
+    if project_id:
+        status = f"{status} ({project_id})"
+    return ProjectWorkflowSummary(project_id=project_id, name=name, status_text=status)
+
+
+def summarize_audio_upload_response(response: dict[str, Any]) -> str:
+    path = str(response.get("path") or "").strip()
+    if path:
+        return f"Audio uploaded: {Path(path).name}"
+    return "Audio uploaded."
+
+
+def summarize_analysis_response(response: dict[str, Any]) -> str:
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    features = analysis.get("features") if isinstance(analysis.get("features"), dict) else {}
+    duration = _float_or_none(analysis.get("duration_s") or features.get("duration_s") or features.get("duration"))
+    bpm = _float_or_none(analysis.get("bpm") or features.get("bpm") or features.get("tempo_bpm"))
+    transcript = analysis.get("transcript") if isinstance(analysis.get("transcript"), dict) else {}
+    transcript_text = str(transcript.get("text") or "").strip()
+    transcript_error = str(transcript.get("error") or "").strip()
+    parts = ["Audio analysis ready"]
+    if duration is not None:
+        parts.append(f"{duration:g}s")
+    if bpm is not None:
+        parts.append(f"{bpm:g} BPM")
+    if transcript_text:
+        parts.append("transcript text available")
+    elif transcript_error:
+        parts.append(transcript_error)
+    return f"{parts[0]}: {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+
+
+def summarize_riva_transcript_response(response: dict[str, Any]) -> str:
+    transcript = response.get("transcript") if isinstance(response.get("transcript"), dict) else {}
+    text = str(transcript.get("text") or "").strip()
+    segments = transcript.get("segments") if isinstance(transcript.get("segments"), list) else []
+    segment_count = len(segments)
+    if text and segment_count:
+        return f"Riva transcript ready: {segment_count} segments"
+    if text:
+        return "Riva transcript ready: text available"
+    if segment_count:
+        return f"Riva transcript ready: {segment_count} segments"
+    return "Riva transcript finished."
+
+
+def summarize_nvidia_diagnostics_response(response: dict[str, Any]) -> str:
+    nvidia = response.get("nvidia") if isinstance(response.get("nvidia"), dict) else {}
+    readiness = nvidia.get("readiness") if isinstance(nvidia.get("readiness"), dict) else {}
+    level = str(readiness.get("level") or "unknown").strip()
+    summary = str(readiness.get("summary") or "").strip()
+    gpu = str(nvidia.get("gpu") or nvidia.get("gpu_name") or "").strip()
+    gpu_text = f", {gpu}" if gpu else ""
+    summary_text = f": {summary}" if summary else ""
+    return f"NVIDIA readiness {level}{gpu_text}{summary_text}"
+
+
+def summarize_render_job_response(response: dict[str, Any]) -> str:
+    export = response.get("export") if isinstance(response.get("export"), dict) else {}
+    job = response.get("job") if isinstance(response.get("job"), dict) else {}
+    renderer = job.get("renderer") if isinstance(job.get("renderer"), dict) else {}
+    resolution = renderer.get("resolution") if isinstance(renderer.get("resolution"), dict) else {}
+    path = str(export.get("path") or "").strip()
+    fps = export.get("fps") or renderer.get("fps")
+    width = resolution.get("width")
+    height = resolution.get("height")
+    parts = ["RTX render job queued"]
+    if path:
+        parts.append(path)
+    if fps and width and height:
+        parts.append(f"{width}x{height}@{fps}fps")
+    return f"{parts[0]}: {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
 
 
 def extract_usda_text(response: dict[str, Any]) -> str:

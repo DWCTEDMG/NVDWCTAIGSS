@@ -39,7 +39,7 @@ class RenderJobRecord:
 
 
 class RenderQueueBackendClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout_s: float = 10.0) -> None:
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout_s: float = 30.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
 
@@ -58,6 +58,8 @@ class RenderQueueBackendClient:
             raise RenderQueueBackendError(f"{method} {path} failed with HTTP {exc.code}: {detail}") from exc
         except error.URLError as exc:
             raise RenderQueueBackendError(f"{method} {path} failed: {exc.reason}") from exc
+        except TimeoutError as exc:
+            raise RenderQueueBackendError(f"{method} {path} timed out after {self.timeout_s:g}s") from exc
         try:
             payload = json.loads(raw)
         except json.JSONDecodeError as exc:

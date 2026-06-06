@@ -89,6 +89,10 @@ class _Handler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if parsed.path.startswith("/v1/projects/") and parsed.path.count("/") == 3:
+            project_id = unquote(parsed.path.split("/")[3])
+            self._send_json({"project": {"id": project_id, "name": "Loaded Project", "meta": {}}})
+            return
         if parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan"):
             project_id = unquote(parsed.path.split("/")[3])
             self._send_json(
@@ -117,17 +121,87 @@ class _Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         is_project_generate = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan")
         is_project_export = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/scene-plan/export")
+        is_project_create = parsed.path == "/v1/projects"
+        is_audio_upload = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/assets/audio")
+        is_audio_analysis = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/analyze_audio")
+        is_riva_transcribe = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/riva/transcribe")
+        is_render_job = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/render-job")
         typed_service = parsed.path in {
             "/v1/nvidia/audio2face/generate",
             "/v1/nvidia/ace/generate",
             "/v1/nvidia/cosmos/infer",
             "/v1/nvidia/triton/infer",
         }
-        if self.path not in {"/v1/usd/scene-plan", "/v1/nvidia/scene-plan"} and not is_project_generate and not is_project_export and not typed_service:
+        if (
+            self.path not in {"/v1/usd/scene-plan", "/v1/nvidia/scene-plan"}
+            and not is_project_create
+            and not is_audio_upload
+            and not is_audio_analysis
+            and not is_riva_transcribe
+            and not is_project_generate
+            and not is_project_export
+            and not is_render_job
+            and not typed_service
+        ):
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length") or "0")
-        payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        raw_body = self.rfile.read(length)
+        payload = {} if is_audio_upload else json.loads(raw_body.decode("utf-8") or "{}")
+        if is_project_create:
+            self._send_json({"project": {"id": "created-project", "name": payload.get("name"), "meta": {}}})
+            return
+        if is_audio_upload:
+            project_id = unquote(parsed.path.split("/")[3])
+            content_type = self.headers.get("Content-Type") or ""
+            self._send_json(
+                {
+                    "ok": "multipart/form-data" in content_type and b'filename="' in raw_body,
+                    "project_id": project_id,
+                    "path": f"C:/tmp/{project_id}/assets/audio/uploaded.wav",
+                }
+            )
+            return
+        if is_audio_analysis:
+            project_id = unquote(parsed.path.split("/")[3])
+            self._send_json(
+                {
+                    "ok": True,
+                    "project_id": project_id,
+                    "analysis": {
+                        "duration_s": 12.5,
+                        "features": {"tempo_bpm": 128},
+                        "transcript": {"text": "hush now"},
+                    },
+                }
+            )
+            return
+        if is_riva_transcribe:
+            project_id = unquote(parsed.path.split("/")[3])
+            self._send_json(
+                {
+                    "ok": True,
+                    "project_id": project_id,
+                    "transcript": {"text": "hush now", "segments": [{"text": "hush", "start": 0, "end": 1}]},
+                }
+            )
+            return
+        if is_render_job:
+            project_id = unquote(parsed.path.split("/")[3])
+            self._send_json(
+                {
+                    "ok": True,
+                    "project_id": project_id,
+                    "job": {
+                        "renderer": {
+                            "fps": payload.get("fps"),
+                            "resolution": {"width": payload.get("width"), "height": payload.get("height")},
+                        }
+                    },
+                    "export": {"path": "outputs/nvidia/render_jobs/job.json"},
+                }
+            )
+            return
         if typed_service:
             service_id = {
                 "/v1/nvidia/audio2face/generate": "audio2face",
@@ -307,6 +381,46 @@ def test_kit_backend_client_reads_and_generates_project_scene_plan():
     finally:
         server.shutdown()
         thread.join(timeout=5)
+
+
+def test_kit_backend_client_supports_guided_studio_workflow(tmp_path, monkeypatch):
+    module = _load_client_module()
+    audio_path = tmp_path / "uploaded.wav"
+    audio_path.write_bytes(b"RIFFfake")
+    monkeypatch.setenv("EDMG_KIT_AUDIO_SEARCH_DIRS", str(tmp_path))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        client = module.EdmgBackendClient(base_url=base_url)
+
+        created = client.create_project("Created Project")
+        loaded = client.project("created-project")
+        uploaded = client.upload_project_audio("created-project", audio_path.name)
+        analysis = client.analyze_project_audio("created-project")
+        transcript = client.transcribe_project_audio_riva("created-project")
+        render_job = client.create_project_render_job("created-project", {"fps": 24, "width": 1920, "height": 1080})
+
+        assert created["project"]["id"] == "created-project"
+        assert loaded["project"]["name"] == "Loaded Project"
+        assert uploaded["ok"] is True
+        assert uploaded["path"].endswith("uploaded.wav")
+        assert analysis["analysis"]["features"]["tempo_bpm"] == 128
+        assert transcript["transcript"]["segments"][0]["text"] == "hush"
+        assert render_job["job"]["renderer"]["resolution"]["width"] == 1920
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
+def test_kit_backend_client_resolves_filename_only_audio_path(tmp_path, monkeypatch):
+    module = _load_client_module()
+    audio_path = tmp_path / "song.wav"
+    audio_path.write_bytes(b"RIFFfake")
+    monkeypatch.setenv("EDMG_KIT_AUDIO_SEARCH_DIRS", str(tmp_path))
+
+    assert module.resolve_audio_upload_path("song.wav") == audio_path
 
 
 def test_kit_backend_smoke_script_writes_optional_usda(tmp_path):

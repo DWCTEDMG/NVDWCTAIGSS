@@ -28,6 +28,11 @@ try:
 except Exception:  # pragma: no cover - optional integration
     AzureModelCache = None  # type: ignore
 
+try:
+    from ..integrations.aws import S3ModelCache
+except Exception:  # pragma: no cover - optional integration
+    S3ModelCache = None  # type: ignore
+
 
 # ------------------------------ persistence ------------------------------
 
@@ -266,12 +271,21 @@ class ModelManager:
         self._lock = threading.Lock()
 
     def _build_model_cache(self):
-        if AzureModelCache is None:
-            return None
-        try:
-            return AzureModelCache.from_env()
-        except Exception:
-            return None
+        for cache_type in (S3ModelCache, AzureModelCache):
+            if cache_type is None:
+                continue
+            try:
+                cache = cache_type.from_env()
+            except Exception:
+                continue
+            if cache is not None:
+                return cache
+        return None
+
+    def _model_cache_label(self) -> str:
+        cache = getattr(self, "model_cache", None)
+        label = getattr(cache, "label", "")
+        return str(label or "model cache")
 
     def _all_entries(self) -> list[dict[str, Any]]:
         cat = self.catalog()
@@ -831,10 +845,10 @@ class ModelManager:
             if not cache.download_model(entry, dest):
                 return False
         except Exception as exc:
-            self._append_task_log(task, f"Azure model cache restore skipped: {exc}")
+            self._append_task_log(task, f"{self._model_cache_label()} restore skipped: {exc}")
             return False
         ModelTaskManager.set_progress(task, 1.0)
-        ModelTaskManager.log(task, f"Restored from Azure model cache: {dest.name}")
+        ModelTaskManager.log(task, f"Restored from {self._model_cache_label()}: {dest.name}")
         return True
 
     def _upload_to_model_cache(self, task: ModelTask, entry: dict[str, Any], path: Path) -> None:
@@ -844,9 +858,9 @@ class ModelManager:
         try:
             blob_name = cache.upload_model(entry, path)
         except Exception as exc:
-            self._append_task_log(task, f"Azure model cache upload skipped: {exc}")
+            self._append_task_log(task, f"{self._model_cache_label()} upload skipped: {exc}")
             return
-        self._append_task_log(task, f"Azure model cache: {blob_name}")
+        self._append_task_log(task, f"{self._model_cache_label()}: {blob_name}")
 
     def _install_file_model(self, task: ModelTask, entry: dict[str, Any]) -> None:
         src = (entry.get("source") or "").lower()

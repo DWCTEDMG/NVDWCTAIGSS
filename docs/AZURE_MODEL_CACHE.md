@@ -64,6 +64,8 @@ If the backend cannot use Azure CLI/AAD auth, use a storage connection string in
 $env:AZURE_STORAGE_CONNECTION_STRING='DefaultEndpointsProtocol=...'
 ```
 
+When both AWS S3 and Azure Blob model caches are enabled, Studio uses the AWS S3 cache first.
+
 ## Use With Stability 3.5
 
 In Studio:

@@ -25,6 +25,9 @@ class _FakeAsrResponse:
 
 
 class _FakeRivaClient:
+    class AudioEncoding:
+        LINEAR_PCM = 1
+
     class Auth:
         def __init__(self, *, uri: str, use_ssl: bool = False) -> None:
             self.uri = uri
@@ -35,6 +38,8 @@ class _FakeRivaClient:
             self.language_code = ""
             self.max_alternatives = 0
             self.enable_automatic_punctuation = False
+            self.encoding = 0
+            self.sample_rate_hertz = 0
             self.audio_channel_count = 0
             self.model = ""
 
@@ -47,6 +52,9 @@ class _FakeRivaClient:
             assert self.auth.uri == "riva.local:50051"
             assert config.language_code == "en-US"
             assert config.max_alternatives == 1
+            assert config.encoding == _FakeRivaClient.AudioEncoding.LINEAR_PCM
+            assert config.sample_rate_hertz == 16000
+            assert config.audio_channel_count == 1
             return _FakeAsrResponse()
 
 
@@ -55,6 +63,7 @@ def test_nvidia_riva_status_and_transcribe(monkeypatch, tmp_path):
     monkeypatch.setenv("EDMG_NVIDIA_RIVA_ASR", "1")
     monkeypatch.setenv("EDMG_NVIDIA_RIVA_MODEL", "parakeet")
     monkeypatch.setattr(nvidia_riva, "_load_riva_client", lambda: _FakeRivaClient)
+    monkeypatch.setattr(nvidia_riva, "_prepare_audio_for_riva", lambda _path: (b"fake-wav", 16000, 1, "test-pcm"))
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"fake-wav")
 
@@ -67,6 +76,8 @@ def test_nvidia_riva_status_and_transcribe(monkeypatch, tmp_path):
     assert transcript["source"] == "nvidia_riva"
     assert transcript["text"] == "Riva heard the neon chorus."
     assert transcript["segment_count"] == 1
+    assert transcript["audio"]["encoding"] == "LINEAR_PCM"
+    assert transcript["audio"]["sample_rate_hertz"] == 16000
 
 
 def test_local_ai_director_prefers_enabled_riva(monkeypatch, tmp_path):

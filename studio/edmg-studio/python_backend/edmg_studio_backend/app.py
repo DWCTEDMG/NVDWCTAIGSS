@@ -9523,8 +9523,15 @@ def get_file(project_id: str, path: str):
 @app.post("/v1/cloud/aws/test")
 def cloud_aws_test(req: CloudAwsTestRequest):
     try:
-        res = aws_integration.test_credentials(bucket=req.bucket)
-        return {"ok": res.ok, "account": res.account, "region": res.region}
+        res = aws_integration.test_credentials(bucket=req.bucket, prefix=req.prefix)
+        return {
+            "ok": res.ok,
+            "provider": "aws",
+            "account": res.account,
+            "region": res.region,
+            "bucket": req.bucket,
+            "prefix": req.prefix or "models",
+        }
     except Exception as e:
         raise HTTPException(status_code=501, detail=str(e))
 

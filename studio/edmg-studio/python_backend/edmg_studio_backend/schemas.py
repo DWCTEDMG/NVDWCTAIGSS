@@ -247,6 +247,7 @@ class BuildUnrealImportPlanRequest(BaseModel):
 
 class CloudAwsTestRequest(BaseModel):
     bucket: str | None = None
+    prefix: str | None = None
 
 class CloudAwsBundleRequest(BaseModel):
     bucket: str | None = None

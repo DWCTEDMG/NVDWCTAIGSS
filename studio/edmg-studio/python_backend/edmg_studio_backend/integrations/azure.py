@@ -78,6 +78,8 @@ def _blob_service_client(settings: AzureBlobSettings):
 
 
 class AzureModelCache:
+    label = "Azure model cache"
+
     def __init__(self, settings: AzureBlobSettings):
         self.settings = settings
         self._client = _blob_service_client(settings)

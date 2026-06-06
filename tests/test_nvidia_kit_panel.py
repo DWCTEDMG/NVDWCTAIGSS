@@ -53,6 +53,40 @@ def test_kit_panel_builds_project_generation_payload():
     }
 
 
+def test_kit_panel_builds_workflow_summaries():
+    panel = _import_ai_director_module("panel")
+
+    project_summary = panel.summarize_project_response(
+        {"project": {"id": "project-one", "name": "Project One", "meta": {}}}
+    )
+    analysis_summary = panel.summarize_analysis_response(
+        {
+            "analysis": {
+                "duration_s": 91.25,
+                "features": {"tempo_bpm": 123.5},
+                "transcript": {"text": "Hush now"},
+            }
+        }
+    )
+    render_payload = panel.build_render_job_payload(fps="999", width="3840", height="2160")
+    render_summary = panel.summarize_render_job_response(
+        {
+            "job": {
+                "renderer": {"fps": 24, "resolution": {"width": 1920, "height": 1080}},
+            },
+            "export": {"path": "outputs/nvidia/render_jobs/job.json"},
+        }
+    )
+
+    assert project_summary.project_id == "project-one"
+    assert "Project One" in project_summary.status_text
+    assert "91.25s" in analysis_summary
+    assert "123.5 BPM" in analysis_summary
+    assert "transcript text available" in analysis_summary
+    assert render_payload == {"fps": 240, "width": 3840, "height": 2160}
+    assert "outputs/nvidia/render_jobs/job.json" in render_summary
+
+
 def test_kit_panel_summarizes_and_writes_usda_preview(tmp_path):
     panel = _import_ai_director_module("panel")
     response = {
@@ -197,6 +231,99 @@ def test_kit_ai_director_invokes_typed_service_from_json():
 
     assert backend.calls == [("cosmos", {"prompt": "stage world"})]
     assert "cosmos ok, HTTP 200" in ext._service_label.text
+
+
+def test_kit_ai_director_runs_guided_project_audio_render_flow():
+    extension = _import_ai_director_module("extension")
+
+    class FakeModel:
+        def __init__(self, value: str = "") -> None:
+            self.value = value
+            self.text = value
+
+        def get_value_as_string(self) -> str:
+            return self.value
+
+        def set_value(self, value: str) -> None:
+            self.value = value
+
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def create_project(self, name: str) -> dict:
+            self.calls.append(("create_project", name))
+            return {"project": {"id": "project-one", "name": name, "meta": {}}}
+
+        def projects(self) -> dict:
+            return {"projects": [{"id": "project-one", "name": "Project One"}]}
+
+        def project(self, project_id: str) -> dict:
+            self.calls.append(("project", project_id))
+            return {
+                "project": {
+                    "id": project_id,
+                    "name": "Project One",
+                    "meta": {"audio": {"filename": "song.wav"}, "analysis": {"duration_s": 12, "features": {"bpm": 128}}},
+                }
+            }
+
+        def upload_project_audio(self, project_id: str, audio_path: str) -> dict:
+            self.calls.append(("upload_audio", project_id, audio_path))
+            return {"ok": True, "path": audio_path}
+
+        def analyze_project_audio(self, project_id: str) -> dict:
+            self.calls.append(("analyze_audio", project_id))
+            return {"ok": True, "analysis": {"duration_s": 14, "features": {"tempo_bpm": 130}, "transcript": {"text": "hi"}}}
+
+        def transcribe_project_audio_riva(self, project_id: str, payload: dict) -> dict:
+            self.calls.append(("riva", project_id, payload))
+            return {"ok": True, "transcript": {"text": "hi", "segments": [{"text": "hi"}]}}
+
+        def export_project_scene_plan(self, project_id: str) -> dict:
+            self.calls.append(("export", project_id))
+            return {"ok": True, "project_id": project_id, "export": {"path": "outputs/nvidia/project.usda", "scene_count": 2}}
+
+        def create_project_render_job(self, project_id: str, payload: dict) -> dict:
+            self.calls.append(("render_job", project_id, payload))
+            return {
+                "ok": True,
+                "job": {"renderer": {"fps": 24, "resolution": {"width": 1920, "height": 1080}}},
+                "export": {"path": "outputs/nvidia/render_jobs/job.json"},
+            }
+
+    backend = FakeBackend()
+    ext = extension.EdmgAiDirectorExtension()
+    ext._backend = backend
+    ext._project_name_model = FakeModel("Project One")
+    ext._project_model = FakeModel("")
+    ext._audio_path_model = FakeModel(r"D:\song.wav")
+    ext._title_model = FakeModel("Project One")
+    ext._duration_model = FakeModel("60")
+    ext._bpm_model = FakeModel("")
+    ext._render_fps_model = FakeModel("24")
+    ext._render_width_model = FakeModel("1920")
+    ext._render_height_model = FakeModel("1080")
+    ext._status_label = FakeModel()
+    ext._project_label = FakeModel()
+    ext._audio_label = FakeModel()
+    ext._analysis_label = FakeModel()
+    ext._summary_label = FakeModel()
+    ext._render_label = FakeModel()
+
+    ext._create_project()
+    ext._upload_audio()
+    ext._analyze_audio()
+    ext._transcribe_audio_with_riva()
+    ext._queue_render_job()
+
+    assert ext._project_model.value == "project-one"
+    assert "Audio uploaded" in ext._audio_label.text
+    assert ext._duration_model.value == "14"
+    assert ext._bpm_model.value == "130"
+    assert "Riva transcript ready" in ext._analysis_label.text
+    assert "outputs/nvidia/render_jobs/job.json" in ext._render_label.text
+    assert ("render_job", "project-one", {"fps": 24, "width": 1920, "height": 1080}) in backend.calls
 
 
 def test_kit_ai_director_extension_starts_headless_with_fake_backend(monkeypatch):

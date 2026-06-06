@@ -211,6 +211,21 @@ def test_render_queue_assembles_mp4_with_ffmpeg_concat(tmp_path, monkeypatch):
     assert concat_text.count("file '") == 2
 
 
+def test_render_queue_capture_plan_samples_scene_motion():
+    worker = _import_extension_module("edmg.render_queue", "render_queue", "worker")
+    timeline = [
+        {"id": "scene-1", "start_frame": 0, "end_frame": 96},
+        {"id": "scene-2", "start_s": 4, "end_s": 6},
+    ]
+
+    capture_plan = worker._timeline_capture_plan(timeline, 24, 4)
+
+    assert [item["frame"] for item in capture_plan[:4]] == [0, 24, 48, 72]
+    assert [item["frame"] for item in capture_plan[4:]] == [96, 108, 120, 132]
+    assert round(sum(item["duration_s"] for item in capture_plan), 6) == 6.0
+    assert capture_plan[0]["sample_count"] == 4
+
+
 def test_render_queue_extension_starts_headless_with_fake_backend(monkeypatch):
     extension = _import_extension_module("edmg.render_queue", "render_queue", "extension")
 

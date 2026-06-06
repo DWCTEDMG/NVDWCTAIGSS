@@ -78,7 +78,87 @@ def _scene_duration_seconds(scene: dict[str, Any], fps: int) -> float:
     return 1.0
 
 
-def _scene_output_path(record: RenderJobRecord, scene: dict[str, Any], index: int) -> Path:
+def _scene_frame_bounds(scene: dict[str, Any], fps: int) -> tuple[int, int]:
+    start_frame = _float_value(scene.get("start_frame"))
+    end_frame = _float_value(scene.get("end_frame"))
+    if start_frame is not None and end_frame is not None and end_frame > start_frame:
+        return max(0, int(round(start_frame))), max(1, int(round(end_frame)))
+
+    start_s = _float_value(scene.get("start_s"))
+    end_s = _float_value(scene.get("end_s"))
+    if start_s is not None and end_s is not None and end_s > start_s:
+        return max(0, int(round(start_s * fps))), max(1, int(round(end_s * fps)))
+
+    try:
+        start = max(0, int(scene.get("start_frame") or 0))
+    except Exception:
+        start = 0
+    duration_frames = max(1, int(round(_scene_duration_seconds(scene, fps) * float(max(1, fps)))))
+    return start, start + duration_frames
+
+
+def _render_samples_per_scene(scene_count: int) -> int:
+    raw = (
+        _kit_setting_string("/edmg/nvidia/render_samples_per_scene")
+        or _kit_setting_string("/edmg/nvidia/render_worker_samples_per_scene")
+        or os.environ.get("EDMG_NVIDIA_RENDER_SAMPLES_PER_SCENE", "")
+    )
+    try:
+        requested = int(float(raw))
+    except Exception:
+        requested = 4
+    requested = max(1, min(8, requested))
+    if scene_count <= 0:
+        return requested
+    return max(1, min(requested, max(1, 96 // max(1, scene_count))))
+
+
+def _timeline_capture_plan(
+    timeline: list[dict[str, Any]],
+    fps: int,
+    samples_per_scene: int,
+) -> list[dict[str, Any]]:
+    capture_plan: list[dict[str, Any]] = []
+    for scene_index, scene in enumerate(timeline, start=1):
+        start_frame, end_frame = _scene_frame_bounds(scene, fps)
+        end_frame = max(start_frame + 1, end_frame)
+        max_unique_frames = max(1, end_frame - start_frame)
+        scene_samples = max(1, min(samples_per_scene, max_unique_frames))
+        frames: list[int] = []
+        for sample_index in range(scene_samples):
+            if scene_samples == 1:
+                frame = start_frame
+            else:
+                frame = int(round(start_frame + ((end_frame - start_frame) * sample_index / float(scene_samples))))
+            frame = min(max(start_frame, frame), end_frame - 1)
+            if frames and frame <= frames[-1]:
+                frame = min(end_frame - 1, frames[-1] + 1)
+            if frame not in frames:
+                frames.append(frame)
+        for sample_index, frame in enumerate(frames, start=1):
+            next_frame = frames[sample_index] if sample_index < len(frames) else end_frame
+            duration_s = max(1.0 / float(max(1, fps)), (next_frame - frame) / float(max(1, fps)))
+            capture_plan.append(
+                {
+                    "scene": scene,
+                    "scene_index": scene_index,
+                    "sample_index": sample_index,
+                    "sample_count": len(frames),
+                    "frame": frame,
+                    "duration_s": duration_s,
+                }
+            )
+    return capture_plan
+
+
+def _scene_output_path(
+    record: RenderJobRecord,
+    scene: dict[str, Any],
+    index: int,
+    *,
+    frame_override: int | None = None,
+    sample_index: int | None = None,
+) -> Path:
     output = scene.get("output") if isinstance(scene.get("output"), dict) else {}
     sequence_dir = str(output.get("sequence_dir") or "").strip()
     if sequence_dir:
@@ -89,12 +169,16 @@ def _scene_output_path(record: RenderJobRecord, scene: dict[str, Any], index: in
             out_dir = (record.project_root / sequence_dir).resolve()
     else:
         out_dir = record.still_path.parent
-    try:
-        frame = int(scene.get("start_frame") or 0)
-    except Exception:
-        frame = 0
+    if frame_override is None:
+        try:
+            frame = int(scene.get("start_frame") or 0)
+        except Exception:
+            frame = 0
+    else:
+        frame = max(0, int(frame_override))
     safe_id = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in str(scene.get("id") or f"scene_{index}"))
-    return out_dir / f"{index:03d}_{safe_id}_{frame:06d}.png"
+    sample_suffix = f"_{sample_index:02d}" if sample_index is not None else ""
+    return out_dir / f"{index:03d}_{safe_id}{sample_suffix}_{frame:06d}.png"
 
 
 def _resolve_project_output_path(record: RenderJobRecord, value: object) -> Path | None:
@@ -192,10 +276,15 @@ def _assemble_movie_from_frames(
     timeline: list[dict[str, Any]],
     frames: list[Path],
     fps: int,
+    durations_override: list[float] | None = None,
 ) -> tuple[Path, Path]:
     movie_path = _movie_output_path(record, timeline)
     movie_path.parent.mkdir(parents=True, exist_ok=True)
-    durations = [_scene_duration_seconds(scene, fps) for scene in timeline[: len(frames)]]
+    durations = (
+        list(durations_override)
+        if durations_override is not None
+        else [_scene_duration_seconds(scene, fps) for scene in timeline[: len(frames)]]
+    )
     concat_path = _write_movie_concat_manifest(movie_path, frames, durations)
     ffmpeg = _ffmpeg_executable()
     cmd = [
@@ -369,19 +458,27 @@ async def execute_rtx_render_job(record: RenderJobRecord) -> dict[str, Any]:
 
     frames: list[str] = []
     frame_paths: list[Path] = []
+    frame_durations: list[float] = []
     start = time.monotonic()
     timeline = _timeline_scenes(record.payload)
-    for index, scene in enumerate(timeline, start=1):
-        try:
-            frame = max(0, int(scene.get("start_frame") or 0))
-        except Exception:
-            frame = 0
+    samples_per_scene = _render_samples_per_scene(len(timeline))
+    capture_plan = _timeline_capture_plan(timeline, fps, samples_per_scene)
+    print(
+        f"[edmg.render_queue] capture plan: {len(capture_plan)} frame(s), "
+        f"{samples_per_scene} sample(s) per scene target"
+    )
+    for item in capture_plan:
+        scene = item["scene"]
+        index = int(item["scene_index"])
+        frame = int(item["frame"])
+        sample_index = int(item["sample_index"])
         _set_timeline_frame(frame, fps)
         await _wait_for_viewport_frames(viewport, n_frames=2)
-        out_path = _scene_output_path(record, scene, index)
-        print(f"[edmg.render_queue] capturing frame {frame} to {out_path}")
+        out_path = _scene_output_path(record, scene, index, frame_override=frame, sample_index=sample_index)
+        print(f"[edmg.render_queue] capturing scene {index} sample {sample_index} frame {frame} to {out_path}")
         await _capture_viewport_frame(viewport, out_path)
         frame_paths.append(out_path)
+        frame_durations.append(float(item["duration_s"]))
         frames.append(_project_relpath(record, out_path))
 
     movie = ""
@@ -389,7 +486,13 @@ async def execute_rtx_render_job(record: RenderJobRecord) -> dict[str, Any]:
     renderer = record.payload.get("renderer") if isinstance(record.payload.get("renderer"), dict) else {}
     if str(renderer.get("output_format") or "").lower() == "mp4":
         print(f"[edmg.render_queue] assembling MP4 from {len(frame_paths)} captured frame(s)")
-        movie_path, concat_path = _assemble_movie_from_frames(record, timeline, frame_paths, fps)
+        movie_path, concat_path = _assemble_movie_from_frames(
+            record,
+            timeline,
+            frame_paths,
+            fps,
+            durations_override=frame_durations,
+        )
         movie = _project_relpath(record, movie_path)
         movie_concat = _project_relpath(record, concat_path)
 
@@ -400,5 +503,7 @@ async def execute_rtx_render_job(record: RenderJobRecord) -> dict[str, Any]:
         "movie_concat": movie_concat,
         "stage": record.stage_path.relative_to(record.project_root).as_posix(),
         "rendered_frame_count": len(frames),
+        "rendered_scene_count": len(timeline),
+        "render_samples_per_scene": samples_per_scene,
         "elapsed_s": round(time.monotonic() - start, 3),
     }

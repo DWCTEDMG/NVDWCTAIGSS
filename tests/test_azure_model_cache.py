@@ -6,6 +6,8 @@ from edmg_studio_backend.services.model_manager import ModelManager, ModelTask
 
 
 class FakeModelCache:
+    label = "Azure model cache"
+
     def __init__(self, *, hit: bool):
         self.hit = hit
         self.downloaded: list[tuple[str, Path]] = []

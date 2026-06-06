@@ -264,7 +264,7 @@ def test_nvidia_usd_scene_plan_route_returns_normalized_metadata(monkeypatch):
     assert response["scene_plan"]["bpm"] == 128.0
     assert response["usd_metadata"]["edmg:projectId"] == "sample"
     assert response["usd_metadata"]["edmg:sceneCount"] == 1
-    assert response["usd_metadata"]["edmg:usdGeneration"] == "production-shot-graph-v1"
+    assert response["usd_metadata"]["edmg:usdGeneration"] == "production-immersive-plate-stage-v3"
     assert response["usd_stage"]["format"] == "usda"
     assert 'def Scope "Production"' in response["usd_stage"]["text"]
     assert 'def Scope "ShotGraph"' in response["usd_stage"]["text"]
@@ -349,7 +349,7 @@ def test_nvidia_generate_scene_plan_route_calls_planner_and_returns_usda(monkeyp
     assert payload["scene_plan"]["project_id"] == "generated-stage"
     assert payload["scene_plan"]["provider"] == "nvidia-profile:openai_compat:nvidia/test-nim"
     assert payload["usd_metadata"]["edmg:sceneCount"] == 2
-    assert payload["usd_metadata"]["edmg:usdGeneration"] == "production-shot-graph-v1"
+    assert payload["usd_metadata"]["edmg:usdGeneration"] == "production-immersive-plate-stage-v3"
     assert 'def Scope "Production"' in payload["usd_stage"]["text"]
     assert 'def Scope "ShotCameras"' in payload["usd_stage"]["text"]
     assert 'def Xform "scene_1"' in payload["usd_stage"]["text"]
@@ -584,6 +584,7 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
                 "start_s": 0,
                 "end_s": 4,
                 "prompt": 'laser "wall"\nwith haze',
+                "visual_plate": "generated_plates/test_plate.png",
             }
         ],
     }
@@ -592,7 +593,7 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
 
     assert 'custom string edmg:title = "A \\"quoted\\" title"' in text
     assert 'upAxis = "Y"' in text
-    assert 'custom string edmg:usdGeneration = "production-shot-graph-v1"' in text
+    assert 'custom string edmg:usdGeneration = "production-immersive-plate-stage-v3"' in text
     assert 'def Scope "Production"' in text
     assert 'def Scope "RenderSettings"' in text
     assert 'def Scope "RenderProducts"' in text
@@ -610,8 +611,18 @@ def test_scene_plan_usda_text_escapes_strings_and_sanitizes_prim_names():
     assert "double3 xformOp:translate.timeSamples" in text
     assert "double3 xformOp:scale.timeSamples" in text
     assert "token visibility.timeSamples" in text
-    assert 'def Cube "Preview__1_drop_scene"' in text
+    assert 'def Xform "ProceduralStage"' in text
+    assert 'def Scope "VisualPlates"' in text
+    assert 'custom string edmg:environmentMode = "image-plate-depth-room"' in text
+    assert 'def Mesh "Plate__1_drop_scene"' in text
+    assert 'def Mesh "FloorReflection__1_drop_scene"' in text
+    assert 'def Mesh "WaveRibbon_A"' in text
+    assert 'asset inputs:file = @generated_plates/test_plate.png@' in text
+    assert 'def Xform "Generated__1_drop_scene"' in text
+    assert 'def Sphere "Core"' in text
+    assert 'def Sphere "Particle_01"' in text
     assert 'def Xform "_1_drop_scene"' in text
+    assert 'custom string edmg:visualPlate = "generated_plates/test_plate.png"' in text
     assert 'custom string edmg:renderProduct = "outputs/nvidia/renders/quoted-project/001_1-drop-scene.mp4"' in text
     assert "custom int edmg:startFrame = 0" in text
     assert "custom int edmg:endFrame = 96" in text

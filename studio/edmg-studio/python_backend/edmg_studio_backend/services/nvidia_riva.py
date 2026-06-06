@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -78,6 +80,68 @@ def _load_riva_client():
     return riva_client
 
 
+def _resolve_ffmpeg_path() -> str:
+    explicit = _env("EDMG_FFMPEG_PATH")
+    candidates = [explicit, "ffmpeg.exe" if os.name == "nt" else "ffmpeg", "ffmpeg"]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate)
+        if candidate_path.is_absolute() and candidate_path.exists():
+            return str(candidate_path)
+        if candidate_path.exists():
+            return str(candidate_path)
+        found = shutil.which(candidate)
+        if found:
+            return found
+    return ""
+
+
+def _prepare_audio_for_riva(path: Path) -> tuple[bytes, int, int, str]:
+    """Return mono 16 kHz signed-16 PCM bytes for Riva's LINEAR_PCM ASR path."""
+
+    ffmpeg = _resolve_ffmpeg_path()
+    if not ffmpeg:
+        raise RivaTranscriptionError(
+            "FFmpeg is required to prepare audio for NVIDIA Riva ASR. "
+            "Install FFmpeg, add it to PATH, or set EDMG_FFMPEG_PATH."
+        )
+
+    timeout_s = float(_env("EDMG_NVIDIA_RIVA_TRANSCODE_TIMEOUT_S", "240") or "240")
+    cmd = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-i",
+        str(path),
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-f",
+        "s16le",
+        "-acodec",
+        "pcm_s16le",
+        "pipe:1",
+    ]
+    try:
+        result = subprocess.run(cmd, capture_output=True, check=False, timeout=timeout_s)
+    except subprocess.TimeoutExpired as exc:
+        raise RivaTranscriptionError(f"FFmpeg timed out while preparing audio for NVIDIA Riva ASR: {path}") from exc
+    except Exception as exc:
+        raise RivaTranscriptionError(f"FFmpeg could not prepare audio for NVIDIA Riva ASR: {exc}") from exc
+
+    if result.returncode != 0 or not result.stdout:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RivaTranscriptionError(
+            "FFmpeg could not prepare audio for NVIDIA Riva ASR"
+            + (f": {stderr[-800:]}" if stderr else ".")
+        )
+    return result.stdout, 16000, 1, "ffmpeg:pcm_s16le:mono:16000"
+
+
 def _best_alternative(result: Any) -> Any | None:
     alternatives = getattr(result, "alternatives", None)
     if alternatives:
@@ -122,19 +186,23 @@ def transcribe_with_riva(
 
     riva_client = _load_riva_client()
     try:
+        audio_content, sample_rate_hertz, audio_channels, prepared_audio = _prepare_audio_for_riva(path)
         auth = riva_client.Auth(uri=uri, use_ssl=bool(status["ssl"]))
         asr_service = riva_client.ASRService(auth)
         config = riva_client.RecognitionConfig()
         config.language_code = language_code or str(status["language_code"] or "en-US")
         config.max_alternatives = 1
         config.enable_automatic_punctuation = True
-        config.audio_channel_count = 1
+        if hasattr(riva_client, "AudioEncoding"):
+            config.encoding = riva_client.AudioEncoding.LINEAR_PCM
+        config.sample_rate_hertz = sample_rate_hertz
+        config.audio_channel_count = audio_channels
         if status["model"]:
             try:
                 config.model = status["model"]
             except Exception:
                 pass
-        response = asr_service.offline_recognize(path.read_bytes(), config)
+        response = asr_service.offline_recognize(audio_content, config)
     except Exception as exc:
         raise RivaTranscriptionError(f"NVIDIA Riva ASR request failed: {exc}") from exc
 
@@ -148,4 +216,10 @@ def transcribe_with_riva(
         "source": "nvidia_riva",
         "model": status["model"] or None,
         "endpoint": uri,
+        "audio": {
+            "prepared": prepared_audio,
+            "encoding": "LINEAR_PCM",
+            "sample_rate_hertz": sample_rate_hertz,
+            "audio_channel_count": audio_channels,
+        },
     }

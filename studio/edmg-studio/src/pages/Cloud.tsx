@@ -8,6 +8,7 @@ type CloudPanelId = "aws" | "azure" | "lightning" | "result";
 
 export default function Cloud(_props: PageProps) {
   const [bucket, setBucket] = useState("");
+  const [awsPrefix, setAwsPrefix] = useState("models");
   const [bundleKey, setBundleKey] = useState("edmg_project_bundle.zip");
   const [azureContainer, setAzureContainer] = useState("edmg-model-cache");
   const [azurePrefix, setAzurePrefix] = useState("models");
@@ -17,7 +18,7 @@ export default function Cloud(_props: PageProps) {
 
   const awsTest = async () => {
     setErr(null); setResult(null);
-    try { setResult(await apiPost("/v1/cloud/aws/test", { bucket: bucket || null })); }
+    try { setResult(await apiPost("/v1/cloud/aws/test", { bucket: bucket || null, prefix: awsPrefix || null })); }
     catch (e: any) { setErr(String(e)); }
   };
 
@@ -43,8 +44,8 @@ export default function Cloud(_props: PageProps) {
     () => [
       {
         id: "aws" as const,
-        label: "AWS bundle tools",
-        description: "S3 credential test and optional project bundle upload flow.",
+        label: "AWS S3 model cache",
+        description: "S3 credential test, model-cache prefix, and optional project bundle upload flow.",
       },
       {
         id: "azure" as const,
@@ -101,6 +102,10 @@ export default function Cloud(_props: PageProps) {
         <div style={{ marginTop: 10 }}>
           <div className="small">S3 bucket</div>
           <input value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder="my-bucket" />
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <div className="small">Model prefix</div>
+          <input value={awsPrefix} onChange={(e) => setAwsPrefix(e.target.value)} placeholder="models" />
         </div>
         <div style={{ marginTop: 10 }}>
           <div className="small">Bundle key</div>

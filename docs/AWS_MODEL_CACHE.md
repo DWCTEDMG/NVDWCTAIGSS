@@ -1,0 +1,88 @@
+# AWS S3 Model Cache
+
+EDMG Studio keeps large model weights out of the repo and installer. This AWS path adds an optional private S3 cache for single-file model artifacts such as SD3.5 `.safetensors` checkpoints and ControlNets.
+
+S3 is used as object storage for model files. Keep the bucket private and use IAM credentials only for machines that should install or restore Studio models.
+
+## What It Does
+
+- Checks S3 before downloading a single-file Hugging Face or Civitai model.
+- Restores the file into the normal Studio-managed model folder when the object exists.
+- Uploads newly downloaded/copied single-file model artifacts back to S3 when the cache is enabled.
+- Leaves diffusers snapshot directories on the normal Hugging Face/on-demand path for now.
+
+## Local Prerequisites
+
+Install AWS CLI v2 and configure credentials:
+
+```powershell
+aws configure
+# or use your organization's AWS SSO/login flow
+aws sts get-caller-identity
+```
+
+Install the optional backend dependencies:
+
+```powershell
+cd studio/edmg-studio/python_backend
+pip install -e ".[aws]"
+```
+
+## Create Storage
+
+From the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deployment\aws\setup_model_cache.ps1 `
+  -Region us-east-1 `
+  -Prefix models
+```
+
+The script creates or reuses:
+
+- a private S3 bucket
+- S3 public access block settings
+- bucket-owner enforced object ownership
+- AES256 default encryption
+- versioning
+- a lifecycle rule that removes old noncurrent object versions under the model prefix after 30 days
+
+Pass `-BucketName your-globally-unique-bucket` when you want to choose the bucket name. Pass `-Profile your-aws-profile` when you use named AWS profiles.
+
+## Enable The Cache
+
+Set these for the backend process:
+
+```powershell
+$env:EDMG_AWS_MODEL_CACHE='1'
+$env:EDMG_AWS_MODEL_CACHE_BUCKET='your-private-bucket'
+$env:EDMG_AWS_MODEL_CACHE_PREFIX='models'
+$env:EDMG_AWS_MODEL_CACHE_STORAGE_CLASS='STANDARD'
+$env:AWS_REGION='us-east-1'
+```
+
+When both AWS S3 and Azure Blob model caches are enabled, Studio uses the AWS S3 cache first.
+
+For S3-compatible providers, also set:
+
+```powershell
+$env:EDMG_S3_ENDPOINT_URL='https://your-s3-compatible-endpoint'
+```
+
+## Use With Studio
+
+1. Start Studio with the environment variables above.
+2. Open **Cloud**.
+3. Enter the S3 bucket and model prefix.
+4. Click **Test credentials**.
+5. Open **Models** and install the model weights you want hosted in the cache.
+
+On the first machine, Studio downloads from the model source and uploads the file to S3. On the next machine with the same env vars, Studio restores from S3 instead of downloading from the public source again.
+
+## Verify
+
+From CLI:
+
+```powershell
+aws s3 ls s3://your-private-bucket/models --recursive --human-readable --summarize
+```

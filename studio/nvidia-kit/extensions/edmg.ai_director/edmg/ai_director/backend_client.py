@@ -1,15 +1,61 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from urllib import error, request
+from uuid import uuid4
 
 
 class BackendClientError(RuntimeError):
     pass
+
+
+def _audio_search_roots() -> list[Path]:
+    roots: list[Path] = []
+    configured = os.getenv("EDMG_KIT_AUDIO_SEARCH_DIRS", "")
+    for item in configured.split(os.pathsep):
+        if item.strip():
+            roots.append(Path(item.strip()).expanduser())
+
+    user_profile = os.getenv("USERPROFILE", "")
+    if user_profile:
+        roots.append(Path(user_profile) / "Downloads")
+    roots.extend(
+        [
+            Path.home() / "Downloads",
+            Path("D:/Downloads"),
+            Path("C:/Downloads"),
+            Path.cwd(),
+        ]
+    )
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root).casefold()
+        if key not in seen:
+            unique.append(root)
+            seen.add(key)
+    return unique
+
+
+def resolve_audio_upload_path(audio_path: str | Path) -> Path:
+    raw = Path(audio_path).expanduser()
+    if raw.exists() and raw.is_file():
+        return raw
+    if raw.is_absolute():
+        return raw
+
+    for root in _audio_search_roots():
+        candidate = root / raw
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return raw
 
 
 @dataclass(frozen=True)
@@ -68,6 +114,68 @@ class EdmgBackendClient:
     def projects(self) -> dict[str, Any]:
         return self._json_request("GET", "/v1/projects")
 
+    def create_project(self, name: str) -> dict[str, Any]:
+        return self._json_request("POST", "/v1/projects", {"name": str(name or "").strip()})
+
+    def project(self, project_id: str) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("GET", f"/v1/projects/{encoded_project_id}")
+
+    def upload_project_audio(self, project_id: str, audio_path: str | Path) -> dict[str, Any]:
+        path = resolve_audio_upload_path(audio_path)
+        if not path.exists() or not path.is_file():
+            raise BackendClientError(f"audio file does not exist: {path}")
+
+        encoded_project_id = quote(str(project_id), safe="")
+        boundary = f"----edmg-kit-{uuid4().hex}"
+        filename = path.name.replace('"', "_")
+        content_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        prefix = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            f"Content-Type: {content_type}\r\n\r\n"
+        ).encode("utf-8")
+        suffix = f"\r\n--{boundary}--\r\n".encode("utf-8")
+        body = prefix + path.read_bytes() + suffix
+        req = request.Request(
+            f"{self.base_url}/v1/projects/{encoded_project_id}/assets/audio",
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Content-Length": str(len(body)),
+            },
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=self.timeout_s) as response:
+                raw = response.read().decode("utf-8")
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise BackendClientError(f"POST /v1/projects/{encoded_project_id}/assets/audio failed with HTTP {exc.code}: {detail}") from exc
+        except TimeoutError as exc:
+            raise BackendClientError(
+                f"POST /v1/projects/{encoded_project_id}/assets/audio timed out after {self.timeout_s:g}s"
+            ) from exc
+        except error.URLError as exc:
+            raise BackendClientError(f"POST /v1/projects/{encoded_project_id}/assets/audio failed: {exc.reason}") from exc
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise BackendClientError("POST /v1/projects/{project_id}/assets/audio returned invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise BackendClientError("POST /v1/projects/{project_id}/assets/audio returned non-object JSON")
+        return data
+
+    def analyze_project_audio(self, project_id: str) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/analyze_audio", {})
+
+    def transcribe_project_audio_riva(self, project_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/riva/transcribe", payload or {})
+
     def generate_scene_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/nvidia/scene-plan", payload)
 
@@ -82,6 +190,10 @@ class EdmgBackendClient:
     def export_project_scene_plan(self, project_id: str) -> dict[str, Any]:
         encoded_project_id = quote(str(project_id), safe="")
         return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/scene-plan/export", {})
+
+    def create_project_render_job(self, project_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/render-job", payload or {})
 
     def audio2face_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/nvidia/audio2face/generate", payload)

@@ -29,13 +29,14 @@ studio/nvidia-kit/
 The app is still a starter, but the main user-facing extensions now do useful
 work:
 
-- `edmg.ai_director` opens a Kit panel for the first project-scoped workflow.
-  From that panel you can enter a Studio `project_id` or visible project name,
-  fetch the saved NVIDIA scene plan, ask the backend/NIM planner for a refreshed
-  plan, export the persisted production USDA, and open the generated stage as a
-  local Kit stage. The same panel now includes a typed NVIDIA service bridge for
-  `audio2face`, `ace`, `cosmos`, and `triton`: enter the service id, edit the
-  JSON payload, then invoke the backend's typed route for the configured service.
+- `edmg.ai_director` opens the EDMG NVIDIA Studio workflow panel. From that
+  panel you can refresh setup readiness, create or load a Studio project, upload
+  a local audio file, run project audio analysis or Riva transcription, generate
+  the NVIDIA storyboard/scene plan, export the persisted production USDA, open
+  the generated stage as a local Kit stage, and queue an RTX render handoff. The
+  same panel keeps the typed NVIDIA service bridge for `audio2face`, `ace`,
+  `cosmos`, and `triton`: enter the service id, edit the JSON payload, then
+  invoke the backend's typed route for the configured service.
 - `edmg.timeline` opens a scene timeline panel from the configured starter
   scene-plan JSON and summarizes the OpenUSD cue boundaries.
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio
