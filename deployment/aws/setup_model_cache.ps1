@@ -47,6 +47,13 @@ function Invoke-AwsCapture {
   return (($output | Out-String).Trim())
 }
 
+function New-AwsJsonArgument {
+  param([string]$Json)
+  $path = Join-Path $env:TEMP ("edmg-aws-{0}.json" -f ([Guid]::NewGuid().ToString("N")))
+  Set-Content -LiteralPath $path -Value $Json -Encoding ASCII -NoNewline
+  return "file://$($path.Replace('\', '/'))"
+}
+
 function Test-S3BucketAccess {
   param([string]$Name)
   $oldErrorActionPreference = $ErrorActionPreference
@@ -133,7 +140,7 @@ $ownership = @{
     @{ ObjectOwnership = "BucketOwnerEnforced" }
   )
 } | ConvertTo-Json -Depth 5 -Compress
-Invoke-Aws @("s3api", "put-bucket-ownership-controls", "--bucket", $BucketName, "--ownership-controls", $ownership)
+Invoke-Aws @("s3api", "put-bucket-ownership-controls", "--bucket", $BucketName, "--ownership-controls", (New-AwsJsonArgument $ownership))
 
 Write-Step "Enabling AES256 default encryption"
 $encryption = @{
@@ -144,7 +151,7 @@ $encryption = @{
     }
   )
 } | ConvertTo-Json -Depth 5 -Compress
-Invoke-Aws @("s3api", "put-bucket-encryption", "--bucket", $BucketName, "--server-side-encryption-configuration", $encryption)
+Invoke-Aws @("s3api", "put-bucket-encryption", "--bucket", $BucketName, "--server-side-encryption-configuration", (New-AwsJsonArgument $encryption))
 
 Write-Step "Enabling versioning"
 Invoke-Aws @("s3api", "put-bucket-versioning", "--bucket", $BucketName, "--versioning-configuration", "Status=Enabled")
@@ -162,7 +169,7 @@ if (-not $SkipLifecycle) {
       }
     )
   } | ConvertTo-Json -Depth 8 -Compress
-  Invoke-Aws @("s3api", "put-bucket-lifecycle-configuration", "--bucket", $BucketName, "--lifecycle-configuration", $lifecycle)
+  Invoke-Aws @("s3api", "put-bucket-lifecycle-configuration", "--bucket", $BucketName, "--lifecycle-configuration", (New-AwsJsonArgument $lifecycle))
 }
 
 Write-Step "EDMG AWS S3 model cache environment"
