@@ -163,6 +163,17 @@ class S3ModelCache:
         tmp.replace(dest)
         return True
 
+    def model_exists(self, entry: dict[str, Any], path: Path) -> str | None:
+        key = self.object_key_for(entry, path)
+        ClientError = _require_client_error()
+        try:
+            self._client.head_object(Bucket=self.settings.bucket, Key=key)
+        except ClientError as exc:
+            if self._is_missing_object(exc):
+                return None
+            raise
+        return key
+
     def upload_model(self, entry: dict[str, Any], path: Path) -> str:
         if not path.exists() or not path.is_file():
             raise RuntimeError(f"Model cache upload source is not a file: {path}")

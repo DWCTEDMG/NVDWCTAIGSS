@@ -9,6 +9,7 @@ S3 is used as object storage for model files. Keep the bucket private and use IA
 - Checks S3 before downloading a single-file Hugging Face or Civitai model.
 - Restores the file into the normal Studio-managed model folder when the object exists.
 - Uploads newly downloaded/copied single-file model artifacts back to S3 when the cache is enabled.
+- Supports `EDMG_MODEL_STORAGE_MODE=cloud_only` for single-file assets, which uploads to S3 and removes the temporary transfer file instead of keeping a local Studio model copy.
 - Leaves diffusers snapshot directories on the normal Hugging Face/on-demand path for now.
 
 ## Local Prerequisites
@@ -63,6 +64,14 @@ $env:AWS_REGION='us-east-1'
 
 When both AWS S3 and Azure Blob model caches are enabled, Studio uses the AWS S3 cache first.
 
+To default supported model installs to S3-only storage:
+
+```powershell
+$env:EDMG_MODEL_STORAGE_MODE='cloud_only'
+```
+
+Use `local_cache` to return to the normal behavior where Studio keeps a local copy and also uploads to S3.
+
 For S3-compatible providers, also set:
 
 ```powershell
@@ -78,6 +87,24 @@ $env:EDMG_S3_ENDPOINT_URL='https://your-s3-compatible-endpoint'
 5. Open **Models** and install the model weights you want hosted in the cache.
 
 On the first machine, Studio downloads from the model source and uploads the file to S3. On the next machine with the same env vars, Studio restores from S3 instead of downloading from the public source again.
+
+In `cloud_only` mode, Studio uses a temporary transfer file during upload and deletes it after the S3 object is written. Local ComfyUI and internal Diffusers render paths still need a filesystem model path at runtime. Use **Restore local** in Model Manager when you want to run those local paths, or use a remote worker that mounts/downloads the S3 cache near the GPU.
+
+## Mount S3 As The Studio Model Root
+
+On this Windows workstation, rclone can mount the S3 model prefix as `X:\`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deployment\aws\mount_model_cache_rclone.ps1
+```
+
+Launch Studio with the S3 mount as the model root:
+
+```powershell
+.\LAUNCH_EDMG_STUDIO_S3_MODELS.bat
+```
+
+That launcher sets `EDMG_STUDIO_MODELS_DIR=X:\` only for the Studio session. Do not set `EDMG_STUDIO_MODELS_DIR=X:\` globally unless the rclone mount is always started before the backend, because Studio expects the configured model root to exist at startup.
 
 ## Verify
 

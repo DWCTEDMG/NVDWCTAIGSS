@@ -116,6 +116,12 @@ class AzureModelCache:
         tmp.replace(dest)
         return True
 
+    def model_exists(self, entry: dict[str, Any], path: Path) -> str | None:
+        blob = self._blob_client(entry, path)
+        if not blob.exists():
+            return None
+        return str(blob.blob_name)
+
     def upload_model(self, entry: dict[str, Any], path: Path) -> str:
         if not path.exists() or not path.is_file():
             raise RuntimeError(f"Model cache upload source is not a file: {path}")

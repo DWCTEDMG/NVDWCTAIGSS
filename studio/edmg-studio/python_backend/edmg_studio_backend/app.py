@@ -9592,6 +9592,12 @@ def models_install(req: dict[str, Any]):
     task = models.install(model_id)
     return {"task": task.__dict__}
 
+@app.post("/v1/models/restore_local")
+def models_restore_local(req: dict[str, Any]):
+    model_id = str(req.get("model_id") or "")
+    task = models.restore_local(model_id)
+    return {"task": task.__dict__}
+
 @app.post("/v1/models/install_pack")
 def models_install_pack(req: dict[str, Any]):
     pack_id = str(req.get("pack_id") or "")

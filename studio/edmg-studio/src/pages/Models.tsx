@@ -29,6 +29,9 @@ type CatalogPayload = {
   packs: any[];
   accepted: Record<string, any>;
   installed: Record<string, boolean>;
+  cloud?: Record<string, any>;
+  storage_mode?: string;
+  model_cache?: string | null;
 };
 
 type HubResult = {
@@ -118,21 +121,39 @@ function repoIdFromEntry(model: CatalogEntry) {
 function ModelCard({
   m,
   installed,
+  cloudRecord,
+  storageMode,
   accepted,
   onAccept,
   onInstall,
+  onRestore,
   onOpen
 }: {
   m: CatalogEntry;
   installed: boolean;
+  cloudRecord?: any;
+  storageMode?: string;
   accepted: boolean;
   onAccept: () => void;
   onInstall: () => void;
+  onRestore: () => void;
   onOpen: (u: string) => void;
 }) {
   const installable = m.installable !== false;
   const needsAccept = installable && m.source !== "ollama" && !accepted;
   const canInstall = installable && !needsAccept;
+  const cloudStored = !!cloudRecord;
+  const cloudOnly = storageMode === "cloud_only";
+  const statusLabel = installed ? "Installed locally" : cloudStored ? "Stored in S3" : installable ? "Not installed" : "Browser only";
+  const installLabel = installed
+    ? "Installed"
+    : cloudStored
+      ? "Stored in S3"
+      : cloudOnly
+        ? "Store in S3"
+        : installable
+          ? "Install"
+          : "Install unavailable";
 
   return (
     <div className="card" style={{ marginTop: 10 }}>
@@ -162,8 +183,13 @@ function ModelCard({
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
           <div className="small" style={{ fontWeight: 800 }}>
-            {installed ? "Installed" : installable ? "Not installed" : "Browser only"}
+            {statusLabel}
           </div>
+          {cloudStored ? (
+            <div className="small" style={{ maxWidth: 260, textAlign: "right", opacity: 0.82 }}>
+              {String(cloudRecord.object || cloudRecord.key || "")}
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
             {m.license_url ? (
               <button className="secondary" onClick={() => onOpen(m.license_url || "")}>View license</button>
@@ -176,8 +202,11 @@ function ModelCard({
             {needsAccept ? (
               <button onClick={onAccept}>Accept license</button>
             ) : null}
-            <button disabled={!canInstall || installed} onClick={onInstall}>
-              {installed ? "Installed" : installable ? "Install" : "Install unavailable"}
+            {cloudStored && !installed ? (
+              <button className="secondary" onClick={onRestore}>Restore local</button>
+            ) : null}
+            <button disabled={!canInstall || installed || cloudStored} onClick={onInstall}>
+              {installLabel}
             </button>
           </div>
         </div>
@@ -190,6 +219,7 @@ function HubResultCard({
   result,
   matchedCatalog,
   installed,
+  cloudStored,
   accepted,
   onAccept,
   onInstall,
@@ -198,6 +228,7 @@ function HubResultCard({
   result: HubResult;
   matchedCatalog: CatalogEntry | null;
   installed: boolean;
+  cloudStored?: boolean;
   accepted: boolean;
   onAccept: (model: CatalogEntry) => void;
   onInstall: (model: CatalogEntry) => void;
@@ -237,10 +268,10 @@ function HubResultCard({
           ) : null}
           {matchedCatalog ? (
             <button
-              disabled={matchedCatalog.installable === false || installed || (matchedCatalog.source !== "ollama" && !accepted)}
+              disabled={matchedCatalog.installable === false || installed || cloudStored || (matchedCatalog.source !== "ollama" && !accepted)}
               onClick={() => onInstall(matchedCatalog)}
             >
-              {installed ? "Installed in Studio" : matchedCatalog.installable === false ? "Browser only" : "Install in Studio"}
+              {installed ? "Installed locally" : cloudStored ? "Stored in S3" : matchedCatalog.installable === false ? "Browser only" : "Install in Studio"}
             </button>
           ) : null}
         </div>
@@ -355,6 +386,11 @@ export default function Models(props: PageProps) {
     await refresh();
   }
 
+  async function restoreLocal(m: CatalogEntry) {
+    await apiPost("/v1/models/restore_local", { model_id: m.id });
+    await refresh();
+  }
+
   async function installPack(packId: string) {
     await apiPost("/v1/models/install_pack", { pack_id: packId });
     await refresh();
@@ -387,6 +423,8 @@ export default function Models(props: PageProps) {
 
   const acceptedMap = data?.accepted ?? {};
   const installedMap = data?.installed ?? {};
+  const cloudMap = data?.cloud ?? {};
+  const storageMode = data?.storage_mode ?? "local_cache";
 
   const internalSummary = useMemo(() => {
     const built = merged.built ?? [];
@@ -609,6 +647,7 @@ export default function Models(props: PageProps) {
                 result={result}
                 matchedCatalog={matchedCatalog}
                 installed={matchedCatalog ? !!installedMap[matchedCatalog.id] : false}
+                cloudStored={matchedCatalog ? !!cloudMap[matchedCatalog.id] : false}
                 accepted={matchedCatalog ? !!acceptedMap[matchedCatalog.id] : false}
                 onAccept={accept}
                 onInstall={install}
@@ -669,9 +708,12 @@ export default function Models(props: PageProps) {
             key={m.id}
             m={m}
             installed={!!installedMap[m.id]}
+            cloudRecord={cloudMap[m.id]}
+            storageMode={storageMode}
             accepted={!!acceptedMap[m.id]}
             onAccept={() => accept(m)}
             onInstall={() => install(m)}
+            onRestore={() => restoreLocal(m)}
             onOpen={(u) => window.edmg?.openExternal?.(u)}
           />
         ))}
@@ -685,9 +727,12 @@ export default function Models(props: PageProps) {
             key={m.id}
             m={m}
             installed={!!installedMap[m.id]}
+            cloudRecord={cloudMap[m.id]}
+            storageMode={storageMode}
             accepted={!!acceptedMap[m.id]}
             onAccept={() => accept(m)}
             onInstall={() => install(m)}
+            onRestore={() => restoreLocal(m)}
             onOpen={(u) => window.edmg?.openExternal?.(u)}
           />
         ))}
@@ -703,9 +748,12 @@ export default function Models(props: PageProps) {
                 key={m.id}
                 m={m}
                 installed={!!installedMap[m.id]}
+                cloudRecord={cloudMap[m.id]}
+                storageMode={storageMode}
                 accepted={!!acceptedMap[m.id]}
                 onAccept={() => accept(m)}
                 onInstall={() => install(m)}
+                onRestore={() => restoreLocal(m)}
                 onOpen={(u) => window.edmg?.openExternal?.(u)}
               />
             ))}
@@ -719,9 +767,12 @@ export default function Models(props: PageProps) {
               <ModelCard
                 m={m}
                 installed={!!installedMap[m.id]}
+                cloudRecord={cloudMap[m.id]}
+                storageMode={storageMode}
                 accepted={!!acceptedMap[m.id]}
                 onAccept={() => accept(m)}
                 onInstall={() => install(m)}
+                onRestore={() => restoreLocal(m)}
                 onOpen={(u) => window.edmg?.openExternal?.(u)}
               />
               <div style={{ marginTop: 6, display: "flex", gap: 8 }}>
@@ -767,6 +818,10 @@ export default function Models(props: PageProps) {
       <h2>Model Manager</h2>
       <div className="small" style={{ marginTop: 6 }}>
         EDMG ships with a curated model catalog, but does <b>not</b> bundle large weights in the installer. Use this page to install Studio-ready defaults, add community models, or browse curated Stability model families.
+      </div>
+      <div className="small" style={{ marginTop: 8, opacity: 0.86 }}>
+        Storage mode: <b>{storageMode === "cloud_only" ? "S3-only" : "local + cache"}</b>
+        {data?.model_cache ? <> • Cache: <b>{data.model_cache}</b></> : null}
       </div>
 
       {err && (
