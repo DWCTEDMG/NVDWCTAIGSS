@@ -91,7 +91,7 @@ from .services.render_settings import (
     STABILITY_STYLE_PRESETS,
 )
 from .services.nvidia_profile import nvidia_profile_status
-from .services.nvidia_diagnostics import nvidia_diagnostics
+from .services.nvidia_diagnostics import nvidia_diagnostics, nvidia_host_gpu_status
 from .services.nvidia_optional_services import (
     NvidiaOptionalServiceError,
     ace_generate,
@@ -1577,6 +1577,23 @@ def _backend_family_for(backend: str, *, integrated: bool = False) -> str:
     return "cpu_only"
 
 
+def _parse_gpu_memory_gb(value: Any) -> float:
+    text = str(value or "").strip().lower().replace(",", "")
+    match = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*([a-z]+)?", text)
+    if not match:
+        return 0.0
+    try:
+        amount = float(match.group(1))
+    except Exception:
+        return 0.0
+    unit = str(match.group(2) or "mib")
+    if unit in {"gb", "gib"}:
+        return round(amount, 2)
+    if unit in {"mb", "mib"}:
+        return round(amount / 1024.0, 2)
+    return round(amount, 2)
+
+
 def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_tier: str = "auto", duration_s: float | None = None) -> dict[str, Any]:
     hw = dict(hw or {})
     backend = str(hw.get("backend") or "cpu").lower()
@@ -1685,6 +1702,7 @@ def _hardware_profile() -> dict[str, Any]:
         "backend": "cpu",
         "device": "cpu",
         "device_name": "CPU",
+        "runtime_device_name": "CPU",
         "available_backends": ["cpu"],
         "vram_gb": 0.0,
         "ram_gb": 0.0,
@@ -1696,6 +1714,12 @@ def _hardware_profile() -> dict[str, Any]:
         "supports_directml": False,
         "directml_runtime_ready": False,
         "directml_device_name": None,
+        "cuda_runtime_ready": False,
+        "host_gpu_visible": False,
+        "host_gpu_name": None,
+        "host_gpu_vram_gb": 0.0,
+        "host_gpus": [],
+        "nvidia_driver_version": None,
     }
     try:
         page_size = int(os.sysconf("SC_PAGE_SIZE"))
@@ -1712,10 +1736,14 @@ def _hardware_profile() -> dict[str, Any]:
         if getattr(torch, "cuda", None) is not None and torch.cuda.is_available():
             out["backend"] = "cuda"
             out["device"] = "cuda"
+            out["device_name"] = "CUDA GPU"
+            out["runtime_device_name"] = out["device_name"]
+            out["cuda_runtime_ready"] = True
             out["available_backends"].append("cuda")
             try:
                 props = torch.cuda.get_device_properties(0)
                 out["device_name"] = getattr(props, "name", "cuda")
+                out["runtime_device_name"] = out["device_name"]
                 out["vram_gb"] = round(float(getattr(props, "total_memory", 0.0)) / float(1024 ** 3), 2)
             except Exception:
                 pass
@@ -1726,6 +1754,7 @@ def _hardware_profile() -> dict[str, Any]:
                     out["backend"] = "mps"
                     out["device"] = "mps"
                     out["device_name"] = "Apple Silicon GPU"
+                    out["runtime_device_name"] = out["device_name"]
                     out["available_backends"].append("mps")
                     out["integrated_acceleration"] = True
                     out["gpu_vendor"] = "apple"
@@ -1733,6 +1762,26 @@ def _hardware_profile() -> dict[str, Any]:
                 pass
     except Exception:
         pass
+
+    try:
+        nvidia_gpu = nvidia_host_gpu_status()
+    except Exception:
+        nvidia_gpu = {"available": False, "ok": False, "gpus": [], "error": ""}
+    host_gpus = [gpu for gpu in list(nvidia_gpu.get("gpus") or []) if isinstance(gpu, dict)]
+    if host_gpus:
+        primary_gpu = host_gpus[0]
+        host_name = str(primary_gpu.get("name") or "NVIDIA GPU")
+        host_vram_gb = _parse_gpu_memory_gb(primary_gpu.get("memory_total"))
+        out["host_gpu_visible"] = bool(nvidia_gpu.get("ok"))
+        out["host_gpu_name"] = host_name
+        out["host_gpu_vram_gb"] = host_vram_gb
+        out["host_gpus"] = host_gpus
+        out["nvidia_driver_version"] = primary_gpu.get("driver_version")
+        if not out.get("gpu_vendor"):
+            out["gpu_vendor"] = "nvidia"
+        if str(out.get("backend") or "cpu").lower() == "cpu":
+            out["device_name"] = host_name
+            out["vram_gb"] = max(float(out.get("vram_gb") or 0.0), host_vram_gb)
 
     directml = _directml_runtime_status()
     out["supports_directml"] = bool(directml.get("available"))
@@ -1745,6 +1794,7 @@ def _hardware_profile() -> dict[str, Any]:
             out["backend"] = "directml"
             out["device"] = "directml"
             out["device_name"] = str(directml.get("device_name") or "DirectML GPU")
+            out["runtime_device_name"] = out["device_name"]
             out["vram_gb"] = max(float(out.get("vram_gb") or 0.0), float(directml.get("vram_gb") or 0.0))
             out["integrated_acceleration"] = bool(directml.get("integrated"))
             out["gpu_vendor"] = directml.get("vendor")

@@ -253,6 +253,18 @@ export default function Settings(props: PageProps) {
       return { id, label, state, configured, reachable, detail };
     });
   }, [nvidiaDiagnostics, nvidiaStatus]);
+  const hardwareProfile = hardware?.hardware || {};
+  const hardwareDisplayName = String(hardwareProfile.host_gpu_name || hardwareProfile.device_name || "unknown");
+  const runtimeBackend = String(hardwareProfile.backend || hardwareProfile.device || hardwareProfile.backend_family || "cpu");
+  const runtimeDeviceName = String(
+    hardwareProfile.runtime_device_name ||
+    (runtimeBackend.toLowerCase() === "cpu" ? "CPU" : hardwareProfile.device_name || runtimeBackend)
+  );
+  const cudaRuntimeLabel = hardwareProfile.cuda_runtime_ready
+    ? "active"
+    : hardwareProfile.host_gpu_visible
+      ? "not active"
+      : "";
 
   async function refreshPage() {
     try {
@@ -704,7 +716,11 @@ export default function Settings(props: PageProps) {
           Save a hardware-aware quick profile here and the Render page will pick it up automatically. This is the safest place to tune laptop vs workstation behavior without changing project content.
         </div>
         <div className="small" style={{ marginBottom: 10, opacity: 0.9 }}>
-          Hardware: <b>{hardware?.hardware?.device_name || "unknown"}</b> • backend family <b>{hardware?.hardware?.backend_family || "cpu_only"}</b> • recommended tier <b>{hardware?.hardware?.recommended_tier || "draft"}</b>
+          Hardware: <b>{hardwareDisplayName}</b> • runtime <b>{runtimeBackend}</b>
+          {runtimeDeviceName && runtimeDeviceName !== hardwareDisplayName ? <> on <b>{runtimeDeviceName}</b></> : null}
+          {" "}• backend family <b>{hardwareProfile.backend_family || "cpu_only"}</b>
+          {cudaRuntimeLabel ? <> • CUDA runtime <b>{cudaRuntimeLabel}</b></> : null}
+          {" "}• recommended tier <b>{hardwareProfile.recommended_tier || "draft"}</b>
         </div>
         {renderProfiles ? (
           <div style={{ display: "grid", gap: 10 }}>

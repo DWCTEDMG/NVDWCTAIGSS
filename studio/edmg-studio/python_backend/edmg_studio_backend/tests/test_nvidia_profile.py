@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from urllib import error as url_error
 
 import pytest
@@ -11,6 +12,45 @@ from edmg_studio_backend.services import nvidia_diagnostics as diagnostics_modul
 from edmg_studio_backend.services.nvidia_profile import nvidia_profile_status
 from edmg_studio_backend.services.nvidia_scene_plan import scene_plan_usda_text
 from edmg_studio_backend.store.projects import ProjectStore
+
+
+def test_hardware_profile_surfaces_host_nvidia_gpu_when_cuda_runtime_missing(monkeypatch):
+    class _FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+    class _FakeTorch:
+        cuda = _FakeCuda()
+        backends = object()
+
+    monkeypatch.setitem(sys.modules, "torch", _FakeTorch())
+    monkeypatch.setattr(
+        backend_app,
+        "_directml_runtime_status",
+        lambda: {"available": False, "runtime_ready": False, "device_name": None, "vram_gb": 0.0, "vendor": None},
+    )
+    monkeypatch.setattr(
+        backend_app,
+        "nvidia_host_gpu_status",
+        lambda: {
+            "available": True,
+            "ok": True,
+            "gpus": [{"name": "Test RTX", "driver_version": "610.47", "memory_total": "6141 MiB"}],
+            "error": "",
+        },
+    )
+
+    hw = backend_app._hardware_profile()
+
+    assert hw["backend"] == "cpu"
+    assert hw["runtime_device_name"] == "CPU"
+    assert hw["device_name"] == "Test RTX"
+    assert hw["host_gpu_visible"] is True
+    assert hw["host_gpu_name"] == "Test RTX"
+    assert hw["cuda_runtime_ready"] is False
+    assert hw["available_backends"] == ["cpu"]
+    assert hw["vram_gb"] == pytest.approx(6.0, abs=0.01)
 
 
 def test_nvidia_profile_status_masks_ngc_key(monkeypatch):

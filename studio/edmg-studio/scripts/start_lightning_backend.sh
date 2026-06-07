@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 STUDIO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKEND_DIR="${STUDIO_ROOT}/python_backend"
-BACKEND_SETUPTOOLS_CONSTRAINT="setuptools<82"
+BACKEND_SETUPTOOLS_CONSTRAINT="setuptools==70.0.0"
 
 pick_python_bin() {
   if [[ -n "${EDMG_PYTHON_BIN:-}" ]]; then

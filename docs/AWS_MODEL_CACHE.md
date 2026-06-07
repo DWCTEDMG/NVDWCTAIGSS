@@ -104,7 +104,11 @@ Launch Studio with the S3 mount as the model root:
 .\LAUNCH_EDMG_STUDIO_S3_MODELS.bat
 ```
 
-That launcher sets `EDMG_STUDIO_MODELS_DIR=X:\` only for the Studio session. Do not set `EDMG_STUDIO_MODELS_DIR=X:\` globally unless the rclone mount is always started before the backend, because Studio expects the configured model root to exist at startup.
+That launcher sets `EDMG_STUDIO_MODELS_DIR=X:\` only for the Studio session and uses `EDMG_MODEL_STORAGE_MODE=local_cache`. In this mode, `local_cache` means "write to the mounted model filesystem"; because the model filesystem is `X:\`, the files live under the S3-backed rclone mount instead of the normal Studio model folder.
+
+Do not combine `EDMG_STUDIO_MODELS_DIR=X:\` with `EDMG_MODEL_STORAGE_MODE=cloud_only`. `cloud_only` is upload-only storage and blocks directory-based Diffusers snapshots; the mounted-S3 runtime path needs normal filesystem writes to `X:\`.
+
+Do not set `EDMG_STUDIO_MODELS_DIR=X:\` globally unless the rclone mount is always started before the backend, because Studio expects the configured model root to exist at startup.
 
 ## Verify
 

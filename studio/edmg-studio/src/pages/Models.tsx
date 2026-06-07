@@ -149,11 +149,11 @@ function ModelCard({
     ? "Installed"
     : cloudStored
       ? "Stored in S3"
-      : cloudOnly
+      : !installable
+        ? "Install unavailable"
+        : cloudOnly
         ? "Store in S3"
-        : installable
-          ? "Install"
-          : "Install unavailable";
+        : "Install";
 
   return (
     <div className="card" style={{ marginTop: 10 }}>

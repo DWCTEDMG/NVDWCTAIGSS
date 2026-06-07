@@ -19,7 +19,7 @@ from typing import Optional, Sequence
 
 STUDIO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = STUDIO_ROOT / "python_backend"
-BACKEND_SETUPTOOLS_CONSTRAINT = "setuptools<82"
+BACKEND_SETUPTOOLS_CONSTRAINT = "setuptools==70.0.0"
 
 
 def _is_windows() -> bool:

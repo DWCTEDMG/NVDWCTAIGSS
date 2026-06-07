@@ -18,8 +18,8 @@ const bundleManifestPath = path.join(electronBackendDir, "backend-bundle-manifes
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const SUPPORTED_PYTHON_MIN = [3, 10];
 const SUPPORTED_PYTHON_MAX_EXCLUSIVE = [3, 14];
-// Torch 2.11.x in the bundled backend currently requires setuptools < 82.
-const backendSetuptoolsConstraint = "setuptools<82";
+// nvidia-riva-client 2.19.0 pins setuptools exactly.
+const backendSetuptoolsConstraint = "setuptools==70.0.0";
 
 const ignoredDirNames = new Set([
   ".git",

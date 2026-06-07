@@ -65,6 +65,11 @@ def _gpu_status() -> dict[str, Any]:
     }
 
 
+def nvidia_host_gpu_status() -> dict[str, Any]:
+    """Host NVIDIA adapter visibility, independent of CUDA runtime packages."""
+    return _gpu_status()
+
+
 def _docker_status() -> dict[str, Any]:
     version = _run_command(["docker", "--version"], timeout_s=5.0)
     runtime_probe = _run_command(

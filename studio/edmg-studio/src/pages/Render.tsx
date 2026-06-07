@@ -156,6 +156,7 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
   const [internalModelId, setInternalModelId] = useState<string>("auto");
   const [internalRenderMode, setInternalRenderMode] = useState<"auto"|"diffusion"|"hosted"|"proxy">("auto");
   const [internalDevicePreference, setInternalDevicePreference] = useState<"auto"|"cpu"|"cuda"|"mps"|"directml">("auto");
+  const [internalDevicePreferenceTouched, setInternalDevicePreferenceTouched] = useState<boolean>(false);
   const [internalRenderTier, setInternalRenderTier] = useState<"auto"|"draft"|"balanced"|"quality">((savedRenderDefaults.internalRenderTier as any) || "auto");
 
   const [internalTemporalMode, setInternalTemporalMode] = useState<"off"|"keyframes"|"frame_img2img">("keyframes");
@@ -463,13 +464,12 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
 
   useEffect(() => {
     const preferred = String(hardware?.hardware?.device_preference || "auto");
-    if (preferred && internalDevicePreference === "auto" && preferred !== "auto") {
-      if (preferred === "directml" && !internalDirectmlAvailable) return;
-      if (preferred === "directml" || preferred === "cuda" || preferred === "mps" || preferred === "cpu") {
-        setInternalDevicePreference(preferred as any);
-      }
+    if (internalDevicePreferenceTouched || !preferred || preferred === "auto") return;
+    if (preferred === "directml" && !internalDirectmlAvailable) return;
+    if (preferred === "directml" || preferred === "cuda" || preferred === "mps" || preferred === "cpu") {
+      if (internalDevicePreference !== preferred) setInternalDevicePreference(preferred as any);
     }
-  }, [hardware, internalDevicePreference, internalDirectmlAvailable]);
+  }, [hardware, internalDevicePreference, internalDevicePreferenceTouched, internalDirectmlAvailable]);
 
   useEffect(() => {
     if (!internalHostedVisible && internalRenderMode === "hosted") {
@@ -1268,7 +1268,10 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
 </div>
                   <div style={{ minWidth: 180 }}>
                     <div className="small">Device</div>
-                    <select value={internalDevicePreference} onChange={(e) => setInternalDevicePreference(e.target.value as any)}>
+                    <select value={internalDevicePreference} onChange={(e) => {
+                      setInternalDevicePreferenceTouched(true);
+                      setInternalDevicePreference(e.target.value as any);
+                    }}>
                       <option value="auto">Auto</option>
                       <option value="cpu">CPU</option>
                       {hardware?.hardware?.available_backends?.includes?.("cuda") ? <option value="cuda">CUDA</option> : null}

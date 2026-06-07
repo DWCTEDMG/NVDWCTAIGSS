@@ -24,7 +24,7 @@ try:
 except Exception:  # pragma: no cover
     py7zr = None
 
-BACKEND_SETUPTOOLS_CONSTRAINT = "setuptools<82"
+BACKEND_SETUPTOOLS_CONSTRAINT = "setuptools==70.0.0"
 
 
 @dataclass

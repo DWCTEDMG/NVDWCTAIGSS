@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $SupportedPythonMin = [Version]"3.10"
 $SupportedPythonMaxExclusive = [Version]"3.14"
-$BackendSetuptoolsConstraint = "setuptools<82"
+$BackendSetuptoolsConstraint = "setuptools==70.0.0"
 
 function Assert-Command($name) {
   if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
