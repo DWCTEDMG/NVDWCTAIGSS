@@ -19,11 +19,23 @@ EDMG_NVIDIA_RIVA_ASR=0
 NGC_API_KEY=...  # load from shell or ignored local env file, never commit it
 ```
 
+For hosted NVIDIA API planning, point both planner URLs at the hosted
+OpenAI-compatible base:
+
+```bash
+EDMG_NVIDIA_NIM_URL=https://integrate.api.nvidia.com/v1
+EDMG_AI_OPENAI_COMPAT_BASE_URL=https://integrate.api.nvidia.com/v1
+EDMG_AI_OPENAI_COMPAT_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1.5
+EDMG_NVIDIA_API_KEY=...  # or NVIDIA_API_KEY / EDMG_AI_OPENAI_COMPAT_API_KEY
+```
+
 For the Compose-based starter, see `deployment/nvidia/`. The Windows desktop
 package remains a client/workstation shell; NIM, Riva, NeMo, and related GPU
 services should run as local or remote service endpoints. If the inference
 endpoint itself requires bearer auth, set `EDMG_AI_OPENAI_COMPAT_API_KEY` too;
-do not assume it is always the same value as `NGC_API_KEY`.
+do not assume it is always the same value as `NGC_API_KEY`. Hosted NVIDIA
+planner auth also accepts `NVIDIA_API_KEY`, `EDMG_NVIDIA_API_KEY`,
+`EDMG_NVIDIA_NIM_API_KEY`, or an existing service-specific `nvapi` key alias.
 
 Riva ASR stays opt-in. Set `EDMG_NVIDIA_RIVA_ASR=1` or
 `EDMG_AI_ASR_PROVIDER=riva` only after the backend environment has the NVIDIA

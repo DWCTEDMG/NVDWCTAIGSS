@@ -60,6 +60,29 @@ function Use-HostLoopbackForLocalBackend {
   }
 }
 
+function Use-NvidiaPlannerApiKeyAliases {
+  $current = [Environment]::GetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_API_KEY", "Process")
+  if (-not [string]::IsNullOrWhiteSpace($current)) {
+    return
+  }
+
+  $baseUrl = [Environment]::GetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_BASE_URL", "Process")
+  $nimUrl = [Environment]::GetEnvironmentVariable("EDMG_NVIDIA_NIM_URL", "Process")
+  $combined = "$baseUrl $nimUrl"
+  if ($combined -notmatch "integrate\.api\.nvidia\.com") {
+    return
+  }
+
+  foreach ($name in @("NVIDIA_API_KEY", "EDMG_NVIDIA_API_KEY", "EDMG_NVIDIA_NIM_API_KEY", "EDMG_NVIDIA_AUDIO2FACE_API_KEY", "NGC_API_KEY")) {
+    $candidate = [Environment]::GetEnvironmentVariable($name, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+      [Environment]::SetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_API_KEY", $candidate, "Process")
+      Write-Step "Using $name as the hosted NVIDIA planner API key alias."
+      return
+    }
+  }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $repoRoot
 $backendRoot = Resolve-Path (Join-Path $repoRoot "studio\edmg-studio\python_backend")
@@ -201,6 +224,7 @@ if ([string]::IsNullOrWhiteSpace($PythonExe)) {
 
 Import-EnvFile -Path $EnvFile
 Use-HostLoopbackForLocalBackend
+Use-NvidiaPlannerApiKeyAliases
 $mode = if ([string]::IsNullOrWhiteSpace($env:EDMG_NVIDIA_MODE)) { "1" } else { $env:EDMG_NVIDIA_MODE }
 $profile = if ([string]::IsNullOrWhiteSpace($env:EDMG_NVIDIA_PROFILE)) { "omniverse" } else { $env:EDMG_NVIDIA_PROFILE }
 [Environment]::SetEnvironmentVariable("EDMG_NVIDIA_MODE", $mode, "Process")

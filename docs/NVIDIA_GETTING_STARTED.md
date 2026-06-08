@@ -61,7 +61,18 @@ EDMG_AI_OPENAI_COMPAT_API_KEY=
 
 `NGC_API_KEY` is for NVIDIA/NGC image and gated asset access. The planner API key
 is separate and belongs in `EDMG_AI_OPENAI_COMPAT_API_KEY` only when the target
-endpoint requires bearer authentication.
+endpoint requires bearer authentication. Hosted NVIDIA API planning can use:
+
+```dotenv
+EDMG_NVIDIA_NIM_URL=https://integrate.api.nvidia.com/v1
+EDMG_AI_OPENAI_COMPAT_BASE_URL=https://integrate.api.nvidia.com/v1
+EDMG_AI_OPENAI_COMPAT_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1.5
+EDMG_NVIDIA_API_KEY=
+```
+
+The backend also accepts `NVIDIA_API_KEY`, `EDMG_NVIDIA_NIM_API_KEY`,
+`EDMG_AI_OPENAI_COMPAT_API_KEY`, and existing service-specific `nvapi` key
+aliases for hosted planner calls.
 
 For local development, the default is to keep the EDMG backend on
 `127.0.0.1:8000` and map a local NIM container to host port `8001`. That keeps

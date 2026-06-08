@@ -233,6 +233,33 @@ def test_nvidia_http_probe_treats_http_response_as_reachable(monkeypatch):
     assert probe["http_response"] is True
 
 
+def test_nvidia_diagnostics_planner_key_uses_nvidia_alias(monkeypatch):
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("EDMG_NVIDIA_API_KEY", raising=False)
+    monkeypatch.delenv("EDMG_NVIDIA_NIM_API_KEY", raising=False)
+    monkeypatch.delenv("NGC_API_KEY", raising=False)
+    monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_API_KEY", "alias-secret-token")
+
+    assert diagnostics_module._planner_api_key() == "alias-secret-token"
+
+
+def test_nvidia_diagnostics_planner_key_prefers_explicit_key(monkeypatch):
+    monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_API_KEY", "planner-secret-token")
+    monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_API_KEY", "alias-secret-token")
+
+    assert diagnostics_module._planner_api_key() == "planner-secret-token"
+
+
+def test_nvidia_diagnostics_planner_key_does_not_alias_non_nvidia_endpoint(monkeypatch):
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_API_KEY", raising=False)
+    monkeypatch.setenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "https://planner.example.test/v1")
+    monkeypatch.setenv("EDMG_NVIDIA_AUDIO2FACE_API_KEY", "alias-secret-token")
+
+    assert diagnostics_module._planner_api_key() is None
+
+
 def test_nvidia_diagnostics_readiness_flags_placeholder_nim(monkeypatch):
     monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
     monkeypatch.delenv("NGC_API_KEY", raising=False)

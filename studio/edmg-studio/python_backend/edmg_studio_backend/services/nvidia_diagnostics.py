@@ -145,6 +145,31 @@ def _http_probe(url: str, *, api_key: str | None = None, timeout_s: float = 3.0)
         return {"configured": True, "reachable": False, "error": str(exc)}
 
 
+def _planner_api_key() -> str | None:
+    explicit = (os.getenv("EDMG_AI_OPENAI_COMPAT_API_KEY") or "").strip()
+    if explicit:
+        return explicit
+    combined = " ".join(
+        (
+            os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", ""),
+            os.getenv("EDMG_NVIDIA_NIM_URL", ""),
+        )
+    ).lower()
+    if "integrate.api.nvidia.com" not in combined:
+        return None
+    for name in (
+        "NVIDIA_API_KEY",
+        "EDMG_NVIDIA_API_KEY",
+        "EDMG_NVIDIA_NIM_API_KEY",
+        "EDMG_NVIDIA_AUDIO2FACE_API_KEY",
+        "NGC_API_KEY",
+    ):
+        value = (os.getenv(name) or "").strip()
+        if value:
+            return value
+    return None
+
+
 def _tcp_probe(endpoint: str, *, timeout_s: float = 3.0) -> dict[str, Any]:
     if not endpoint:
         return {"configured": False, "reachable": False, "skipped": True}
@@ -309,7 +334,7 @@ def nvidia_diagnostics() -> dict[str, Any]:
 
     nim_probe = _http_probe(
         _nim_models_url(nim_base_url) if nim_base_url else "",
-        api_key=os.getenv("EDMG_AI_OPENAI_COMPAT_API_KEY") or None,
+        api_key=_planner_api_key(),
         timeout_s=4.0,
     )
     if nim_base_url:
