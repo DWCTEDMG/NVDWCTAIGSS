@@ -739,6 +739,36 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
     }
   };
 
+  const runStoryboardMovie = async () => {
+    setErr(null);
+    setInfo(null);
+    try {
+      const d = await apiPost(`/v1/projects/${projectId}/render/storyboard_movie`, {
+        variant_index: selectedVariant,
+        preset: renderPreset,
+        render_mode: internalRenderMode,
+        model_id: internalModelId,
+        apply_storyboard: true,
+        overwrite_timeline: true,
+        allow_hosted_fallback: true,
+        allow_proxy_fallback: true,
+        fps_output: internalFpsOut,
+        fps_render: internalFpsRender,
+        keyframe_interval_s: internalKeyInterval,
+        interpolation_engine: internalInterp,
+        temporal_mode: internalTemporalMode,
+        temporal_strength: internalTemporalStrength,
+        resume_existing_frames: internalResumeExisting,
+      });
+      setInfo(d);
+      await refreshProject(projectId);
+      await refreshInternalStatus();
+      await refreshInternalPreflight();
+    } catch (e: any) {
+      setErr(String(e));
+    }
+  };
+
   const cancelLatestInternal = async () => {
     if (!projectId || !latestInternalJob?.id) return;
     setErr(null);
@@ -1213,6 +1243,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
           ) : null}
 
           <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
+            <button onClick={runStoryboardMovie} disabled={!variantCount || !analysis}>AI Storyboard Movie</button>
             <button onClick={runPipeline} disabled={!variantCount}>Preset + Render (one click)</button>
             <button className="secondary" onClick={runInternalVideo} disabled={!variantCount}>Internal / Hosted</button>
             <button className="secondary" onClick={assemble} disabled={!variantCount}>Assemble only</button>
@@ -2483,7 +2514,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
             Audio analysis: {analysis ? "✓" : "×"} • Plan variants: {variantCount ? "✓" : "×"}
           </div>
           <div className="small" style={{ marginTop: 8 }}>
-            If motion isn’t available, the system will automatically fall back to stills and assemble a slideshow MP4.
+            AI Storyboard Movie applies the selected storyboard to prompt tracks, writes audio-reactive motion schedules, queues a full MP4, and falls back to proxy motion when diffusion is unavailable.
           </div>
 
           <hr />

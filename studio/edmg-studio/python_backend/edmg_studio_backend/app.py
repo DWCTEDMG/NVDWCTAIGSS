@@ -44,6 +44,7 @@ from .config import Settings
 from .schemas import (
     HealthResponse, ProjectCreateRequest, PlanRequest, ApplyPlanRequest,
     RenderScenesRequest, RenderMotionRequest, AssembleVideoRequest, InternalVideoRenderRequest, TimelineUpdateRequest,
+    StoryboardMovieRenderRequest,
     CreativeDirectionApplyRequest, PlannerLabImportRequest, ReactiveLabApplyRequest, ExportDeforumRequest, ExportUnrealBridgeRequest,
     ImportUnrealBridgeReturnRequest,
     BuildUnrealImportPlanRequest,
@@ -5773,6 +5774,337 @@ def _apply_plan_to_project_timeline(proj: Any, *, variant_index: int, overwrite:
     return timeline
 
 
+def _storyboard_variant_for_render(proj: Any, variant_index: int) -> tuple[dict[str, Any], list[dict[str, Any]], float]:
+    plan = proj.meta.get("last_plan") if isinstance(getattr(proj, "meta", None), dict) else None
+    if not isinstance(plan, dict):
+        raise HTTPException(400, "No AI storyboard found. Generate a plan first.")
+    variants = plan.get("variants") if isinstance(plan.get("variants"), list) else []
+    vi = int(variant_index or 0)
+    if not variants or vi < 0 or vi >= len(variants):
+        raise HTTPException(400, "Invalid variant_index")
+    variant = variants[vi] if isinstance(variants[vi], dict) else {}
+    scenes = [scene for scene in list(variant.get("scenes") or []) if isinstance(scene, dict)]
+    if not scenes:
+        raise HTTPException(400, "Selected storyboard variant has no scenes")
+    return variant, scenes, _resolved_project_duration_s(proj, variant, scenes)
+
+
+def _storyboard_scene_bounds(scene: dict[str, Any], *, index: int, total: int, duration_s: float) -> tuple[float, float]:
+    try:
+        start_s = max(0.0, float(scene.get("start_s") or 0.0))
+        end_s = max(0.0, float(scene.get("end_s") or 0.0))
+    except Exception:
+        start_s, end_s = 0.0, 0.0
+    if end_s > start_s:
+        return start_s, end_s
+    safe_total = max(1, int(total or 1))
+    slice_s = max(0.25, float(duration_s or safe_total) / float(safe_total))
+    start_s = float(index) * slice_s
+    end_s = float(duration_s) if duration_s > 0 and index == safe_total - 1 else start_s + slice_s
+    return max(0.0, start_s), max(start_s + 0.25, end_s)
+
+
+def _storyboard_analysis_features(proj: Any) -> dict[str, Any]:
+    analysis = proj.meta.get("analysis") if isinstance(getattr(proj, "meta", None), dict) else {}
+    if not isinstance(analysis, dict) or not analysis:
+        raise HTTPException(400, "No audio analysis found. Analyze project audio before rendering an audio-reactive storyboard movie.")
+    return analysis
+
+
+def _storyboard_tempo_bpm(analysis: dict[str, Any]) -> float:
+    features = analysis.get("features") if isinstance(analysis.get("features"), dict) else {}
+    for raw in (
+        features.get("bpm"),
+        features.get("tempo_bpm"),
+        features.get("tempo"),
+        analysis.get("bpm"),
+        analysis.get("tempo"),
+    ):
+        try:
+            bpm = float(raw)
+        except Exception:
+            continue
+        if bpm > 0:
+            return bpm
+    return 0.0
+
+
+def _storyboard_beat_times(analysis: dict[str, Any], *, duration_s: float, bpm: float) -> list[float]:
+    features = analysis.get("features") if isinstance(analysis.get("features"), dict) else {}
+    raw = features.get("beat_times") or features.get("beats") or analysis.get("beat_times") or analysis.get("beats") or []
+    times: list[float] = []
+    for item in list(raw or []):
+        try:
+            value = float(item)
+        except Exception:
+            continue
+        if value >= 0:
+            times.append(value)
+    if not times and bpm > 0 and duration_s > 0:
+        step = 60.0 / max(1e-6, bpm)
+        current = 0.0
+        while current <= duration_s + 1e-6 and len(times) < 160:
+            times.append(round(current, 4))
+            current += step
+    return sorted({round(t, 4) for t in times if t <= max(duration_s, 0.0) + 1e-6})[:160]
+
+
+def _storyboard_energy_at_time(overall: dict[str, Any], t: float, duration_s: float) -> float:
+    curve = [max(0.0, min(1.0, float(value))) for value in list(overall.get("energy_curve") or []) if isinstance(value, (int, float))]
+    if not curve or duration_s <= 0:
+        return max(0.0, min(1.0, float(overall.get("energy") or 0.45)))
+    idx = max(0, min(len(curve) - 1, int(round((max(0.0, t) / max(0.001, duration_s)) * (len(curve) - 1)))))
+    return curve[idx]
+
+
+def _dedupe_schedule_pairs(pairs: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    by_frame: dict[int, float] = {}
+    for frame, value in pairs:
+        by_frame[max(0, int(frame))] = float(value)
+    return [(frame, by_frame[frame]) for frame in sorted(by_frame.keys())]
+
+
+def _storyboard_upsert_track(timeline: dict[str, Any], track: dict[str, Any], *, overwrite: bool) -> None:
+    tracks = [item for item in list(timeline.get("tracks") or []) if isinstance(item, dict)]
+    track_id = str(track.get("id") or "")
+    track_type = str(track.get("type") or "").lower()
+    index = next(
+        (
+            i
+            for i, item in enumerate(tracks)
+            if str(item.get("id") or "") == track_id
+            or (track_type and str(item.get("type") or "").lower() == track_type)
+        ),
+        -1,
+    )
+    if index >= 0:
+        if overwrite or not tracks[index].get("clips"):
+            tracks[index] = {**tracks[index], **track}
+    else:
+        tracks.append(track)
+    timeline["tracks"] = tracks
+
+
+def _ensure_storyboard_movie_timeline(
+    proj: Any,
+    *,
+    variant_index: int,
+    overwrite: bool,
+    fps: int = 24,
+) -> dict[str, Any]:
+    analysis = _storyboard_analysis_features(proj)
+    variant, scenes, duration_s = _storyboard_variant_for_render(proj, variant_index)
+    timeline = proj.meta.get("timeline") if isinstance(proj.meta.get("timeline"), dict) else {}
+    timeline = deepcopy(timeline)
+
+    overall = _infer_reactivity_metrics(analysis)
+    if not float(overall.get("duration_s") or 0.0):
+        overall["duration_s"] = duration_s
+    energy_curve = [max(0.0, min(1.0, float(value))) for value in list(overall.get("energy_curve") or []) if isinstance(value, (int, float))]
+    bpm = _storyboard_tempo_bpm(analysis)
+    beat_times = _storyboard_beat_times(analysis, duration_s=duration_s, bpm=bpm)
+
+    prompt_clips: list[dict[str, Any]] = []
+    camera_keyframes: list[dict[str, Any]] = []
+    zoom_pairs: list[tuple[int, float]] = []
+    angle_pairs: list[tuple[int, float]] = []
+    tx_pairs: list[tuple[int, float]] = []
+    ty_pairs: list[tuple[int, float]] = []
+    strength_pairs: list[tuple[int, float]] = []
+    cfg_pairs: list[tuple[int, float]] = []
+    steps_pairs: list[tuple[int, float]] = []
+    denoise_pairs: list[tuple[int, float]] = []
+    prev_zoom = 1.0
+    prev_pan_x = 0.0
+    prev_pan_y = 0.0
+    prev_rot = 0.0
+
+    for index, scene in enumerate(scenes):
+        start_s, end_s = _storyboard_scene_bounds(scene, index=index, total=len(scenes), duration_s=duration_s)
+        start_frame = max(0, int(round(start_s * fps)))
+        end_frame = max(start_frame + 1, int(round(end_s * fps)))
+        metrics = _scene_metrics_from_curve(index, len(scenes), scene, overall, duration_s, energy_curve)
+        params = _compute_reactive_params(metrics, "cinematic", 1.0)
+
+        zoom_end = max(0.75, min(1.45, float(params.get("zoom") or prev_zoom)))
+        pan_x_end = max(-80.0, min(80.0, float(params.get("translation_x") or 0.0)))
+        pan_y_end = max(-60.0, min(60.0, float(params.get("translation_y") or 0.0)))
+        rot_end = max(-18.0, min(18.0, float(params.get("rotation_z") or 0.0) + float(params.get("rotation_y") or 0.0) * 0.12))
+        strength = max(0.15, min(0.92, float(params.get("strength") or 0.45)))
+        cfg = max(1.0, min(20.0, float(params.get("cfg_scale") or 7.0)))
+        steps = max(6.0, min(36.0, 10.0 + float(metrics.get("energy") or 0.45) * 18.0))
+        denoise = max(0.15, min(0.9, 0.24 + float(metrics.get("energy") or 0.45) * 0.46))
+
+        prompt_clips.append(
+            {
+                "id": f"storyboard_prompt_{index}",
+                "start_s": start_s,
+                "end_s": end_s,
+                "data": {
+                    "prompt": str(scene.get("prompt") or scene.get("name") or f"Scene {index + 1}").strip(),
+                    "negative_prompt": str(scene.get("negative_prompt") or "blurry, low quality, watermark, text, logo").strip(),
+                    "scene_id": str(scene.get("id") or index + 1),
+                },
+            }
+        )
+        camera_keyframes.extend(
+            [
+                {"t": start_s, "zoom": prev_zoom, "pan_x": prev_pan_x, "pan_y": prev_pan_y, "rotation_deg": prev_rot},
+                {"t": end_s, "zoom": zoom_end, "pan_x": pan_x_end, "pan_y": pan_y_end, "rotation_deg": rot_end},
+            ]
+        )
+        zoom_pairs.extend([(start_frame, prev_zoom), (end_frame, zoom_end)])
+        angle_pairs.extend([(start_frame, prev_rot), (end_frame, rot_end)])
+        tx_pairs.extend([(start_frame, prev_pan_x), (end_frame, pan_x_end)])
+        ty_pairs.extend([(start_frame, prev_pan_y), (end_frame, pan_y_end)])
+        strength_pairs.extend([(start_frame, strength), (end_frame, strength)])
+        cfg_pairs.extend([(start_frame, cfg), (end_frame, cfg)])
+        steps_pairs.extend([(start_frame, steps), (end_frame, steps)])
+        denoise_pairs.extend([(start_frame, denoise), (end_frame, denoise)])
+
+        prev_zoom = zoom_end
+        prev_pan_x = pan_x_end
+        prev_pan_y = pan_y_end
+        prev_rot = rot_end
+
+    for beat_index, beat_s in enumerate(beat_times):
+        frame = max(0, int(round(beat_s * fps)))
+        energy = _storyboard_energy_at_time(overall, beat_s, duration_s)
+        pulse = 1.0 + min(0.12, 0.025 + energy * 0.075)
+        direction = -1.0 if beat_index % 2 else 1.0
+        zoom_pairs.append((frame, pulse))
+        strength_pairs.append((frame, max(0.2, min(0.95, 0.28 + energy * 0.56))))
+        tx_pairs.append((frame, direction * (2.0 + energy * 10.0)))
+
+    schedules = {
+        "zoom": _format_schedule_pairs(_dedupe_schedule_pairs(zoom_pairs)),
+        "angle": _format_schedule_pairs(_dedupe_schedule_pairs(angle_pairs)),
+        "rotation_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(angle_pairs)),
+        "rotation_z_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(angle_pairs)),
+        "translation_x": _format_schedule_pairs(_dedupe_schedule_pairs(tx_pairs)),
+        "translation_y": _format_schedule_pairs(_dedupe_schedule_pairs(ty_pairs)),
+        "pan_x_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(tx_pairs)),
+        "pan_y_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(ty_pairs)),
+        "strength_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(strength_pairs)),
+        "cfg_scale_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(cfg_pairs)),
+        "steps_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(steps_pairs)),
+        "denoise_schedule": _format_schedule_pairs(_dedupe_schedule_pairs(denoise_pairs)),
+    }
+
+    _storyboard_upsert_track(
+        timeline,
+        {
+            "id": "edmg_prompt",
+            "name": "AI Storyboard Prompts",
+            "type": "prompt",
+            "clips": prompt_clips,
+        },
+        overwrite=overwrite,
+    )
+    _storyboard_upsert_track(
+        timeline,
+        {
+            "id": "edmg_motion",
+            "name": "Audio-Reactive Storyboard Motion",
+            "type": "motion",
+            "clips": [
+                {
+                    "id": "edmg_storyboard_movie_motion",
+                    "start_s": 0.0,
+                    "end_s": duration_s,
+                    "data": {
+                        "motion_schedules": schedules,
+                        **schedules,
+                        "reactive_source": "storyboard_movie",
+                        "bpm": bpm,
+                        "beat_count": len(beat_times),
+                        "scene_count": len(scenes),
+                    },
+                }
+            ],
+        },
+        overwrite=overwrite,
+    )
+
+    existing_camera = timeline.get("camera") if isinstance(timeline.get("camera"), dict) else {}
+    existing_keyframes = existing_camera.get("keyframes") if isinstance(existing_camera.get("keyframes"), list) else []
+    if overwrite or not existing_keyframes:
+        timeline["camera"] = {**existing_camera, "keyframes": _dedupe_camera_keyframes(camera_keyframes)}
+    else:
+        timeline["camera"] = {
+            **existing_camera,
+            "keyframes": _dedupe_camera_keyframes([*existing_keyframes, *camera_keyframes]),
+        }
+
+    render = timeline.get("render") if isinstance(timeline.get("render"), dict) else {}
+    timeline["render"] = {**render, "fps_output": fps}
+    timeline["fps_output"] = fps
+    timeline["duration_s"] = duration_s
+    timeline["storyboard_movie"] = {
+        "variant_index": int(variant_index or 0),
+        "scene_count": len(scenes),
+        "duration_s": duration_s,
+        "bpm": bpm,
+        "beat_count": len(beat_times),
+        "audio_reactive": True,
+        "source": "ai_storyboard",
+        "variant_name": str(variant.get("name") or ""),
+    }
+    proj.meta["timeline"] = timeline
+    return timeline
+
+
+def _storyboard_movie_payload_from_request(
+    proj: Any,
+    req: StoryboardMovieRenderRequest,
+    *,
+    duration_s: float,
+) -> dict[str, Any]:
+    preset = str(req.preset or "balanced").lower()
+    requested_tier = "draft" if preset == "fast" else ("quality" if preset in {"quality", "ultra"} else "auto")
+    hw = _hardware_profile()
+    provider_status = _render_provider_status(hw)
+    tier_plan = _build_internal_render_plan(hw, requested_tier=requested_tier, duration_s=duration_s)
+    defaults = dict(tier_plan.get("defaults") or {})
+    device_preference = str(tier_plan.get("device_preference") or "auto")
+    if device_preference == "directml" and not bool((provider_status.get("directml") or {}).get("enabled", True)):
+        device_preference = "cpu"
+
+    payload: dict[str, Any] = {
+        "variant_index": int(req.variant_index or 0),
+        "fps_output": int(req.fps_output or defaults.get("fps_output") or 24),
+        "fps_render": int(req.fps_render or defaults.get("fps_render") or 2),
+        "width": int(req.width or defaults.get("width") or 768),
+        "height": int(req.height or defaults.get("height") or 432),
+        "steps": int(defaults.get("steps") or 15),
+        "cfg": float(defaults.get("cfg") or 7.0),
+        "keyframe_interval_s": float(req.keyframe_interval_s or defaults.get("keyframe_interval_s") or 5.0),
+        "interpolation_engine": str(req.interpolation_engine or defaults.get("interpolation_engine") or "auto"),
+        "model_id": str(req.model_id or "auto"),
+        "render_mode": str(req.render_mode or "auto"),
+        "render_tier": str(tier_plan.get("applied_tier") or requested_tier),
+        "device_preference": device_preference,
+        "temporal_mode": str(req.temporal_mode or defaults.get("temporal_mode") or "keyframes"),
+        "temporal_strength": float(req.temporal_strength or defaults.get("temporal_strength") or 0.35),
+        "temporal_steps": int(defaults.get("temporal_steps") or 12),
+        "refine_every_n_frames": int(defaults.get("refine_every_n_frames") or 1),
+        "anchor_strength": float(defaults.get("anchor_strength") or 0.20),
+        "prompt_blend": bool(defaults.get("prompt_blend", True)),
+        "allow_hosted_fallback": bool(req.allow_hosted_fallback),
+        "allow_proxy_fallback": bool(req.allow_proxy_fallback),
+        "resume_existing_frames": bool(req.resume_existing_frames),
+        "storyboard_movie": {
+            "source": "ai_storyboard",
+            "project_id": str(proj.id),
+            "project_name": str(getattr(proj, "name", "") or ""),
+            "preset": preset,
+            "apply_storyboard": bool(req.apply_storyboard),
+            "overwrite_timeline": bool(req.overwrite_timeline),
+        },
+    }
+    return payload
+
+
 @app.post("/v1/projects/{project_id}/plan")
 def generate_plan(project_id: str, req: PlanRequest, mode: str = "auto"):
     proj = store.get(project_id)
@@ -8102,6 +8434,89 @@ def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) ->
 @app.post("/v1/projects/{project_id}/render/internal/preflight")
 def render_internal_preflight(project_id: str, req: InternalVideoRenderRequest):
     return _internal_render_preflight_data(project_id, _request_payload(req))
+
+
+@app.post("/v1/projects/{project_id}/render/storyboard_movie")
+def render_storyboard_movie(project_id: str, req: StoryboardMovieRenderRequest):
+    """Queue a full MP4 from the saved AI storyboard and audio-reactive timeline."""
+    proj = store.get(project_id)
+    if not proj:
+        raise HTTPException(404, "Project not found")
+
+    _storyboard_analysis_features(proj)
+    _variant, scenes, duration_s = _storyboard_variant_for_render(proj, int(req.variant_index or 0))
+    if req.apply_storyboard:
+        _apply_plan_to_project_timeline(
+            proj,
+            variant_index=int(req.variant_index or 0),
+            overwrite=bool(req.overwrite_timeline),
+        )
+    timeline = _ensure_storyboard_movie_timeline(
+        proj,
+        variant_index=int(req.variant_index or 0),
+        overwrite=bool(req.overwrite_timeline),
+        fps=int(req.fps_output or 24),
+    )
+    store.save(proj)
+
+    payload = _storyboard_movie_payload_from_request(proj, req, duration_s=duration_s)
+    preflight = _internal_render_preflight_data(project_id, payload)
+    payload["render_mode"] = str(preflight.get("mode") or payload.get("render_mode") or "auto")
+    storyboard_meta = payload.setdefault("storyboard_movie", {})
+    storyboard_meta.update(
+        {
+            "scene_count": len(scenes),
+            "duration_s": duration_s,
+            "audio_reactive": True,
+            "timeline": timeline.get("storyboard_movie"),
+            "preflight_mode": preflight.get("mode"),
+        }
+    )
+
+    job = jobs.create(project_id, "internal_video", payload)
+    job.progress = {
+        "stage": "queued",
+        "current": 0,
+        "total": max(1, int(preflight.get("estimated_frames", 1)) + 3),
+        "percent": 0.0,
+        "message": f"Queued audio-reactive storyboard movie ({preflight.get('mode') or 'auto'})",
+    }
+    jobs.save(job)
+
+    latest = store.get(project_id) or proj
+    latest.meta.setdefault("jobs", []).append(job.__dict__)
+    latest.meta["last_storyboard_movie"] = {
+        "job_id": job.id,
+        "queued_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "variant_index": int(req.variant_index or 0),
+        "scene_count": len(scenes),
+        "duration_s": duration_s,
+        "render_mode": payload["render_mode"],
+        "audio_reactive": True,
+        "preflight": {
+            "mode": preflight.get("mode"),
+            "model_id": preflight.get("model_id"),
+            "estimated_frames": preflight.get("estimated_frames"),
+            "duration_s": preflight.get("duration_s"),
+        },
+    }
+    store.save(latest)
+
+    return {
+        "ok": True,
+        "mode": "storyboard_movie",
+        "render_mode": payload["render_mode"],
+        "job": job.__dict__,
+        "preflight": preflight,
+        "storyboard": {
+            "variant_index": int(req.variant_index or 0),
+            "scene_count": len(scenes),
+            "duration_s": duration_s,
+            "audio_reactive": True,
+            "timeline": timeline.get("storyboard_movie"),
+        },
+    }
+
 
 @app.post("/v1/projects/{project_id}/render/comfyui/motion_scenes")
 def render_motion_scenes(project_id: str, req: RenderMotionRequest):

@@ -209,16 +209,16 @@ EDMG Core integration:
 2. Upload audio
 3. Analyze + transcribe with NVIDIA services where configured
 4. Generate NVIDIA/OpenUSD scene-plan variants with NIM
-5. Queue RTX render handoff jobs for Kit, or use internal/ComfyUI secondary lanes when explicitly selected
-6. Assemble MP4 (FFmpeg slideshow + audio)
+5. Use **Render -> AI Storyboard Movie** to apply the selected AI storyboard, write audio-reactive motion schedules, and queue a full MP4 job
+6. Queue RTX render handoff jobs for Kit when you need OpenUSD/RTX staging
 7. Export Deforum settings (optional)
 
 
 ## Default rendering path
 
-Studio's default production render path is the **NVIDIA Kit/OpenUSD/RTX handoff** backed by the Studio backend runtime, NIM planning, render-job JSON, and FFmpeg assembly.
+Studio's default movie path is **AI Storyboard Movie**: NIM creates the story pass, Studio writes prompt and audio-reactive motion tracks, the internal renderer produces a frame sequence, and FFmpeg assembles/muxes the final MP4. If no diffusion model is available, the same command falls back to proxy motion so the project still produces a usable timed movie.
 
-Use the internal renderer or ComfyUI only when you explicitly want a secondary still or motion workflow.
+The NVIDIA Kit/OpenUSD/RTX handoff remains the default path for inspectable 3D stage work and RTX render jobs. Use ComfyUI only when you explicitly want its optional still or motion workflows.
 
 ## Optional OpenClaw operator shell
 

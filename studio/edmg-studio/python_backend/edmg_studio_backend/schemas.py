@@ -189,6 +189,29 @@ class InternalVideoRenderRequest(BaseModel):
     deforum_translation_y: str | dict[str, float] | None = None
     deforum_strength_schedule: str | dict[str, float] | None = None
 
+
+class StoryboardMovieRenderRequest(BaseModel):
+    """One-command path from saved AI storyboard to an audio-reactive MP4 job."""
+
+    variant_index: int = Field(default=0, ge=0)
+    preset: Literal["fast", "balanced", "quality", "ultra"] = "balanced"
+    render_mode: Literal["auto", "diffusion", "hosted", "proxy"] = "auto"
+    model_id: str = "auto"
+    apply_storyboard: bool = True
+    overwrite_timeline: bool = True
+    allow_hosted_fallback: bool = True
+    allow_proxy_fallback: bool = True
+
+    fps_output: int | None = Field(default=None, ge=1, le=60)
+    fps_render: int | None = Field(default=None, ge=1, le=30)
+    width: int | None = Field(default=None, ge=256, le=1920)
+    height: int | None = Field(default=None, ge=256, le=1080)
+    keyframe_interval_s: float | None = Field(default=None, ge=0.5, le=60.0)
+    interpolation_engine: Literal["auto", "minterpolate", "fps", "rife"] | None = None
+    temporal_mode: Literal["off", "keyframes", "frame_img2img"] | None = None
+    temporal_strength: float | None = Field(default=None, ge=0.01, le=0.99)
+    resume_existing_frames: bool = True
+
 class TimelineUpdateRequest(BaseModel):
     timeline: dict[str, Any] = Field(default_factory=dict)
 

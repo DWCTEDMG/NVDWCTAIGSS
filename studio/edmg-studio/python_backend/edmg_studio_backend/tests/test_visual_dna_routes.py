@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from edmg_studio_backend import app as backend_app
+from edmg_studio_backend.schemas import StoryboardMovieRenderRequest
 from edmg_studio_backend.store.jobs import JobStore
 from edmg_studio_backend.store.projects import ProjectStore
 
@@ -202,3 +203,83 @@ def test_reactive_apply_and_conductor_plan_routes_use_visual_dna(tmp_path, monke
         assert outputs_payload["unreal_returns"][0]["source_dir"].endswith("/returned")
         assert len(outputs_payload["unreal_returns"][0]["media"]) == 2
         assert any(item["kind"] == "unreal_bridge_return" for item in outputs_payload["videos"])
+
+
+def test_storyboard_movie_route_applies_reactive_timeline_and_queues_job(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path / "data")
+    jobs = JobStore(store.projects_dir)
+    proj = store.create("Storyboard Movie")
+    audio_path = store.project_dir(proj.id) / "assets" / "audio" / "track.wav"
+    audio_path.write_bytes(b"fake-wav")
+    proj.meta = {
+        "audio": {"filename": "track.wav", "size_bytes": audio_path.stat().st_size},
+        "analysis": {
+            "features": {
+                "duration_s": 8.0,
+                "bpm": 120,
+                "energy_curve": [0.2, 0.45, 0.9, 0.55, 0.3, 0.72, 0.84, 0.4],
+                "beat_times": [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            },
+            "tags": ["neon", "stage"],
+        },
+        "last_plan": {
+            "duration_s": 8.0,
+            "variants": [
+                {
+                    "name": "NIM storyboard",
+                    "duration_s": 8.0,
+                    "scenes": [
+                        {"id": "intro", "start_s": 0.0, "end_s": 4.0, "prompt": "neon stage opens"},
+                        {"id": "drop", "start_s": 4.0, "end_s": 8.0, "prompt": "drop hits with light columns"},
+                    ],
+                }
+            ],
+        },
+        "timeline": {"layers": [], "camera": {"keyframes": []}},
+    }
+    store.save(proj)
+
+    monkeypatch.setattr(backend_app, "store", store)
+    monkeypatch.setattr(backend_app, "jobs", jobs)
+    monkeypatch.setattr(
+        backend_app,
+        "_hardware_profile",
+        lambda: {
+            "backend": "cpu",
+            "backend_family": "cpu_only",
+            "ram_gb": 16.0,
+            "cpu_threads": 8,
+            "device_name": "test cpu",
+        },
+    )
+
+    response = backend_app.render_storyboard_movie(
+        proj.id,
+        StoryboardMovieRenderRequest(
+            variant_index=0,
+            preset="fast",
+            render_mode="proxy",
+            fps_output=24,
+            fps_render=1,
+        ),
+    )
+
+    assert response["ok"] is True
+    assert response["render_mode"] == "proxy"
+    assert response["job"]["type"] == "internal_video"
+    assert response["job"]["payload"]["storyboard_movie"]["audio_reactive"] is True
+    assert response["preflight"]["mode"] == "proxy"
+
+    saved = store.get(proj.id)
+    assert saved is not None
+    assert saved.meta["last_storyboard_movie"]["job_id"] == response["job"]["id"]
+    tracks = saved.meta["timeline"]["tracks"]
+    prompt_track = next(track for track in tracks if track["type"] == "prompt")
+    motion_track = next(track for track in tracks if track["type"] == "motion")
+    assert prompt_track["clips"][0]["data"]["prompt"] == "neon stage opens"
+    motion_data = motion_track["clips"][0]["data"]
+    assert motion_data["reactive_source"] == "storyboard_movie"
+    assert motion_data["beat_count"] == 7
+    assert "zoom" in motion_data["motion_schedules"]
+    assert saved.meta["timeline"]["storyboard_movie"]["audio_reactive"] is True
+    assert len(saved.meta["timeline"]["camera"]["keyframes"]) >= 2
