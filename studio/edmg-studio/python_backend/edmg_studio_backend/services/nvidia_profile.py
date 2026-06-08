@@ -27,10 +27,14 @@ def _service(base_url_env: str, *, model_env: str = "") -> dict[str, Any]:
     return service
 
 
+DEFAULT_NVIDIA_NIM_URL = "http://127.0.0.1:8001/v1"
+DEFAULT_NVIDIA_NIM_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+
+
 def nvidia_profile_status() -> dict[str, Any]:
     """Return NVIDIA service-profile configuration without exposing secrets."""
 
-    nim_url = _env("EDMG_NVIDIA_NIM_URL") or _env("EDMG_AI_OPENAI_COMPAT_BASE_URL")
+    nim_url = _env("EDMG_NVIDIA_NIM_URL") or _env("EDMG_AI_OPENAI_COMPAT_BASE_URL", DEFAULT_NVIDIA_NIM_URL)
     riva_url = _env("EDMG_NVIDIA_RIVA_URL") or _env("EDMG_RIVA_URL")
     omniverse_url = _env("EDMG_NVIDIA_OMNIVERSE_URL")
     ngc_api_key = _env("NGC_API_KEY")
@@ -42,7 +46,7 @@ def nvidia_profile_status() -> dict[str, Any]:
     )
 
     return {
-        "enabled": _truthy(_env("EDMG_NVIDIA_MODE", "0")),
+        "enabled": _truthy(_env("EDMG_NVIDIA_MODE", "1")),
         "profile": _env("EDMG_NVIDIA_PROFILE", "omniverse") or "omniverse",
         "credentials": {
             "ngc_api_key_configured": _configured(ngc_api_key),
@@ -50,7 +54,7 @@ def nvidia_profile_status() -> dict[str, Any]:
         "services": {
             "nim": {
                 "base_url": nim_url,
-                "model": _env("EDMG_AI_OPENAI_COMPAT_MODEL"),
+                "model": _env("EDMG_AI_OPENAI_COMPAT_MODEL", DEFAULT_NVIDIA_NIM_MODEL),
                 "configured": _configured(nim_url),
             },
             "riva": {

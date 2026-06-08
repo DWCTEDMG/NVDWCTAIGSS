@@ -590,9 +590,9 @@ export default function Models(props: PageProps) {
 
         {!renderProviders?.stability?.visible && !renderProviders?.directml?.available ? (
           <div className="card" style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900 }}>Runtime bridges</div>
+            <div style={{ fontWeight: 900 }}>Secondary runtime bridges</div>
             <div className="small" style={{ marginTop: 6 }}>
-              No optional hosted or hardware-specific runtime bridge is active yet. The default internal render path and model install flow remain unchanged.
+              No secondary hosted or hardware-specific runtime bridge is active yet. The NVIDIA/OpenUSD handoff and model install flow remain the primary path.
             </div>
           </div>
         ) : null}

@@ -141,12 +141,12 @@ const DEV_SERVER_URL =
 
 const AI_SETTINGS_DEFAULTS = Object.freeze({
   mode: "local",
-  provider: "ollama",
+  provider: "openai_compat",
   aiBaseUrl: "http://127.0.0.1:7862",
   ollamaUrl: "http://127.0.0.1:11434",
   ollamaModel: "qwen3:8b",
-  openaiCompatBaseUrl: "http://127.0.0.1:8000",
-  openaiCompatModel: "qwen3-8b",
+  openaiCompatBaseUrl: "http://127.0.0.1:8001/v1",
+  openaiCompatModel: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
 });
 
 const AI_SETTINGS_ENV_KEYS = Object.freeze({
@@ -543,6 +543,11 @@ function normalizeAiSettings(rawSettings = {}) {
   };
 }
 
+function defaultNvidiaNimUrl(openaiCompatBaseUrl = "") {
+  const baseUrl = String(openaiCompatBaseUrl || AI_SETTINGS_DEFAULTS.openaiCompatBaseUrl).trim();
+  return baseUrl.replace(/\/v1\/?$/i, "") || "http://127.0.0.1:8001";
+}
+
 function normalizeBackendSettings(rawSettings = {}) {
   const current = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
   const mode = normalizeBackendMode(current.mode);
@@ -638,6 +643,15 @@ function syncAiSettingsToProcessEnv(rawSettings) {
   process.env.EDMG_AI_OLLAMA_MODEL = aiSettings.ollamaModel;
   process.env.EDMG_AI_OPENAI_COMPAT_BASE_URL = aiSettings.openaiCompatBaseUrl;
   process.env.EDMG_AI_OPENAI_COMPAT_MODEL = aiSettings.openaiCompatModel;
+  if (!String(process.env.EDMG_NVIDIA_MODE ?? "").trim()) {
+    process.env.EDMG_NVIDIA_MODE = "1";
+  }
+  if (!String(process.env.EDMG_NVIDIA_PROFILE ?? "").trim()) {
+    process.env.EDMG_NVIDIA_PROFILE = "omniverse";
+  }
+  if (!String(process.env.EDMG_NVIDIA_NIM_URL ?? "").trim()) {
+    process.env.EDMG_NVIDIA_NIM_URL = defaultNvidiaNimUrl(aiSettings.openaiCompatBaseUrl);
+  }
   return aiSettings;
 }
 
@@ -847,6 +861,17 @@ function buildManagedAiEnv() {
     EDMG_AI_OLLAMA_MODEL: aiSettings.ollamaModel,
     EDMG_AI_OPENAI_COMPAT_BASE_URL: aiSettings.openaiCompatBaseUrl,
     EDMG_AI_OPENAI_COMPAT_MODEL: aiSettings.openaiCompatModel,
+    EDMG_NVIDIA_MODE: String(process.env.EDMG_NVIDIA_MODE ?? "1").trim() || "1",
+    EDMG_NVIDIA_PROFILE: String(process.env.EDMG_NVIDIA_PROFILE ?? "omniverse").trim() || "omniverse",
+    EDMG_NVIDIA_NIM_URL:
+      String(process.env.EDMG_NVIDIA_NIM_URL ?? "").trim() ||
+      defaultNvidiaNimUrl(aiSettings.openaiCompatBaseUrl),
+    EDMG_NVIDIA_RIVA_URL: String(process.env.EDMG_NVIDIA_RIVA_URL ?? "127.0.0.1:50051").trim(),
+    EDMG_NVIDIA_RIVA_ASR: String(process.env.EDMG_NVIDIA_RIVA_ASR ?? "0").trim() || "0",
+    EDMG_NVIDIA_RIVA_LANGUAGE_CODE:
+      String(process.env.EDMG_NVIDIA_RIVA_LANGUAGE_CODE ?? "en-US").trim() || "en-US",
+    EDMG_NVIDIA_RIVA_ASR_FALLBACK:
+      String(process.env.EDMG_NVIDIA_RIVA_ASR_FALLBACK ?? "1").trim() || "1",
   };
 }
 

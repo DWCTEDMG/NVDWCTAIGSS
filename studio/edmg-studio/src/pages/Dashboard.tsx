@@ -131,10 +131,10 @@ export default function Dashboard({ backendUrl, config, onNavigate }: PageProps)
           <li>Create a project</li>
           <li>Upload audio</li>
           <li>Analyze/transcribe</li>
-          <li>Generate plan variants</li>
-          <li>Render with the internal renderer by default, or use ComfyUI optionally</li>
+          <li>Generate the NVIDIA/OpenUSD scene plan</li>
+          <li>Export an NVIDIA RTX render job for Omniverse Kit</li>
           <li>Assemble MP4 (FFmpeg)</li>
-          <li>Export Deforum JSON (optional)</li>
+          <li>Use local renderer, ComfyUI, or Deforum only as fallback/export lanes</li>
         </ol>
       </div>
     ),

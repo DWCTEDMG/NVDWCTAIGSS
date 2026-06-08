@@ -94,6 +94,22 @@ def test_nvidia_profile_status_uses_openai_compat_url_as_nim_fallback(monkeypatc
     assert status["services"]["nim"]["configured"] is True
 
 
+def test_nvidia_profile_status_defaults_to_nvidia_first(monkeypatch):
+    monkeypatch.delenv("EDMG_NVIDIA_MODE", raising=False)
+    monkeypatch.delenv("EDMG_NVIDIA_NIM_URL", raising=False)
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", raising=False)
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_MODEL", raising=False)
+    monkeypatch.delenv("NGC_API_KEY", raising=False)
+
+    status = nvidia_profile_status()
+
+    assert status["enabled"] is True
+    assert status["profile"] == "omniverse"
+    assert status["services"]["nim"]["base_url"] == "http://127.0.0.1:8001/v1"
+    assert status["services"]["nim"]["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert status["services"]["nim"]["configured"] is True
+
+
 def test_nvidia_status_route_does_not_return_secret(monkeypatch):
     monkeypatch.setenv("EDMG_NVIDIA_MODE", "1")
     monkeypatch.setenv("NGC_API_KEY", "route-secret-token")
@@ -271,6 +287,23 @@ def test_setup_ai_config_labels_nvidia_openai_compat(monkeypatch):
 
     assert payload["label"] == "NVIDIA NIM / OpenAI-compatible provider"
     assert payload["model"] == "nvidia/model"
+    assert payload["nvidia_profile"]["enabled"] is True
+
+
+def test_setup_ai_config_defaults_to_nvidia_openai_compat(monkeypatch):
+    monkeypatch.delenv("EDMG_AI_PROVIDER", raising=False)
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", raising=False)
+    monkeypatch.delenv("EDMG_AI_OPENAI_COMPAT_MODEL", raising=False)
+    monkeypatch.delenv("EDMG_NVIDIA_MODE", raising=False)
+    monkeypatch.delenv("EDMG_NVIDIA_NIM_URL", raising=False)
+
+    payload = backend_app._setup_ai_config()
+
+    assert payload["provider"] == "openai_compat"
+    assert payload["label"] == "NVIDIA NIM / OpenAI-compatible provider"
+    assert payload["base_url"] == "http://127.0.0.1:8001/v1"
+    assert payload["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert payload["ollama_required"] is False
     assert payload["nvidia_profile"]["enabled"] is True
 
 

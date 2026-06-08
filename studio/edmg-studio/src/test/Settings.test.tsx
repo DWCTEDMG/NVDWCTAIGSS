@@ -29,11 +29,13 @@ describe("Settings page", () => {
     installFetchMock({
       "/v1/config": {
         ai_mode: "local",
-        ai_provider: "ollama",
+        ai_provider: "openai_compat",
         ai_ollama_url: "http://127.0.0.1:11434",
         ai_ollama_model: "qwen3:8b",
+        ai_openai_compat_base_url: "http://127.0.0.1:8001/v1",
+        ai_openai_compat_model: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
       },
-      "/v1/ai/status": { ok: true, provider: "ollama" },
+      "/v1/ai/status": { ok: true, provider: "openai_compat" },
       "/v1/nvidia/status": {
         ok: true,
         nvidia: {
@@ -41,7 +43,7 @@ describe("Settings page", () => {
           profile: "omniverse",
           credentials: { ngc_api_key_configured: true },
           services: {
-            nim: { configured: true, base_url: "http://127.0.0.1:8000/v1", model: "nvidia/model" },
+            nim: { configured: true, base_url: "http://127.0.0.1:8001/v1", model: "nvidia/model" },
             riva: { configured: true, base_url: "http://127.0.0.1:50051" },
             omniverse: { configured: false, base_url: "" },
             triton: { configured: true, base_url: "http://127.0.0.1:8002", model: "edmg_ensemble" },
@@ -60,7 +62,7 @@ describe("Settings page", () => {
             nim: {
               probe: {
                 reachable: true,
-                models_url: "http://127.0.0.1:8000/v1/models",
+                models_url: "http://127.0.0.1:8001/v1/models",
               },
             },
             triton: {
@@ -159,7 +161,7 @@ describe("Settings page", () => {
     expect(await screen.findByText(/Saved\. Restart Studio so it relaunches against the selected backend target\./)).toBeTruthy();
     expect(await screen.findByText("NVIDIA service profile")).toBeTruthy();
     expect(await screen.findByText("NVIDIA runtime diagnostics")).toBeTruthy();
-    expect(await screen.findByText("Optional NVIDIA services")).toBeTruthy();
+    expect(await screen.findByText("NVIDIA service stack")).toBeTruthy();
     expect(await screen.findByText("Audio2Face")).toBeTruthy();
     expect(await screen.findByText("Triton")).toBeTruthy();
     expect(await screen.findByText("edmg_ensemble")).toBeTruthy();

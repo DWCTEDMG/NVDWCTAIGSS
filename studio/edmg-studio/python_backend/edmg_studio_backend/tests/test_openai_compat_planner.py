@@ -68,13 +68,13 @@ def test_openai_compat_planner_requests_json_schema(monkeypatch):
     planner = OpenAICompatPlanner(
         base_url="http://127.0.0.1:8001/v1",
         api_key=None,
-        model="meta/llama-3.2-1b-instruct",
+        model="nvidia/llama-3.3-nemotron-super-49b-v1.5",
         timeout_s=123,
     )
     plan = planner.plan(PlanRequest(title="Smoke", duration_s=6, num_variants=1, max_scenes=1))
 
     assert plan.provider == "openai_compat"
-    assert plan.model == "meta/llama-3.2-1b-instruct"
+    assert plan.model == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     assert plan.variants[0].scenes[0].camera == "wide push"
     assert plan.variants[0].scenes[0].notes == "NIM generated; schema coercion"
     assert captured["json"]["response_format"] == {"type": "json_object"}

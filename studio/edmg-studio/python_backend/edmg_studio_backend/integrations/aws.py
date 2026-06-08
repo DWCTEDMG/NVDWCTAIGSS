@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any
+from urllib.parse import urlparse
 
 
 def _require_boto3():
@@ -30,6 +31,26 @@ def _truthy(value: str | None) -> bool:
 def _clean_part(value: str, fallback: str) -> str:
     raw = str(value or "").strip().strip("/\\") or fallback
     return re.sub(r"[^A-Za-z0-9._=-]+", "-", raw).strip(".-") or fallback
+
+
+def _first_string(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _parse_s3_uri(value: str) -> tuple[str, str] | None:
+    raw = str(value or "").strip()
+    if not raw.lower().startswith("s3://"):
+        return None
+    parsed = urlparse(raw)
+    bucket = str(parsed.netloc or "").strip()
+    key = str(parsed.path or "").lstrip("/")
+    if not bucket or not key:
+        return None
+    return bucket, key
 
 
 @dataclass
@@ -134,13 +155,63 @@ class S3ModelCache:
             return None
         return cls(settings_from_env())
 
-    def object_key_for(self, entry: dict[str, Any], path: Path) -> str:
+    def _explicit_object_location(self, entry: dict[str, Any]) -> tuple[str, str] | None:
+        target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
+        uri = _first_string(
+            entry.get("s3_uri"),
+            entry.get("aws_s3_uri"),
+            entry.get("s3_url"),
+            target.get("s3_uri"),
+            target.get("aws_s3_uri"),
+            target.get("s3_url"),
+        )
+        if uri:
+            parsed = _parse_s3_uri(uri)
+            if parsed is not None:
+                return parsed
+
+        key = _first_string(
+            entry.get("s3_key"),
+            entry.get("aws_s3_key"),
+            entry.get("object_key"),
+            entry.get("key"),
+            target.get("s3_key"),
+            target.get("aws_s3_key"),
+            target.get("object_key"),
+            target.get("key"),
+        )
+        if not key:
+            return None
+
+        parsed = _parse_s3_uri(key)
+        if parsed is not None:
+            return parsed
+
+        bucket = _first_string(
+            entry.get("s3_bucket"),
+            entry.get("aws_s3_bucket"),
+            target.get("s3_bucket"),
+            target.get("aws_s3_bucket"),
+            self.settings.bucket,
+        )
+        return bucket, key.strip("/")
+
+    def _default_object_key_for(self, entry: dict[str, Any], path: Path) -> str:
         target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
         folder = _clean_part(str(target.get("folder") or "models"), "models")
         model_id = _clean_part(str(entry.get("id") or path.stem), path.stem)
         filename = _clean_part(path.name, "model")
         prefix = self.settings.prefix.strip("/")
         return "/".join(part for part in (prefix, folder, model_id, filename) if part)
+
+    def object_location_for(self, entry: dict[str, Any], path: Path) -> tuple[str, str]:
+        explicit = self._explicit_object_location(entry)
+        if explicit is not None:
+            return explicit
+        return self.settings.bucket, self._default_object_key_for(entry, path)
+
+    def object_key_for(self, entry: dict[str, Any], path: Path) -> str:
+        return self.object_location_for(entry, path)[1]
 
     def _is_missing_object(self, exc: Exception) -> bool:
         response = getattr(exc, "response", {})
@@ -149,25 +220,25 @@ class S3ModelCache:
         return code in {"404", "NoSuchKey", "NotFound"}
 
     def download_model(self, entry: dict[str, Any], dest: Path) -> bool:
-        key = self.object_key_for(entry, dest)
+        bucket, key = self.object_location_for(entry, dest)
         ClientError = _require_client_error()
         try:
-            self._client.head_object(Bucket=self.settings.bucket, Key=key)
+            self._client.head_object(Bucket=bucket, Key=key)
         except ClientError as exc:
             if self._is_missing_object(exc):
                 return False
             raise
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_suffix(dest.suffix + ".s3.tmp")
-        self._client.download_file(self.settings.bucket, key, str(tmp))
+        self._client.download_file(bucket, key, str(tmp))
         tmp.replace(dest)
         return True
 
     def model_exists(self, entry: dict[str, Any], path: Path) -> str | None:
-        key = self.object_key_for(entry, path)
+        bucket, key = self.object_location_for(entry, path)
         ClientError = _require_client_error()
         try:
-            self._client.head_object(Bucket=self.settings.bucket, Key=key)
+            self._client.head_object(Bucket=bucket, Key=key)
         except ClientError as exc:
             if self._is_missing_object(exc):
                 return None
@@ -177,7 +248,7 @@ class S3ModelCache:
     def upload_model(self, entry: dict[str, Any], path: Path) -> str:
         if not path.exists() or not path.is_file():
             raise RuntimeError(f"Model cache upload source is not a file: {path}")
-        key = self.object_key_for(entry, path)
+        bucket, key = self.object_location_for(entry, path)
         metadata = {
             "model_id": _clean_part(str(entry.get("id") or path.stem), path.stem)[:128],
             "source": _clean_part(str(entry.get("source") or "unknown"), "unknown")[:128],
@@ -186,5 +257,5 @@ class S3ModelCache:
         extra_args: dict[str, Any] = {"Metadata": metadata}
         if self.settings.storage_class:
             extra_args["StorageClass"] = self.settings.storage_class
-        self._client.upload_file(str(path), self.settings.bucket, key, ExtraArgs=extra_args)
+        self._client.upload_file(str(path), bucket, key, ExtraArgs=extra_args)
         return key

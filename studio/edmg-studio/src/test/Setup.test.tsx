@@ -25,7 +25,7 @@ describe("Setup page", () => {
             gpu: { ok: true, gpus: [{ name: "Test RTX" }] },
             docker: { ok: true, nvidia_runtime: true },
           },
-          services: { nim: { model: "nvidia/model", probe: { reachable: true, models_url: "http://127.0.0.1:8000/v1/models" } } },
+          services: { nim: { model: "nvidia/model", probe: { reachable: true, models_url: "http://127.0.0.1:8001/v1/models" } } },
           readiness: {
             level: "ready",
             summary: "NVIDIA profile, local GPU runtime, NGC access, and NIM planner endpoint are ready.",
@@ -95,7 +95,7 @@ describe("Setup page", () => {
     expect(await screen.findByText("0) System Setup")).toBeTruthy();
     expect(await screen.findByText(/Linux and macOS use the manual setup path/)).toBeTruthy();
     expect(await screen.findByText(/Linux support expects a system-installed/i)).toBeTruthy();
-    expect(await screen.findByText(/Linux support uses a manually installed ComfyUI instance.*optional workflows/i)).toBeTruthy();
+    expect(await screen.findByText(/Linux support uses a manually installed ComfyUI instance.*secondary workflows/i)).toBeTruthy();
   });
 
   it("shows a cancel button for active installer tasks", async () => {

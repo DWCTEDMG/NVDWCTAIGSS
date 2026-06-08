@@ -106,7 +106,7 @@ export default function Sidebar({
         </div>
       </div>
       <div className="small sidebar-tagline">
-        Desktop UI + managed or external backend + internal renderer + optional ComfyUI + AI + EDMG Core
+        NVIDIA-first Studio control for NIM planning, OpenUSD handoff, RTX render jobs, and local fallback engines
       </div>
 
       <div className="sidebar-focusCard">
@@ -157,9 +157,9 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <span className="badge">backend configurable</span>
-        <span className="badge">Ollama 11434</span>
-        <span className="badge">ComfyUI 8188</span>
+        <span className="badge">NVIDIA profile</span>
+        <span className="badge">NIM 8001</span>
+        <span className="badge">Kit / OpenUSD</span>
       </div>
     </div>
   );

@@ -118,4 +118,19 @@ If your OpenAI-compatible gateway exposes a different model alias, override
 - ComfyUI renders are queued locally.
 - Planning/transcription run in-process by default through the selected provider; an external AI service on `7862` is optional.
 - EDMG Core is bundled into the Studio backend install/build target; Studio Setup can repair or reinstall it if needed.
+
+## S3-backed model hosting
+
+Set these variables before starting the backend to enable S3-backed model storage:
+
+```bash
+EDMG_AWS_MODEL_CACHE=1
+EDMG_AWS_MODEL_CACHE_BUCKET=your-model-bucket
+EDMG_AWS_MODEL_CACHE_PREFIX=models
+EDMG_MODEL_STORAGE_MODE=local_cache  # or cloud_only for supported single-file assets
+```
+
+AWS credentials are resolved through the standard AWS SDK provider chain. S3-compatible storage can set `EDMG_S3_ENDPOINT_URL`.
+
+Catalog or user-model entries may use `source: "s3"` with `s3_uri: "s3://bucket/key"` or `s3_key: "prefix/model.safetensors"`. When a ComfyUI checkpoint, LoRA, ControlNet, VAE, or similar single-file asset is selected for rendering, Studio restores it from S3 into the configured models directory and returns a local runtime path.
 - FFmpeg defaults to the Studio-bundled binary when available; `EDMG_FFMPEG_PATH` remains an override.

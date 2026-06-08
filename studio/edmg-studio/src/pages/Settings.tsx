@@ -44,12 +44,12 @@ type SettingsPanelId =
 
 const DEFAULT_AI_SETTINGS: StudioAiSettings = {
   mode: "local",
-  provider: "ollama",
+  provider: "openai_compat",
   aiBaseUrl: "http://127.0.0.1:7862",
   ollamaUrl: "http://127.0.0.1:11434",
   ollamaModel: "qwen3:8b",
-  openaiCompatBaseUrl: "http://127.0.0.1:8000",
-  openaiCompatModel: "qwen3-8b",
+  openaiCompatBaseUrl: "http://127.0.0.1:8001/v1",
+  openaiCompatModel: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   source: "default",
 };
 
@@ -623,7 +623,7 @@ export default function Settings(props: PageProps) {
       {
         id: "comfyui" as const,
         label: "ComfyUI workflow",
-        description: "Reference guidance for the optional ComfyUI routing path.",
+        description: "Reference guidance for the secondary ComfyUI routing path.",
       },
       {
         id: "deforum" as const,
@@ -833,7 +833,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>AI Provider</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          These are Studio startup settings for planning and prompt generation. Save them here, then restart Studio so the backend relaunches on the selected provider.
+          These are Studio startup settings for planning and prompt generation. NVIDIA NIM / OpenAI-compatible is the default path; save changes here, then restart Studio so the backend relaunches on the selected provider.
         </div>
         <div className="small" style={{ marginBottom: 12, opacity: 0.85 }}>
           Saved startup config: <b>{aiSettingsLoaded ? `${aiDraft.mode === "http" ? "remote_ai_service" : aiDraft.provider}` : "loading"}</b>
@@ -854,8 +854,8 @@ export default function Settings(props: PageProps) {
               <div>
                 <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Local provider</div>
                 <select value={aiDraft.provider} onChange={(e) => updateAiDraft({ provider: e.target.value })}>
-                  <option value="ollama">Ollama</option>
-                  <option value="openai_compat">OpenAI-compatible</option>
+                  <option value="openai_compat">NVIDIA NIM / OpenAI-compatible</option>
+                  <option value="ollama">Ollama fallback</option>
                   <option value="rule_based">Rule-based fallback</option>
                 </select>
               </div>
@@ -871,7 +871,7 @@ export default function Settings(props: PageProps) {
                     <input value={aiDraft.ollamaModel} onChange={(e) => updateAiDraft({ ollamaModel: e.target.value })} placeholder="qwen3:8b" />
                   </div>
                   <div className="small" style={{ opacity: 0.82 }}>
-                    Recommended local planning default. Use <code>qwen3:4b</code> on lighter CPU-only or low-memory systems.
+                    Local fallback planner. Use <code>qwen3:4b</code> on lighter CPU-only or low-memory systems.
                   </div>
                 </>
               ) : null}
@@ -879,12 +879,12 @@ export default function Settings(props: PageProps) {
               {aiDraft.provider === "openai_compat" ? (
                 <>
                   <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>OpenAI-compatible base URL</div>
-                    <input value={aiDraft.openaiCompatBaseUrl} onChange={(e) => updateAiDraft({ openaiCompatBaseUrl: e.target.value })} placeholder="http://127.0.0.1:8000" />
+                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>NVIDIA NIM / OpenAI-compatible base URL</div>
+                    <input value={aiDraft.openaiCompatBaseUrl} onChange={(e) => updateAiDraft({ openaiCompatBaseUrl: e.target.value })} placeholder="http://127.0.0.1:8001/v1" />
                   </div>
                   <div>
                     <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Model</div>
-                    <input value={aiDraft.openaiCompatModel} onChange={(e) => updateAiDraft({ openaiCompatModel: e.target.value })} placeholder="qwen3-8b" />
+                    <input value={aiDraft.openaiCompatModel} onChange={(e) => updateAiDraft({ openaiCompatModel: e.target.value })} placeholder="nvidia/llama-3.3-nemotron-super-49b-v1.5" />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "center" }}>
                     <div>
@@ -902,7 +902,7 @@ export default function Settings(props: PageProps) {
                     <button className="secondary" disabled={saving || !secrets?.has_openai_compat_api_key} onClick={() => clearSecret("openai_compat_api_key")}>Clear</button>
                   </div>
                   <div className="small" style={{ opacity: 0.82 }}>
-                    Use this for OpenAI-style endpoints such as hosted gateways, self-hosted vLLM/TGI adapters, or local tools that expose <code>/v1/chat/completions</code>.
+                    Use this for NVIDIA NIM first, or another OpenAI-style endpoint when a fallback gateway exposes <code>/v1/chat/completions</code>.
                   </div>
                 </>
               ) : null}
@@ -978,7 +978,7 @@ export default function Settings(props: PageProps) {
                   NIM endpoint: <b>{nvidiaDiagnostics.nvidia.services?.nim?.probe?.reachable ? "reachable" : "not reachable"}</b>
                   {nvidiaDiagnostics.nvidia.services?.nim?.probe?.models_url ? <> • <code>{nvidiaDiagnostics.nvidia.services.nim.probe.models_url}</code></> : null}
                 </div>
-                <div style={{ fontWeight: 800, marginTop: 10 }}>Optional NVIDIA services</div>
+                <div style={{ fontWeight: 800, marginTop: 10 }}>NVIDIA service stack</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginTop: 8 }}>
                   {optionalNvidiaServices.map((service) => (
                     <div key={service.id} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>
@@ -1223,7 +1223,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>ComfyUI workflow</div>
         <div className="small">
-          Studio now ships curated ComfyUI routing for plain stills, AnimateDiff motion, SVD image-to-video, and reference-driven ControlNet stills. The fallback manual checkpoint override still uses <code>EDMG_COMFYUI_CHECKPOINT</code> when no catalog-backed model is selected.
+          Studio keeps NVIDIA/OpenUSD as the primary production handoff and ships curated ComfyUI routing for secondary stills, AnimateDiff motion, SVD image-to-video, and reference-driven ControlNet stills. The manual checkpoint override still uses <code>EDMG_COMFYUI_CHECKPOINT</code> when no catalog-backed model is selected.
         </div>
         <div className="small" style={{ marginTop: 10, opacity: 0.92 }}>
           Use this mental model:

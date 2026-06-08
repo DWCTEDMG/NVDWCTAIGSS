@@ -21,6 +21,9 @@ DEFAULT_PACKAGE_MANAGER = "pnpm"
 DEFAULT_BACKEND_PORT = 7863
 DEFAULT_BACKEND_HOST = "127.0.0.1"
 DEFAULT_UI_PORT = 5173
+DEFAULT_NVIDIA_NIM_URL = "http://127.0.0.1:8001"
+DEFAULT_NVIDIA_NIM_OPENAI_BASE_URL = f"{DEFAULT_NVIDIA_NIM_URL}/v1"
+DEFAULT_NVIDIA_NIM_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
 LAUNCHER_ENV_PATH = STUDIO_DIR / "launcher_env.json"
 BOOTSTRAP_CONFIG_BASENAME = "bootstrap.json"
 SUPPORTED_PYTHON_MIN = (3, 10)
@@ -228,6 +231,21 @@ def _default_storage_env(studio_home: Path, data_dir: Path | None = None) -> dic
         "EDMG_STUDIO_LOGS_DIR": str((home / "logs").resolve()),
         "EDMG_STUDIO_EXTERNAL_DIR": str((home / "external").resolve()),
         "OLLAMA_MODELS": str((models / "ollama").resolve()),
+    }
+
+def _default_nvidia_env() -> dict[str, str]:
+    return {
+        "EDMG_NVIDIA_MODE": "1",
+        "EDMG_NVIDIA_PROFILE": "omniverse",
+        "EDMG_NVIDIA_NIM_URL": DEFAULT_NVIDIA_NIM_URL,
+        "EDMG_AI_MODE": "local",
+        "EDMG_AI_PROVIDER": "openai_compat",
+        "EDMG_AI_OPENAI_COMPAT_BASE_URL": DEFAULT_NVIDIA_NIM_OPENAI_BASE_URL,
+        "EDMG_AI_OPENAI_COMPAT_MODEL": DEFAULT_NVIDIA_NIM_MODEL,
+        "EDMG_NVIDIA_RIVA_URL": "127.0.0.1:50051",
+        "EDMG_NVIDIA_RIVA_ASR": "0",
+        "EDMG_NVIDIA_RIVA_LANGUAGE_CODE": "en-US",
+        "EDMG_NVIDIA_RIVA_ASR_FALLBACK": "1",
     }
 
 def _persist_studio_location(*, studio_home: Path | None = None, data_dir: Path | None = None) -> tuple[Path, Path]:
@@ -1536,6 +1554,8 @@ class Launcher(tk.Tk):
             env = os.environ.copy()
             for key, value in _default_storage_env(self.studio_home, self.data_dir).items():
                 env.setdefault(key, value)
+            for key, value in _default_nvidia_env().items():
+                env.setdefault(key, value)
             ffmpeg_path = _resolve_ffmpeg_path()
             env["EDMG_FFMPEG_PATH"] = ffmpeg_path
             self._log(f"Using FFmpeg: {ffmpeg_path}")
@@ -1676,6 +1696,8 @@ class Launcher(tk.Tk):
         env.setdefault("EDMG_STUDIO_BACKEND_HOST", self.backend_host)
         env.setdefault("EDMG_STUDIO_BACKEND_PORT", str(self.backend_port))
         for key, value in _default_storage_env(self.studio_home, self.data_dir).items():
+            env.setdefault(key, value)
+        for key, value in _default_nvidia_env().items():
             env.setdefault(key, value)
 
         self.studio_log_path.parent.mkdir(parents=True, exist_ok=True)

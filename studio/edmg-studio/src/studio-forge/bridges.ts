@@ -33,7 +33,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     name: "Unreal Render Handoff",
     kind: "renderHandoff",
     description:
-      "Preview an external render target where Studio stays the planner and assembly owner while Unreal becomes an optional execution endpoint.",
+      "Preview an external render target where NVIDIA Studio stays the planner and assembly owner while Unreal becomes a secondary execution endpoint.",
     transports: ["fileExport", "http"],
     outputs: [
       "Render intent manifest",
@@ -50,7 +50,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
       assembly_mode: "ffmpeg_back_in_studio",
     },
     limitations:
-      "Preview only. No Unreal render job is launched from Studio Forge, and the internal renderer remains the default runtime.",
+      "Preview only. No Unreal render job is launched from Studio Forge, and NVIDIA/OpenUSD remains the default runtime.",
     requiredCapabilities: ["backend", "ffmpeg"],
     optionalCapabilities: ["internalRenderer", "edmgCore"],
     destructive: false,

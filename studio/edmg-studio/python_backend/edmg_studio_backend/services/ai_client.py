@@ -79,8 +79,8 @@ class HttpAiDirectorClient:
 class LocalAiDirectorClient:
     """In-process AI: uses vendored `edmg_ai_service` directly.
 
-    Default provider is Ollama (EDMG_AI_PROVIDER=ollama). This avoids users having to run a separate
-    AI FastAPI process; the Studio backend calls Ollama directly.
+    Default provider is NVIDIA NIM through the OpenAI-compatible planner path.
+    Ollama and the rule-based planner remain local fallback providers.
     """
 
     def __init__(self, timeout_s: float = 180.0):

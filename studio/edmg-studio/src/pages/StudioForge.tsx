@@ -456,15 +456,15 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       status: setupError ? "error" : setupStatus ? (setupReady ? "available" : "missing") : "unknown",
       detail: setupError || (
         setupReady
-          ? "Backend bundle, FFmpeg, and the active AI path are ready."
+          ? "Backend bundle, FFmpeg, and the NVIDIA AI path are ready."
           : `Still needs ${missingSetupParts.join(", ")}.`
       ),
       impact: "Studio Forge reads setup health only; the existing Setup page remains the only place for installs and repair.",
     },
     {
       id: "ollama",
-      label: "Ollama",
-      role: ollamaRequired ? "Required" : "Optional",
+      label: "Ollama fallback",
+      role: ollamaRequired ? "Required" : "Fallback",
       status: setupError
         ? "unknown"
         : ollamaRequired
@@ -475,7 +475,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
         : `${ollamaUrl} not detected${ollamaRequired ? " for the current AI mode." : "."}`,
       impact: ollamaRequired
         ? "The current AI mode expects a reachable local Ollama endpoint."
-        : "Studio can still run with an external AI path when Ollama is not required.",
+        : "Studio can run the NVIDIA/NIM path without Ollama.",
     },
     {
       id: "comfyui",
@@ -485,7 +485,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       detail: comfyAvailable
         ? `${comfyUrl} responded to capability discovery.`
         : `${comfyUrl} is unavailable or not configured for this session.`,
-      impact: "Internal renderer remains the default path even when ComfyUI is missing.",
+      impact: "NVIDIA/OpenUSD remains the primary handoff even when ComfyUI is missing.",
     },
     {
       id: "ffmpeg",
@@ -508,7 +508,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
         ? `${ollamaModel}${modelOk ? " is ready." : " is configured but not present yet."}`
         : "Model configuration is available through the existing Models and Setup flows.",
       impact: edmgAvailable
-        ? "Installed models can stay aligned with EDMG Core and the internal renderer."
+        ? "Installed models can stay aligned with EDMG Core and the NVIDIA/OpenUSD handoff."
         : "Model management remains owned by the current Models page and setup flow.",
     },
   ];
@@ -518,7 +518,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       {
         id: "runtime" as const,
         label: "Runtime Status",
-        description: "Read-only health for backend, setup, AI, ComfyUI, FFmpeg, and models.",
+        description: "Read-only health for backend, setup, NVIDIA AI, ComfyUI, FFmpeg, and models.",
       },
       {
         id: "recommendations" as const,
@@ -528,12 +528,12 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       {
         id: "templates" as const,
         label: "Builder Templates",
-        description: "Static registry of preview-only panel, workflow, and model-profile concepts.",
+        description: "Static registry of preview-only NVIDIA Studio panel, workflow, and model-profile concepts.",
       },
       {
         id: "recipes" as const,
         label: "Workflow Recipes",
-        description: "Canonical workflow previews that stay compatible with the existing Studio flow.",
+        description: "Canonical workflow previews that stay compatible with the NVIDIA-first Studio flow.",
       },
       {
         id: "validation" as const,
@@ -625,7 +625,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div>
         <h2 style={{ marginBottom: 10 }}>Builder Templates</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Static preview registry for additive page, panel, workflow, and model-profile concepts.
+          Static preview registry for NVIDIA Studio page, panel, workflow, and model-profile concepts.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           {STUDIO_FORGE_TEMPLATES.map((template) => (
@@ -651,8 +651,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div>
         <h2 style={{ marginBottom: 10 }}>Unreal Bridge Previews</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Optional bridge concepts only. These previews describe export, handoff, and control shapes for Unreal without
-          adding an Unreal dependency to Setup, packaging, or the default internal renderer flow.
+          Secondary bridge concepts only. These previews describe export, handoff, and control shapes for Unreal without
+          changing the NVIDIA/OpenUSD Setup, packaging, or Kit render-job flow.
         </div>
         {projectId && unrealPreview ? (
           <div className="small" style={{ marginBottom: 10 }}>

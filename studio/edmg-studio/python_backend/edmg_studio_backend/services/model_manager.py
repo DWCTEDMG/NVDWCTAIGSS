@@ -336,6 +336,22 @@ class ModelManager:
             return None
         return exists(entry, dest)
 
+    def _cache_entry_from_cloud_record(self, entry: dict[str, Any], record: dict[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(record, dict):
+            return entry
+        object_name = str(record.get("object") or record.get("key") or "").strip()
+        if not object_name:
+            return entry
+
+        cache_entry = dict(entry)
+        # S3ModelCache understands these override fields. Other cache backends
+        # keep using their deterministic cache key.
+        cache_entry["s3_key"] = object_name
+        bucket = str(record.get("bucket") or "").strip()
+        if bucket:
+            cache_entry["s3_bucket"] = bucket
+        return cache_entry
+
     def _cloud_temp_path(self, dest: Path) -> Path:
         root = _ensure_managed_dir(self.data_dir / "cache" / "model_transfers", label="model transfer cache")
         return root / uuid.uuid4().hex / dest.name
@@ -437,7 +453,7 @@ class ModelManager:
         if source == "ollama":
             name = f"Install (Ollama): {entry.get('name')}"
             return self.tasks.start(name, self._install_ollama, entry)
-        if source in ("hf", "civitai", "local"):
+        if source in ("hf", "civitai", "local", "s3"):
             name = f"Install: {entry.get('name')}"
             return self.tasks.start(name, self._install_file_model, entry)
 
@@ -619,6 +635,80 @@ class ModelManager:
             )
         return True
 
+    def _local_installed_path(self, entry: dict[str, Any]) -> Path | None:
+        model_id = str(entry.get("id") or "").strip()
+        if not model_id:
+            return None
+
+        target = entry.get("target") or {}
+        engine = (target.get("engine") if isinstance(target, dict) else "") or "comfyui"
+        folder = (target.get("folder") if isinstance(target, dict) else None) or "checkpoints"
+        if engine == "internal":
+            path = self._internal_models_dir(folder) / model_id
+            return path if self._internal_asset_installed(entry, path) else None
+        if engine == "runtime_bundle":
+            path = self._internal_models_dir(folder) / model_id
+            return path if path.exists() else None
+
+        filename = str(entry.get("filename") or "")
+        if not filename:
+            return None
+
+        primary = self._comfy_models_dir(folder) / filename
+        if primary.exists():
+            return primary
+        legacy_root = self._legacy_comfy_models_dir(folder)
+        if legacy_root is not None:
+            legacy = legacy_root / filename
+            if legacy.exists():
+                return legacy
+        return None
+
+    def _materialize_file_from_model_cache(self, entry: dict[str, Any], dest: Path) -> Path | None:
+        cache = getattr(self, "model_cache", None)
+        if cache is None:
+            return None
+
+        model_id = str(entry.get("id") or "").strip()
+        record = self._cloud_model_record(model_id)
+        candidates: list[dict[str, Any]] = []
+        if record is not None:
+            candidates.append(self._cache_entry_from_cloud_record(entry, record))
+        candidates.append(entry)
+
+        seen_objects: set[str] = set()
+        for candidate in candidates:
+            try:
+                object_name = self._cache_model_exists(candidate, dest)
+            except Exception as exc:
+                if record is not None:
+                    raise UserFacingError(
+                        "Cloud model cache is unavailable",
+                        hint=f"Check the {self._model_cache_label()} credentials and bucket/prefix settings, then retry.",
+                        code="MODEL_CACHE_UNAVAILABLE",
+                    ) from exc
+                continue
+
+            if not object_name or object_name in seen_objects:
+                continue
+            seen_objects.add(str(object_name))
+
+            try:
+                if not cache.download_model(candidate, dest):
+                    continue
+            except Exception as exc:
+                raise UserFacingError(
+                    "Could not restore model from cloud cache",
+                    hint=f"Check that the model object exists in {self._model_cache_label()} and that Studio has read access.",
+                    code="MODEL_CACHE_RESTORE_FAILED",
+                ) from exc
+
+            mode = str(record.get("mode") or "remote_cache") if record is not None else "remote_cache"
+            self._record_cloud_model(entry, str(object_name), mode=mode)
+            return dest if dest.exists() else None
+
+        return None
+
     def internal_asset_issue(self, model_id: str) -> str | None:
         entry = self._find_entry(model_id)
         if not entry:
@@ -700,7 +790,7 @@ class ModelManager:
                 or Path(str(entry.get("source_path") or "")).name
                 or raw
             ).strip()
-            installed = self.installed_path(str(entry.get("id") or ""))
+            installed = self.resolve_installed_path(str(entry.get("id") or ""), materialize_remote=True)
             resolved_path = installed or self._find_existing_comfy_file(folder, filename)
             if resolved_path is None:
                 cloud_record = self._cloud_model_record(str(entry.get("id") or ""))
@@ -790,7 +880,7 @@ class ModelManager:
                 hint="Pick an internal Studio asset for the internal diffusers path.",
             )
 
-        resolved_path = self.installed_path(str(entry.get("id") or ""))
+        resolved_path = self.resolve_installed_path(str(entry.get("id") or ""), materialize_remote=True)
         if resolved_path is None:
             issue = self.internal_asset_issue(str(entry.get("id") or ""))
             hint = "Install the asset in Model Manager, then retry."
@@ -917,8 +1007,12 @@ class ModelManager:
         cache = getattr(self, "model_cache", None)
         if cache is None:
             return False
+        cache_entry = self._cache_entry_from_cloud_record(
+            entry,
+            self._cloud_model_record(str(entry.get("id") or "").strip()),
+        )
         try:
-            if not cache.download_model(entry, dest):
+            if not cache.download_model(cache_entry, dest):
                 return False
         except Exception as exc:
             self._append_task_log(task, f"{self._model_cache_label()} restore skipped: {exc}")
@@ -994,7 +1088,7 @@ class ModelManager:
                     ModelTaskManager.set_progress(task, 1.0)
                     ModelTaskManager.log(task, f"Already stored in {self._model_cache_label()}: {object_name}")
                     return
-            elif self._restore_from_model_cache(task, entry, dest):
+            elif src != "s3" and self._restore_from_model_cache(task, entry, dest):
                 return
 
         headers: dict[str, str] = {}
@@ -1056,6 +1150,39 @@ class ModelManager:
                         pass
             return
 
+        if src == "s3":
+            if self.model_cache is None:
+                raise UserFacingError(
+                    "S3 model source requires an enabled model cache",
+                    hint="Set EDMG_AWS_MODEL_CACHE=1 and EDMG_AWS_MODEL_CACHE_BUCKET, then restart Studio.",
+                    code="MODEL_CACHE_REQUIRED",
+                )
+            if mode != "file":
+                raise UserFacingError(
+                    "S3 model source is only available for single-file model assets",
+                    hint="Use S3-hosted checkpoint, LoRA, ControlNet, VAE, or similar single-file assets.",
+                    code="S3_SOURCE_UNSUPPORTED_MODEL",
+                )
+            object_name = self._cache_model_exists(entry, dest)
+            if not object_name:
+                raise UserFacingError(
+                    f"{entry.get('name') or entry.get('id') or 'Model'} was not found in S3",
+                    hint="Check the model entry's s3_uri/s3_key, bucket, prefix, and Studio AWS credentials.",
+                    code="MODEL_CACHE_MISS",
+                )
+            self._record_cloud_model(entry, object_name, mode="cloud_only" if cloud_only else "remote_cache")
+            if cloud_only:
+                ModelTaskManager.set_progress(task, 1.0)
+                ModelTaskManager.log(task, f"Stored in {self._model_cache_label()}: {object_name}")
+                return
+            if not self._restore_from_model_cache(task, entry, dest):
+                raise UserFacingError(
+                    "Could not download S3 model source",
+                    hint="Check that Studio has read access to the configured S3 object.",
+                    code="MODEL_CACHE_RESTORE_FAILED",
+                )
+            return
+
         if src == "civitai":
             dl = str(entry.get("civitai_download_url") or "")
             if not dl:
@@ -1106,26 +1233,27 @@ class ModelManager:
 
         raise RuntimeError(f"Unsupported source: {src}")
 
-    
     def installed_path(self, model_id: str) -> Path | None:
         """Return local path for an installed model (file or directory), else None."""
         entry = self._find_entry(model_id)
         if not entry:
             return None
-        target = entry.get("target") or {}
-        engine = (target.get("engine") if isinstance(target, dict) else "") or "comfyui"
-        folder = (target.get("folder") if isinstance(target, dict) else None) or "checkpoints"
-        if engine == "internal":
-            p = (self._internal_models_dir(folder) / model_id)
-            return p if self._internal_asset_installed(entry, p) else None
-        if engine == "runtime_bundle":
-            p = self._internal_models_dir(folder) / model_id
-            return p if p.exists() else None
-        fname = str(entry.get("filename") or "")
-        if not fname:
+        return self._local_installed_path(entry)
+
+    def resolve_installed_path(self, model_id: str, *, materialize_remote: bool = True) -> Path | None:
+        """Return a local runtime path, restoring a cached remote file when requested."""
+        entry = self._find_entry(model_id)
+        if not entry:
             return None
-        p = self._comfy_models_dir(folder) / fname
-        return p if p.exists() else None
+
+        local = self._local_installed_path(entry)
+        if local is not None or not materialize_remote:
+            return local
+
+        mode, dest = self._models_dest(entry)
+        if mode != "file":
+            return None
+        return self._materialize_file_from_model_cache(entry, dest)
 
 
     def import_local(self, file_path: str, name: str | None = None, folder: str = "checkpoints") -> dict[str, Any]:

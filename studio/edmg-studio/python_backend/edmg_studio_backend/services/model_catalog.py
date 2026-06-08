@@ -42,7 +42,7 @@ def built_in_catalog() -> list[dict[str, Any]]:
     # - id: stable ID
     # - name: display name
     # - kind: llm | checkpoint | diffusers | controlnet | motion_module | runtime_bundle
-    # - source: ollama | hf | civitai | local
+    # - source: ollama | hf | civitai | local | s3
     # - installable: whether Studio can install this entry directly
     # - target: installation instructions (where it goes)
     # - render: optional UI/runtime metadata for Render page presets

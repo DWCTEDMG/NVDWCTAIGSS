@@ -100,9 +100,10 @@ Windows or `/mnt/media/EDMG-Studio` on Linux.
 
 ## Recommended Local Stack
 
-- Planner default: `qwen3:8b` via Ollama
-- Low-resource planner: `qwen3:4b`
-- OpenAI-compatible default model string: `qwen3-8b`
+- Planner default: NVIDIA NIM / OpenAI-compatible `nvidia/llama-3.3-nemotron-super-49b-v1.5`
+- Local fallback planner: `qwen3:8b` via Ollama
+- Low-resource fallback planner: `qwen3:4b`
+- OpenAI-compatible default base URL: `http://127.0.0.1:8001/v1`
 - Broad still-image default: SDXL Base 1.0
 - Fast still-image option: SD3.5 Large Turbo
 - Reference still guidance: SD3.5 ControlNet Blur, Canny, and Depth
@@ -111,9 +112,9 @@ Windows or `/mnt/media/EDMG-Studio` on Linux.
 
 ## Hardware Tiers
 
-- Low-spec: `qwen3:4b` + SDXL Base 1.0
-- Mid-range: `qwen3:8b` + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
-- High-end: `qwen3:8b` + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
+- Low-spec fallback: `qwen3:4b` + SDXL Base 1.0
+- Mid-range: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
+- High-end: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
 
 ## Compatibility shims
 

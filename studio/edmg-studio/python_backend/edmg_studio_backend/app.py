@@ -390,6 +390,23 @@ def _resolve_comfy_checkpoint_name(
     return requested, None
 
 
+def _catalog_comfy_asset_filename(
+    entry: dict[str, Any] | None,
+    *,
+    folder: str,
+    allowed_kinds: set[str] | None = None,
+) -> str:
+    if not isinstance(entry, dict) or not entry.get("id"):
+        return ""
+    target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
+    engine = str(target.get("engine") or entry.get("engine") or "comfyui").strip().lower()
+    target_folder = str(target.get("folder") or "checkpoints").strip().lower()
+    if engine != "comfyui" or target_folder != str(folder or "").strip().lower():
+        return ""
+    asset = models.resolve_comfy_asset(str(entry.get("id") or ""), folder=folder, allowed_kinds=allowed_kinds)
+    return str(asset.get("filename") or entry.get("filename") or "").strip()
+
+
 def _resolve_comfy_still_selection(
     *,
     model_id: str | None,
@@ -406,6 +423,14 @@ def _resolve_comfy_still_selection(
 
     explicit_checkpoint = str(checkpoint or "").strip()
     catalog_checkpoint = str(render.get("checkpoint_name") or entry_data.get("filename") or "").strip()
+    if not explicit_checkpoint:
+        materialized_checkpoint = _catalog_comfy_asset_filename(
+            entry_data,
+            folder="checkpoints",
+            allowed_kinds={"checkpoint"},
+        )
+        if materialized_checkpoint:
+            catalog_checkpoint = materialized_checkpoint
     chosen_checkpoint, fallback_checkpoint = _resolve_comfy_checkpoint_name(
         explicit_checkpoint or catalog_checkpoint or settings.comfyui_checkpoint,
         allow_auto_fallback=not explicit_checkpoint and not catalog_checkpoint,
@@ -424,6 +449,14 @@ def _resolve_comfy_still_selection(
         or render.get("controlnet_name")
         or ""
     ).strip()
+    if control_entry_data:
+        materialized_controlnet = _catalog_comfy_asset_filename(
+            control_entry_data,
+            folder="controlnet",
+            allowed_kinds={"controlnet"},
+        )
+        if materialized_controlnet:
+            controlnet_name = materialized_controlnet
     has_controlnet_units = any(
         isinstance(unit, dict) and str(unit.get("model") or unit.get("controlnet_name") or "").strip()
         for unit in (controlnet_units or [])
@@ -480,6 +513,14 @@ def _resolve_comfy_motion_selection(
     render = _catalog_render_metadata(entry)
     explicit_checkpoint = str(checkpoint or "").strip()
     catalog_checkpoint = str(render.get("checkpoint_name") or entry_data.get("filename") or "").strip()
+    if not explicit_checkpoint:
+        materialized_checkpoint = _catalog_comfy_asset_filename(
+            entry_data,
+            folder="checkpoints",
+            allowed_kinds={"checkpoint"},
+        )
+        if materialized_checkpoint:
+            catalog_checkpoint = materialized_checkpoint
     base_checkpoint, fallback_checkpoint = _resolve_comfy_checkpoint_name(
         explicit_checkpoint or catalog_checkpoint or settings.comfyui_checkpoint,
         allow_auto_fallback=not explicit_checkpoint and not catalog_checkpoint,
@@ -494,6 +535,14 @@ def _resolve_comfy_motion_selection(
         or svd_entry_data.get("filename")
         or "svd_xt.safetensors"
     )
+    if not svd_checkpoint:
+        materialized_svd = _catalog_comfy_asset_filename(
+            svd_entry_data,
+            folder="checkpoints",
+            allowed_kinds={"checkpoint", "motion_module"},
+        )
+        if materialized_svd:
+            resolved_svd = materialized_svd
     return {
         "entry": entry,
         "svd_entry": svd_entry,
@@ -1947,11 +1996,11 @@ def get_config():
         "ai_mode": settings.ai_mode,
         "ai_base_url": settings.ai_base_url,
         "ai_timeout_s": settings.ai_timeout_s,
-        "ai_provider": os.getenv("EDMG_AI_PROVIDER", "ollama").strip().lower() or "ollama",
+        "ai_provider": os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower() or "openai_compat",
         "ai_ollama_url": os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434").strip(),
         "ai_ollama_model": os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b").strip(),
-        "ai_openai_compat_base_url": os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8000").strip(),
-        "ai_openai_compat_model": os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "qwen3-8b").strip(),
+        "ai_openai_compat_base_url": os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1").strip(),
+        "ai_openai_compat_model": os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5").strip(),
         "ai_openai_compat_api_key_configured": bool(
             secrets.get("openai_compat_api_key") or os.getenv("EDMG_AI_OPENAI_COMPAT_API_KEY")
         ),
@@ -2018,12 +2067,12 @@ def secrets_clear(payload: dict[str, Any]):
 
 def _setup_ai_config() -> dict[str, Any]:
     ai_mode = (settings.ai_mode or "local").strip().lower() or "local"
-    ai_provider = (os.getenv("EDMG_AI_PROVIDER", "ollama").strip().lower() or "ollama")
+    ai_provider = (os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower() or "openai_compat")
     nvidia_profile = nvidia_profile_status()
     ollama_url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
     ollama_model = os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b")
-    openai_compat_base_url = os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8000")
-    openai_compat_model = os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "qwen3-8b")
+    openai_compat_base_url = os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1")
+    openai_compat_model = os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5")
     openai_compat_api_key_configured = bool(
         secrets.get("openai_compat_api_key") or os.getenv("EDMG_AI_OPENAI_COMPAT_API_KEY")
     )
@@ -2264,7 +2313,7 @@ def setup_backend_install(payload: dict[str, Any]):
 
 @app.post("/v1/setup/full/install")
 def setup_full_install(payload: dict[str, Any]):
-    """Run a full one-click setup: backend bundle, 7-Zip, Ollama/model, ComfyUI Portable install + start."""
+    """Run one-click setup for the NVIDIA-first stack plus local fallback engines."""
     import os
 
     flavor = (payload or {}).get("flavor") or "cpu"
@@ -2277,7 +2326,7 @@ def setup_full_install(payload: dict[str, Any]):
     ai_config = _setup_ai_config()
 
     def _run(task):
-        # 1) Ensure backend runtime bundle is present for audio/ASR/internal render paths.
+        # 1) Ensure backend runtime bundle is present for audio, ASR, and render support paths.
         SetupTaskManager.check_canceled(task, "Full setup canceled.")
         if not check_backend_bundle(bundle).get("ok"):
             install_backend_bundle(task, bundle)
@@ -2291,7 +2340,7 @@ def setup_full_install(payload: dict[str, Any]):
         except Exception:
             download_and_install_7zip(task, settings.external_dir, settings.data_dir)
 
-        # 3) Ollama install/model only when the active AI path actually uses Ollama.
+        # 3) Ollama install/model only when the active AI path actually uses Ollama as fallback.
         SetupTaskManager.check_canceled(task, "Full setup canceled.")
         if ai_config.get("ollama_required"):
             ollama_status = check_ollama(ollama_url, model)
@@ -2316,7 +2365,7 @@ def setup_full_install(payload: dict[str, Any]):
                 f"Skipping Ollama install because Studio AI is configured for {ai_config.get('label')}.",
             )
 
-        # 4) ComfyUI Portable install + start
+        # 4) ComfyUI Portable secondary workflow install + start
         SetupTaskManager.check_canceled(task, "Full setup canceled.")
         if not comfy_portable_installed(settings.external_dir, settings.data_dir):
             download_and_extract_portable(task, settings.external_dir, flavor, settings.data_dir, settings.models_dir)

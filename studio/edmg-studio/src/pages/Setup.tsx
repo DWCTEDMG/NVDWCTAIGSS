@@ -349,7 +349,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     <div>
       <h2>Setup Wizard</h2>
       <div className="small" style={{ marginTop: 6 }}>
-        This is the "installer GUI" inside EDMG Studio. It checks required components and lets you fix issues without using the command line.
+        NVIDIA is the primary Studio runtime. This checks NIM planning, OpenUSD/RTX handoff readiness, backend dependencies, and fallback local engines without requiring the command line.
       </div>
 
       {err && (
@@ -441,12 +441,12 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   <div className="small" style={{ marginTop: 6 }}>
     {isWindows ? (
       ollamaRequired
-      ? "Runs the full installer pipeline: backend runtime bundle → 7-Zip (if needed) → managed Ollama install → pull model → optional ComfyUI Portable install + start for alternate still/motion workflows."
-      : `Runs the full installer pipeline: backend runtime bundle → 7-Zip (if needed) → optional ComfyUI Portable install + start for alternate still/motion workflows. Ollama is skipped because Studio AI is currently set to ${aiLabel}.`
+      ? "Runs the full installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> managed Ollama fallback install -> pull fallback model -> ComfyUI secondary workflow install."
+      : `Runs the full installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> ComfyUI secondary workflow install. Ollama is skipped because Studio AI is currently set to ${aiLabel}.`
     ) : (
       ollamaRequired
-        ? "Linux and macOS use the manual setup path: install the backend runtime here, install Ollama system-wide if needed, pull the configured model, and run a local ComfyUI instance only if you want the optional ComfyUI workflows."
-        : `Linux and macOS use the manual setup path: install the backend runtime here and add ComfyUI only if you want the optional ComfyUI workflows. Ollama is optional because Studio AI is currently set to ${aiLabel}.`
+        ? "Linux and macOS use the manual setup path: install the backend runtime here, configure the NVIDIA/NIM endpoint, install Ollama only as a fallback, and run ComfyUI only for secondary workflows."
+        : `Linux and macOS use the manual setup path: install the backend runtime here, configure the NVIDIA/NIM endpoint, and add ComfyUI only for secondary workflows. Ollama is a fallback because Studio AI is currently set to ${aiLabel}.`
     )}
   </div>
   <div data-testid="setup-active-ai-path" className="small" style={{ marginTop: 8, opacity: 0.9 }}>
@@ -460,22 +460,24 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     {isWindows ? (
       <>
         <button
-          disabled={busy === "full_cpu"}
-          onClick={() => run("full_cpu", "/v1/setup/full/install", { flavor: "cpu" })}
-        >
-          {busy === "full_cpu" ? "Running…" : "Full Setup (CPU)"}
-        </button>
-        <button
           disabled={busy === "full_nvidia"}
           onClick={() => run("full_nvidia", "/v1/setup/full/install", { flavor: "nvidia" })}
         >
           {busy === "full_nvidia" ? "Running…" : "Full Setup (NVIDIA)"}
         </button>
         <button
+          className="secondary"
+          disabled={busy === "full_cpu"}
+          onClick={() => run("full_cpu", "/v1/setup/full/install", { flavor: "cpu" })}
+        >
+          {busy === "full_cpu" ? "Running…" : "Fallback Setup (CPU)"}
+        </button>
+        <button
+          className="secondary"
           disabled={busy === "full_amd"}
           onClick={() => run("full_amd", "/v1/setup/full/install", { flavor: "amd", bundle: "studio_bundle_directml" })}
         >
-          {busy === "full_amd" ? "Running…" : "Full Setup (AMD / DirectML)"}
+          {busy === "full_amd" ? "Running…" : "Fallback Setup (AMD / DirectML)"}
         </button>
       </>
     ) : (
@@ -590,13 +592,13 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 800 }}>1) Ollama (AI)</div>
+            <div style={{ fontWeight: 800 }}>1) Ollama (Fallback AI)</div>
             <Badge ok={ollamaRequired ? ollamaOk : true} label={ollamaRequired ? (ollamaOk ? "OK" : "Missing") : (ollamaOk ? "Installed" : "Optional")} />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
             {ollamaRequired
               ? <>Studio planning is configured to use Ollama locally at <code>{status?.ollama?.url ?? "http://127.0.0.1:11434"}</code>.</>
-              : <>Current AI path is <b>{aiLabel}</b>, so Ollama is optional unless you want a local fallback.</>}
+              : <>Current AI path is <b>{aiLabel}</b>, so Ollama is only needed as a local fallback.</>}
           </div>
           <div className="small" style={{ marginTop: 6, opacity: 0.9 }}>
             Studio-managed Ollama models live under <code>{status?.ollama?.managed_models_dir ?? "(set your Models path first)"}</code>.
@@ -651,13 +653,13 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 800 }}>2) AI Model</div>
+            <div style={{ fontWeight: 800 }}>2) Fallback AI Model</div>
             <Badge ok={modelRequired ? modelOk : true} label={modelRequired ? (modelOk ? "Ready" : "Not pulled") : (modelOk ? "Available" : "Optional")} />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
             {modelRequired
               ? <>Default Ollama model: <code>{status?.ollama?.model ?? "(unknown)"}</code></>
-              : <>The active AI path is <b>{aiLabel}</b>, so pulling an Ollama model is optional.</>}
+              : <>The active AI path is <b>{aiLabel}</b>, so pulling an Ollama model is only for fallback planning.</>}
           </div>
           <div className="small" style={{ marginTop: 6, opacity: 0.9 }}>
             Pulled Ollama models are expected under <code>{status?.ollama?.managed_models_dir ?? "(unknown)"}</code> when Studio starts Ollama itself.
@@ -709,11 +711,11 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
 
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 800 }}>3) ComfyUI (Optional still/motion engine)</div>
+            <div style={{ fontWeight: 800 }}>3) ComfyUI (Secondary still/motion engine)</div>
             <Badge ok={comfyOk} label={comfyOk ? "Available" : "Optional"} />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
-            Studio's internal renderer is the default path. EDMG can also talk to ComfyUI at <code>{status?.comfyui?.url ?? "http://127.0.0.1:8188"}</code> when you want alternate still or motion workflows.
+            NVIDIA/OpenUSD is the primary production handoff. EDMG can also talk to ComfyUI at <code>{status?.comfyui?.url ?? "http://127.0.0.1:8188"}</code> when you want alternate still or motion workflows.
           </div>
           <div className="small" style={{ marginTop: 10, opacity: 0.92 }}>
             To make ComfyUI actually show up inside Studio, four things have to line up in order:
@@ -725,11 +727,11 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             <li>If nothing changes in Render, the usual cause is that ComfyUI is not running, the selected model is still an internal model, or the required workflow or ControlNet assets are not installed yet.</li>
           </ol>
           <div className="small" style={{ marginTop: 8, opacity: 0.9 }}>
-            In other words, installing ComfyUI alone does not switch the product over. It only adds an alternate engine path that becomes available when the active render model is ComfyUI-backed.
+            In other words, installing ComfyUI does not replace the NVIDIA Studio path. It adds an alternate engine lane that becomes available when the active render model is ComfyUI-backed.
           </div>
           {!isWindows ? (
             <div className="small" style={{ marginTop: 8, opacity: 0.88 }}>
-              Linux support uses a manually installed ComfyUI instance. Start it yourself only if you want those optional workflows, and keep <code>EDMG_COMFYUI_URL</code> pointed at the running server.
+              Linux support uses a manually installed ComfyUI instance. Start it yourself only if you want those secondary workflows, and keep <code>EDMG_COMFYUI_URL</code> pointed at the running server.
             </div>
           ) : null}
 
@@ -892,8 +894,8 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           <div style={{ fontWeight: 800 }}>Ready check</div>
           <div className="small" style={{ marginTop: 6 }}>
             {ollamaRequired
-              ? "When the backend runtime bundle + Ollama + a model + FFmpeg are all OK, EDMG Studio is ready for the default internal-render workflow. ComfyUI remains optional for alternate still/motion paths. EDMG Core is optional but recommended for the fully unified workflow."
-              : "When the backend runtime bundle + your active AI provider + FFmpeg are all OK, EDMG Studio is ready for the default internal-render workflow. ComfyUI remains optional for alternate still/motion paths. EDMG Core is optional but recommended for the fully unified workflow."}
+              ? "When the backend runtime bundle + NVIDIA profile + Ollama fallback + FFmpeg are all OK, EDMG Studio is ready for the NVIDIA-first workflow. ComfyUI and EDMG Core remain secondary support lanes."
+              : "When the backend runtime bundle + NVIDIA/NIM AI path + FFmpeg are all OK, EDMG Studio is ready for the NVIDIA-first workflow. ComfyUI and EDMG Core remain secondary support lanes."}
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <button

@@ -45,6 +45,10 @@ hidden += collect_submodules("yaml")
 hidden += collect_submodules("nltk")
 hidden += collect_submodules("textblob")
 hidden += collect_submodules("spacy")
+hidden += safe_collect(collect_submodules, "boto3")
+hidden += safe_collect(collect_submodules, "botocore")
+hidden += safe_collect(collect_submodules, "s3transfer")
+hidden += safe_collect(collect_submodules, "jmespath")
 hidden += [
     "matplotlib",
     "matplotlib.pyplot",
@@ -76,6 +80,10 @@ datas += safe_collect(copy_metadata, "nltk")
 datas += safe_collect(copy_metadata, "tensorboard")
 datas += safe_collect(copy_metadata, "tzdata")
 datas += safe_collect(copy_metadata, "pycparser")
+datas += safe_collect(copy_metadata, "boto3")
+datas += safe_collect(copy_metadata, "botocore")
+datas += safe_collect(copy_metadata, "s3transfer")
+datas += safe_collect(copy_metadata, "jmespath")
 if nltk_data_dir.exists():
     datas.append((str(nltk_data_dir), "nltk_data"))
 
