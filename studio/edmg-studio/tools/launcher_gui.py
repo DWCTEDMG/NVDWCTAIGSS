@@ -24,6 +24,10 @@ DEFAULT_UI_PORT = 5173
 DEFAULT_NVIDIA_NIM_URL = "http://127.0.0.1:8001"
 DEFAULT_NVIDIA_NIM_OPENAI_BASE_URL = f"{DEFAULT_NVIDIA_NIM_URL}/v1"
 DEFAULT_NVIDIA_NIM_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+DEFAULT_NVIDIA_RIVA_URL = "127.0.0.1:50051"
+DEFAULT_NVIDIA_TRITON_URL = "http://127.0.0.1:8002"
+DEFAULT_NVIDIA_OMNIVERSE_URL = "http://127.0.0.1:8011"
+NVIDIA_RUNTIME_SCRIPT = ROOT / "deployment" / "nvidia" / "start_nvidia_runtime_local.ps1"
 LAUNCHER_ENV_PATH = STUDIO_DIR / "launcher_env.json"
 BOOTSTRAP_CONFIG_BASENAME = "bootstrap.json"
 SUPPORTED_PYTHON_MIN = (3, 10)
@@ -242,10 +246,12 @@ def _default_nvidia_env() -> dict[str, str]:
         "EDMG_AI_PROVIDER": "openai_compat",
         "EDMG_AI_OPENAI_COMPAT_BASE_URL": DEFAULT_NVIDIA_NIM_OPENAI_BASE_URL,
         "EDMG_AI_OPENAI_COMPAT_MODEL": DEFAULT_NVIDIA_NIM_MODEL,
-        "EDMG_NVIDIA_RIVA_URL": "127.0.0.1:50051",
+        "EDMG_NVIDIA_RIVA_URL": DEFAULT_NVIDIA_RIVA_URL,
         "EDMG_NVIDIA_RIVA_ASR": "0",
         "EDMG_NVIDIA_RIVA_LANGUAGE_CODE": "en-US",
         "EDMG_NVIDIA_RIVA_ASR_FALLBACK": "1",
+        "EDMG_NVIDIA_TRITON_URL": DEFAULT_NVIDIA_TRITON_URL,
+        "EDMG_NVIDIA_OMNIVERSE_URL": DEFAULT_NVIDIA_OMNIVERSE_URL,
     }
 
 def _persist_studio_location(*, studio_home: Path | None = None, data_dir: Path | None = None) -> tuple[Path, Path]:
@@ -725,6 +731,41 @@ def _port_doctor_line(name: str, host: str, port: int, *, health_url: str | None
     return False, f"{name}: not detected ({url})"
 
 
+def _parse_service_host_port(raw_url: str, *, default_host: str, default_port: int) -> tuple[str, int]:
+    value = str(raw_url or "").strip()
+    if not value:
+        return default_host, default_port
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(value if "://" in value else f"//{value}", scheme="http")
+        host = parsed.hostname or default_host
+        port = parsed.port or default_port
+        return host, int(port)
+    except Exception:
+        return default_host, default_port
+
+
+def _nvidia_service_specs() -> list[tuple[str, str, int, str | None]]:
+    nim_url = os.environ.get("EDMG_NVIDIA_NIM_URL") or os.environ.get("EDMG_AI_OPENAI_COMPAT_BASE_URL") or DEFAULT_NVIDIA_NIM_URL
+    nim_host, nim_port = _parse_service_host_port(nim_url, default_host="127.0.0.1", default_port=8001)
+    riva_host, riva_port = _parse_service_host_port(
+        os.environ.get("EDMG_NVIDIA_RIVA_URL") or DEFAULT_NVIDIA_RIVA_URL,
+        default_host="127.0.0.1",
+        default_port=50051,
+    )
+    triton_url = os.environ.get("EDMG_NVIDIA_TRITON_URL") or DEFAULT_NVIDIA_TRITON_URL
+    triton_host, triton_port = _parse_service_host_port(triton_url, default_host="127.0.0.1", default_port=8002)
+    omniverse_url = os.environ.get("EDMG_NVIDIA_OMNIVERSE_URL") or DEFAULT_NVIDIA_OMNIVERSE_URL
+    omni_host, omni_port = _parse_service_host_port(omniverse_url, default_host="127.0.0.1", default_port=8011)
+
+    return [
+        ("NVIDIA NIM", nim_host, nim_port, f"http://{nim_host}:{nim_port}/v1/models"),
+        ("NVIDIA Riva", riva_host, riva_port, None),
+        ("NVIDIA Triton", triton_host, triton_port, f"http://{triton_host}:{triton_port}/v2/health/ready"),
+        ("Omniverse / Audio2Face", omni_host, omni_port, None),
+    ]
+
+
 def _find_free_port(host: str, start_port: int, *, max_tries: int = 50) -> int:
     for p in range(start_port, start_port + max_tries):
         if _is_port_bindable(host, p):
@@ -777,7 +818,7 @@ def _tail_file(path: Path, max_bytes: int = 200_000) -> str:
 
 
 def _parse_backend_url_from_logs(text: str) -> tuple[str, int] | None:
-    """Parse EDMG_BACKEND_URL marker from Electron logs."""
+    """Parse EDMG_BACKEND_URL marker from legacy Electron dev logs."""
     for pattern in (
         r"EDMG_BACKEND_URL=(https?://[^\s]+)",
         r"\[backend\][^\n]*?(https?://(?:127\.0\.0\.1|localhost):\d{4,5})",
@@ -793,18 +834,18 @@ def _parse_backend_url_from_logs(text: str) -> tuple[str, int] | None:
 
 
 class Launcher(tk.Tk):
-    """Installer-style launcher for EDMG Studio.
+    """Installer-style launcher for EDMG NVIDIA Studio.
 
     Features:
     - Migrates legacy .edmg_work and data/ into the canonical Studio data dir.
     - Port doctor + attach/switch/optional safe terminate.
     - Silent fix mode (attach/switch only; never kills processes).
-    - Captures Electron dev logs and syncs backend host/port when Studio chooses a different port.
+    - Launches the NVIDIA Kit runtime; legacy Electron dev UI remains optional.
     """
 
     def __init__(self):
         super().__init__()
-        self.title("EDMG Studio Launcher")
+        self.title("EDMG NVIDIA Studio Launcher")
         self.geometry("920x620")
         self.minsize(920, 620)
 
@@ -949,8 +990,8 @@ class Launcher(tk.Tk):
 
         top = ttk.Frame(frm)
         top.pack(fill="x")
-        ttk.Label(top, text="EDMG Studio", font=("Segoe UI", 16, "bold")).pack(side="left")
-        ttk.Label(top, text="Installer-style launcher (no CLI typing)", foreground="#555").pack(side="left", padx=12)
+        ttk.Label(top, text="EDMG NVIDIA Studio", font=("Segoe UI", 16, "bold")).pack(side="left")
+        ttk.Label(top, text="Kit + NVIDIA services launcher (no CLI typing)", foreground="#555").pack(side="left", padx=12)
 
         # Paths
         path_row = ttk.LabelFrame(frm, text="Paths", padding=10)
@@ -1024,11 +1065,13 @@ class Launcher(tk.Tk):
 
         self.lbl_python = ttk.Label(stat, text="Python: …")
         self.lbl_node = ttk.Label(stat, text="Node: …")
-        self.lbl_ollama = ttk.Label(stat, text="Ollama: …")
-        self.lbl_comfyui = ttk.Label(stat, text="ComfyUI: …")
+        self.lbl_nim = ttk.Label(stat, text="NVIDIA NIM: …")
+        self.lbl_riva = ttk.Label(stat, text="NVIDIA Riva: …")
+        self.lbl_triton = ttk.Label(stat, text="NVIDIA Triton: …")
+        self.lbl_omniverse = ttk.Label(stat, text="Omniverse / Audio2Face: …")
         self.lbl_backend = ttk.Label(stat, text="Backend: …")
 
-        for w in [self.lbl_python, self.lbl_node, self.lbl_ollama, self.lbl_comfyui, self.lbl_backend]:
+        for w in [self.lbl_python, self.lbl_node, self.lbl_nim, self.lbl_riva, self.lbl_triton, self.lbl_omniverse, self.lbl_backend]:
             w.pack(anchor="w")
 
         btn_stat = ttk.Frame(stat)
@@ -1044,21 +1087,22 @@ class Launcher(tk.Tk):
         btn_row = ttk.Frame(actions)
         btn_row.pack(fill="x")
 
-        ttk.Button(btn_row, text="Install/Update Backend (venv + deps)", command=self.install_backend).pack(side="left")
-        ttk.Button(btn_row, text=f"Install/Update Studio UI ({_studio_package_manager_name()} install)", command=self.install_ui).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Start Backend", command=self.start_backend).pack(side="left", padx=8)
+        ttk.Button(btn_row, text="Start NVIDIA Runtime (Kit + backend)", command=self.start_nvidia_runtime).pack(side="left")
+        ttk.Button(btn_row, text="Install/Update Backend (venv + deps)", command=self.install_backend).pack(side="left", padx=8)
+        ttk.Button(btn_row, text="Start Backend Only", command=self.start_backend).pack(side="left", padx=8)
         ttk.Button(btn_row, text="Stop Backend", command=self.stop_backend).pack(side="left")
         ttk.Button(btn_row, text="Run Health Test", command=self.health_test).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Start Studio (Electron dev)", command=self.start_studio).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Restart Studio", command=self.restart_studio).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Stop Studio", command=self.stop_studio).pack(side="left")
+        ttk.Button(btn_row, text="Install Legacy React UI Deps", command=self.install_ui).pack(side="left", padx=8)
+        ttk.Button(btn_row, text="Start Legacy Electron UI", command=self.start_studio).pack(side="left", padx=8)
+        ttk.Button(btn_row, text="Stop Legacy Electron UI", command=self.stop_studio).pack(side="left")
 
         # Packaging (Windows)
         pkg_row = ttk.Frame(actions)
         pkg_row.pack(fill="x", pady=(8, 0))
-        ttk.Button(pkg_row, text="Get FFmpeg (bundle for Studio renderer)", command=self.get_ffmpeg).pack(side="left")
-        ttk.Button(pkg_row, text="Build Installer (NSIS)", command=self.build_installer).pack(side="left", padx=8)
-        ttk.Button(pkg_row, text="Build Inno Installer (large payload)", command=self.build_inno_installer).pack(side="left")
+        ttk.Button(pkg_row, text="Get FFmpeg (for Kit render assembly)", command=self.get_ffmpeg).pack(side="left")
+        ttk.Button(pkg_row, text="Stage NVIDIA Kit Bundle", command=self.stage_nvidia_kit_bundle).pack(side="left", padx=8)
+        ttk.Button(pkg_row, text="Build Legacy Electron Installer", command=self.build_installer).pack(side="left", padx=8)
+        ttk.Button(pkg_row, text="Build Legacy Inno Installer", command=self.build_inno_installer).pack(side="left")
         ttk.Button(pkg_row, text="Open Release Folder", command=self.open_release_folder).pack(side="left")
         ttk.Button(pkg_row, text="Open Inno Folder", command=self.open_inno_folder).pack(side="left", padx=8)
 
@@ -1141,7 +1185,7 @@ class Launcher(tk.Tk):
         return None
 
     def _sync_backend_from_studio_logs(self) -> bool:
-        """If Electron dev logs show a backend URL, sync launcher to it."""
+        """If legacy Electron dev logs show a backend URL, sync launcher to it."""
         parsed = _parse_backend_url_from_logs(_tail_file(self.studio_log_path))
         if not parsed:
             return False
@@ -1234,7 +1278,7 @@ class Launcher(tk.Tk):
         if self._refresh_in_progress:
             return
 
-        # Prefer Studio logs (Electron may have picked a different port).
+        # Prefer legacy UI logs when that dev client picked a different port.
         if self._sync_backend_from_studio_logs():
             self._refresh_status()
             return
@@ -1269,7 +1313,8 @@ class Launcher(tk.Tk):
         allow = [
             "python", "python.exe", "pythonw.exe", "uvicorn",
             "node", "node.exe", "ollama", "ollama.exe",
-            "comfy", "comfyui", "edmg", "electron"
+            "comfy", "comfyui", "edmg", "electron",
+            "kit", "kit.exe", "tritonserver", "riva", "nim"
         ]
         return any(a in name for a in allow)
 
@@ -1328,8 +1373,7 @@ class Launcher(tk.Tk):
 
         services = [
             ("Studio backend", host, cur_port, f"http://{host}:{cur_port}/health"),
-            ("Ollama", "127.0.0.1", 11434, "http://127.0.0.1:11434/api/tags"),
-            ("ComfyUI", "127.0.0.1", 8188, "http://127.0.0.1:8188/"),
+            *_nvidia_service_specs(),
         ]
 
         rows = []
@@ -1453,11 +1497,14 @@ class Launcher(tk.Tk):
                 text=f"Node: {node or 'NOT FOUND'} ({package_manager_name}: {(package_manager[1] if package_manager else 'NOT FOUND')})"
             )
 
-            _, line_ollama = _port_doctor_line("Ollama", "127.0.0.1", 11434, health_url="http://127.0.0.1:11434/api/tags")
-            self.lbl_ollama.config(text=line_ollama)
-
-            _, line_comfy = _port_doctor_line("ComfyUI", "127.0.0.1", 8188, health_url="http://127.0.0.1:8188/")
-            self.lbl_comfyui.config(text=line_comfy)
+            nvidia_lines = {}
+            for service_name, service_host, service_port, service_health in _nvidia_service_specs():
+                _, line = _port_doctor_line(service_name, service_host, service_port, health_url=service_health)
+                nvidia_lines[service_name] = line
+            self.lbl_nim.config(text=nvidia_lines.get("NVIDIA NIM", "NVIDIA NIM: not configured"))
+            self.lbl_riva.config(text=nvidia_lines.get("NVIDIA Riva", "NVIDIA Riva: not configured"))
+            self.lbl_triton.config(text=nvidia_lines.get("NVIDIA Triton", "NVIDIA Triton: not configured"))
+            self.lbl_omniverse.config(text=nvidia_lines.get("Omniverse / Audio2Face", "Omniverse / Audio2Face: not configured"))
 
             host = self.backend_host
             port = int(self.backend_port)
@@ -1612,7 +1659,7 @@ class Launcher(tk.Tk):
 
         self._run_bg("Health test", work)
 
-    def _run_powershell(self, ps1: Path, extra_args: list[str] | None = None) -> None:
+    def _run_powershell(self, ps1: Path, extra_args: list[str] | None = None, *, cwd: Path | None = None) -> None:
         if not sys.platform.startswith("win"):
             raise RuntimeError("Windows-only action.")
         if not ps1.exists():
@@ -1620,33 +1667,59 @@ class Launcher(tk.Tk):
         cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1)]
         if extra_args:
             cmd.extend(extra_args)
-        rc = _run_cmd(cmd, cwd=STUDIO_DIR, log_cb=self._log)
+        rc = _run_cmd(cmd, cwd=cwd or STUDIO_DIR, log_cb=self._log)
         if rc != 0:
             raise RuntimeError(f"PowerShell script failed (exit {rc}): {ps1.name}")
+
+    def start_nvidia_runtime(self) -> None:
+        def work():
+            backend_url = f"http://{self.backend_host}:{int(self.backend_port)}"
+            ffmpeg_path = _resolve_ffmpeg_path()
+            args = [
+                "-BackendUrl", backend_url,
+                "-HostName", self.backend_host,
+                "-Port", str(int(self.backend_port)),
+                "-ReuseExistingBackend",
+                "-FfmpegPath", ffmpeg_path,
+            ]
+            self._log(f"Launching NVIDIA Kit runtime against backend {backend_url}")
+            self._log(f"Using FFmpeg: {ffmpeg_path}")
+            self._run_powershell(NVIDIA_RUNTIME_SCRIPT, args, cwd=ROOT)
+
+        self._run_bg("Start NVIDIA Runtime", work)
 
     def get_ffmpeg(self) -> None:
         def work():
             ps1 = STUDIO_DIR / "packaging" / "windows" / "get_ffmpeg.ps1"
-            self._log("This will download FFmpeg and stage it for the packaged Studio renderer/build.")
+            self._log("This will download FFmpeg for NVIDIA Kit render assembly.")
             self._run_powershell(ps1)
 
         self._run_bg("Get FFmpeg", work)
 
+    def stage_nvidia_kit_bundle(self) -> None:
+        def work():
+            ps1 = ROOT / "deployment" / "nvidia" / "stage_nvidia_kit_app.ps1"
+            self._log("Staging the NVIDIA Kit app bundle under dist/nvidia-kit-app.")
+            self._run_powershell(ps1, ["-PackageMode", "thin"], cwd=ROOT)
+            self._log("NVIDIA Kit staging finished. Use the staged Start-EDMG-NVIDIA-Kit.ps1 launcher.")
+
+        self._run_bg("Stage NVIDIA Kit Bundle", work)
+
     def build_installer(self) -> None:
         def work():
             ps1 = STUDIO_DIR / "packaging" / "windows" / "build_all.ps1"
-            self._log("Building installer (backend EXE + Electron installer)…")
+            self._log("Building legacy Electron installer (backend EXE + Electron shell)…")
             self._run_powershell(ps1)
-            self._log("Build finished. Use 'Open Release Folder' to find the installer.")
+            self._log("Legacy Electron build finished. Use 'Open Release Folder' to find the installer.")
 
         self._run_bg("Build installer", work)
 
     def build_inno_installer(self) -> None:
         def work():
             ps1 = STUDIO_DIR / "packaging" / "windows" / "build_inno_external.ps1"
-            self._log("Building Inno external-payload installer (setup EXE + payload archive)…")
+            self._log("Building legacy Inno external-payload installer (setup EXE + payload archive)…")
             self._run_powershell(ps1)
-            self._log("Inno build finished. Use 'Open Inno Folder' and ship the setup EXE with the payload folder.")
+            self._log("Legacy Inno build finished. Use 'Open Inno Folder' and ship the setup EXE with the payload folder.")
 
         self._run_bg("Build Inno installer", work)
 
@@ -1685,7 +1758,7 @@ class Launcher(tk.Tk):
         package_manager = _resolve_package_manager_command(package_manager_name)
         if not package_manager:
             raise RuntimeError(f"{package_manager_name} not found. Install Node.js LTS, enable Corepack if needed, then retry.")
-        self._log(f"Starting Studio ({package_manager_name} run dev)…")
+        self._log(f"Starting legacy Electron UI ({package_manager_name} run dev)…")
 
         # Align backend first.
         self._auto_attach_backend_if_found()
@@ -1708,7 +1781,7 @@ class Launcher(tk.Tk):
             pass
 
         self._studio_log_fp = open(self.studio_log_path, "a", encoding="utf-8", errors="ignore")
-        self._studio_log_fp.write(f"\n=== launcher start_studio {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        self._studio_log_fp.write(f"\n=== launcher start_legacy_electron_ui {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
         self._studio_log_fp.flush()
 
         self.studio_proc = subprocess.Popen(
@@ -1732,9 +1805,9 @@ class Launcher(tk.Tk):
 
     def _stop_studio_impl(self) -> None:
         if not self.studio_proc or self.studio_proc.poll() is not None:
-            self._log("Studio not running.")
+            self._log("Legacy Electron UI not running.")
             return
-        self._log("Stopping Studio…")
+        self._log("Stopping legacy Electron UI…")
         try:
             self.studio_proc.terminate()
         except Exception:
@@ -1753,20 +1826,20 @@ class Launcher(tk.Tk):
             pass
 
     def start_studio(self) -> None:
-        self._run_bg("Start Studio UI", self._start_studio_impl)
+        self._run_bg("Start Legacy Electron UI", self._start_studio_impl)
 
     def restart_studio(self) -> None:
         def work():
-            self._log("Restarting Studio…")
+            self._log("Restarting legacy Electron UI…")
             try:
                 self._stop_studio_impl()
             except Exception:
                 pass
             self._start_studio_impl()
-        self._run_bg("Restart Studio UI", work)
+        self._run_bg("Restart Legacy Electron UI", work)
 
     def stop_studio(self) -> None:
-        self._run_bg("Stop Studio UI", self._stop_studio_impl)
+        self._run_bg("Stop Legacy Electron UI", self._stop_studio_impl)
 
 
 if __name__ == "__main__":

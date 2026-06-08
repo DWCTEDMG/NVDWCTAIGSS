@@ -8,15 +8,15 @@ infrastructure.
 
 ## Current branch stance
 
-Use NVIDIA as the preferred accelerated path while keeping a packaged Windows
-desktop app:
+Use NVIDIA as the product runtime, with Omniverse Kit owning the desktop shell
+and viewport:
 
 - Windows desktop package: Omniverse Kit app, EDMG extensions, connection
   profiles, sample USD projects, and lightweight local validation tools.
 - Local or remote GPU service stack: NIM, Riva, NeMo, Audio2Face/ACE, Cosmos,
   Triton, TensorRT, and render workers.
-- Existing Electron app: remains a compatibility client until the Kit app is
-  useful enough to replace or stand beside it.
+- Existing Electron app: compatibility client only while remaining panels move
+  into Kit extensions or backend-served NVIDIA tools.
 
 The package should not embed model weights, accepted license artifacts, or
 private registry credentials.

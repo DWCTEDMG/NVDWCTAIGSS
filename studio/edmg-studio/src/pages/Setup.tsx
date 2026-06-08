@@ -173,7 +173,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   const aiConfig = status?.ai_config ?? null;
   const nvidiaProfile = status?.nvidia_profile ?? aiConfig?.nvidia_profile ?? null;
   const directmlAvailable = !!status?.hardware?.supports_directml;
-  const aiLabel = String(aiConfig?.label ?? "Local Ollama");
+  const aiLabel = String(aiConfig?.label ?? "NVIDIA NIM / OpenAI-compatible provider");
   const ollamaRequired = !!aiConfig?.ollama_required;
   const modelRequired = !!aiConfig?.model_required;
   const platformKind = normalizePlatformKind(studioPaths?.platform);
@@ -347,9 +347,9 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
 
   return (
     <div>
-      <h2>Setup Wizard</h2>
+      <h2>NVIDIA Runtime Setup</h2>
       <div className="small" style={{ marginTop: 6 }}>
-        NVIDIA is the primary Studio runtime. This checks NIM planning, OpenUSD/RTX handoff readiness, backend dependencies, and fallback local engines without requiring the command line.
+        NVIDIA Kit is the primary Studio shell. This page checks NIM planning, OpenUSD/RTX handoff readiness, backend dependencies, and legacy fallback engines while the remaining React client is phased out.
       </div>
 
       {err && (
@@ -416,7 +416,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
                 <div>Shared cache: <code>{studioPaths.cacheRoot}</code></div>
                 <div>External tools: <code>{studioPaths.externalDir}</code></div>
                 <div>Logs: <code>{studioPaths.logsDir}</code></div>
-                <div>Electron data: <code>{studioPaths.electronUserData}</code></div>
+                <div>Legacy UI data: <code>{studioPaths.electronUserData}</code></div>
                 {studioPaths?.pendingMigration?.source?.studioHome ? (
                   <div style={{ color: "#ffd78c" }}>
                     Pending migration: <code>{studioPaths.pendingMigration.source.studioHome}</code> to <code>{studioPaths.pendingMigration.target?.studioHome}</code>. Restart Studio to run it.
@@ -441,12 +441,12 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   <div className="small" style={{ marginTop: 6 }}>
     {isWindows ? (
       ollamaRequired
-      ? "Runs the full installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> managed Ollama fallback install -> pull fallback model -> ComfyUI secondary workflow install."
-      : `Runs the full installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> ComfyUI secondary workflow install. Ollama is skipped because Studio AI is currently set to ${aiLabel}.`
+      ? "Runs the NVIDIA-first installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> managed Ollama fallback install -> pull fallback model -> ComfyUI secondary workflow install."
+      : `Runs the NVIDIA-first installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> secondary ComfyUI workflow install. Ollama is skipped because Studio AI is currently set to ${aiLabel}.`
     ) : (
       ollamaRequired
-        ? "Linux and macOS use the manual setup path: install the backend runtime here, configure the NVIDIA/NIM endpoint, install Ollama only as a fallback, and run ComfyUI only for secondary workflows."
-        : `Linux and macOS use the manual setup path: install the backend runtime here, configure the NVIDIA/NIM endpoint, and add ComfyUI only for secondary workflows. Ollama is a fallback because Studio AI is currently set to ${aiLabel}.`
+        ? "Linux and macOS use the manual NVIDIA path: run the backend, configure the NIM endpoint, install Ollama only as a fallback, and run ComfyUI only for secondary workflows."
+        : `Linux and macOS use the manual NVIDIA path: run the backend, configure the NIM endpoint, and add ComfyUI only for secondary workflows. Ollama is a fallback because Studio AI is currently set to ${aiLabel}.`
     )}
   </div>
   <div data-testid="setup-active-ai-path" className="small" style={{ marginTop: 8, opacity: 0.9 }}>
@@ -463,7 +463,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           disabled={busy === "full_nvidia"}
           onClick={() => run("full_nvidia", "/v1/setup/full/install", { flavor: "nvidia" })}
         >
-          {busy === "full_nvidia" ? "Running…" : "Full Setup (NVIDIA)"}
+          {busy === "full_nvidia" ? "Running…" : "Prepare NVIDIA Runtime"}
         </button>
         <button
           className="secondary"
@@ -482,17 +482,17 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
       </>
     ) : (
       <>
-        <button className="secondary" onClick={() => window.edmg?.openExternal?.(ollamaDownloadUrl)}>
-          Open Ollama Install Guide
+        <button className="secondary" onClick={() => window.edmg?.openExternal?.("https://docs.nvidia.com/nim/")}>
+          Open NVIDIA NIM Docs
         </button>
-        <button className="secondary" onClick={() => window.edmg?.openExternal?.(comfyDocsUrl)}>
-          Open ComfyUI Docs
+        <button className="secondary" onClick={() => window.edmg?.openExternal?.("https://docs.omniverse.nvidia.com/")}>
+          Open Omniverse Docs
         </button>
       </>
     )}
     {onNavigate ? (
       <button className="secondary" onClick={() => onNavigate("settings")}>
-        Open AI Settings
+        Open NVIDIA Settings
       </button>
     ) : null}
   </div>

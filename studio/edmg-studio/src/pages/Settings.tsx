@@ -680,7 +680,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>Appearance</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          Theme changes are frontend-only. They do not affect Setup Wizard, backend spawning, model installs, render settings, or package outputs.
+          Theme changes affect only this legacy React client. They do not affect NVIDIA Kit panels, backend spawning, model installs, render settings, or package outputs.
         </div>
         <div style={{ display: "grid", gap: 12 }}>
           <div>
@@ -831,12 +831,12 @@ export default function Settings(props: PageProps) {
     ),
     aiProvider: (
       <div className="card" style={{ marginTop: 14 }}>
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>AI Provider</div>
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>NVIDIA AI Runtime</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          These are Studio startup settings for planning and prompt generation. NVIDIA NIM / OpenAI-compatible is the default path; save changes here, then restart Studio so the backend relaunches on the selected provider.
+          These are backend startup settings for NVIDIA Kit planning and prompt generation. NVIDIA NIM / OpenAI-compatible is the default path; save changes here, then restart the backend or NVIDIA Kit runtime so the selected provider is active.
         </div>
         <div className="small" style={{ marginBottom: 12, opacity: 0.85 }}>
-          Saved startup config: <b>{aiSettingsLoaded ? `${aiDraft.mode === "http" ? "remote_ai_service" : aiDraft.provider}` : "loading"}</b>
+          Saved NVIDIA startup config: <b>{aiSettingsLoaded ? `${aiDraft.mode === "http" ? "remote_ai_service" : aiDraft.provider}` : "loading"}</b>
           {studioAiSettings.source ? <span> • source <b>{studioAiSettings.source}</b></span> : null}
         </div>
 
@@ -852,11 +852,11 @@ export default function Settings(props: PageProps) {
           {aiDraft.mode === "local" ? (
             <>
               <div>
-                <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Local provider</div>
+                <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Runtime provider</div>
                 <select value={aiDraft.provider} onChange={(e) => updateAiDraft({ provider: e.target.value })}>
                   <option value="openai_compat">NVIDIA NIM / OpenAI-compatible</option>
-                  <option value="ollama">Ollama fallback</option>
-                  <option value="rule_based">Rule-based fallback</option>
+                  <option value="ollama">Legacy Ollama fallback</option>
+                  <option value="rule_based">Legacy rule-based fallback</option>
                 </select>
               </div>
 
@@ -890,7 +890,7 @@ export default function Settings(props: PageProps) {
                     <div>
                       <div className="small" style={{ fontWeight: 800 }}>API key</div>
                       <div className="small" style={{ opacity: 0.8 }}>
-                        Optional for local tools like LM Studio. Required for hosted providers that expect bearer auth.
+                        Optional for local NIM-compatible tools. Required for hosted NVIDIA or gateway providers that expect bearer auth.
                       </div>
                       <input
                         value={openaiCompatApiKey}
@@ -902,14 +902,14 @@ export default function Settings(props: PageProps) {
                     <button className="secondary" disabled={saving || !secrets?.has_openai_compat_api_key} onClick={() => clearSecret("openai_compat_api_key")}>Clear</button>
                   </div>
                   <div className="small" style={{ opacity: 0.82 }}>
-                    Use this for NVIDIA NIM first, or another OpenAI-style endpoint when a fallback gateway exposes <code>/v1/chat/completions</code>.
+                    Use this for NVIDIA NIM first. Non-NVIDIA OpenAI-style endpoints are compatibility gateways, not the primary product runtime.
                   </div>
                 </>
               ) : null}
 
               {aiDraft.provider === "rule_based" ? (
                 <div className="small" style={{ opacity: 0.82 }}>
-                  Dependency-free fallback. No external AI service is required, but planning quality will be simpler and more deterministic.
+                  Legacy dependency-free fallback. No external AI service is required, but planning quality will be simpler and it will not exercise the NVIDIA Kit/NIM runtime path.
                 </div>
               ) : null}
             </>
@@ -920,13 +920,13 @@ export default function Settings(props: PageProps) {
                 <input value={aiDraft.aiBaseUrl} onChange={(e) => updateAiDraft({ aiBaseUrl: e.target.value })} placeholder="http://127.0.0.1:7862" />
               </div>
               <div className="small" style={{ opacity: 0.82 }}>
-                Use this when you want Studio to call a separate EDMG AI service over HTTP instead of running the local planner/provider path inside the Studio backend.
+                Use this only when an external NVIDIA-compatible gateway owns planning outside the Studio backend.
               </div>
             </>
           )}
 
           <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button disabled={savingAi || !aiSettingsDirty || !window.edmg?.setAiSettings} onClick={saveAiSettings}>Save AI startup settings</button>
+            <button disabled={savingAi || !aiSettingsDirty || !window.edmg?.setAiSettings} onClick={saveAiSettings}>Save NVIDIA AI startup settings</button>
             {aiRestartRequired && window.edmg?.relaunch ? (
               <button className="secondary" disabled={savingAi} onClick={() => { void window.edmg?.relaunch?.(); }}>Restart now</button>
             ) : null}
@@ -938,9 +938,9 @@ export default function Settings(props: PageProps) {
     backendConfig: cfg ? <div className="card"><pre>{JSON.stringify(cfg, null, 2)}</pre></div> : null,
     liveAiStatus: aiStatus || nvidiaStatus || nvidiaDiagnostics ? (
       <div className="card" style={{ marginTop: 14 }}>
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>Live AI / NVIDIA Status</div>
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>Live NVIDIA Runtime Status</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          This is the provider the backend is using right now. If it differs from the saved startup config above, restart Studio to apply your latest change.
+          This is the provider and NVIDIA service profile the backend is using right now. If it differs from the saved startup config above, restart the backend or NVIDIA Kit runtime to apply your latest change.
         </div>
         {nvidiaDiagnostics?.nvidia?.readiness ? (
           <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12, marginBottom: 12 }}>

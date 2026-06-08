@@ -1,33 +1,36 @@
 # EDMG Studio Repo Map
 
-This repository now presents one product surface: EDMG Studio.
+This repository now presents one product surface: EDMG NVIDIA Studio.
 
 ## Canonical product tree
 
 - `studio/edmg-studio/`
-  Canonical Electron desktop app.
+  Legacy Electron/React compatibility client and Node tooling.
 - `studio/edmg-studio/src/`
-  React/Vite frontend.
+  React/Vite frontend retained for migration and browser/client experiments.
 - `studio/edmg-studio/main.mjs`, `preload.cjs`, `main-process/`
-  Desktop shell and runtime glue.
+  Legacy Electron desktop shell and runtime glue.
 - `studio/edmg-studio/python_backend/`
   FastAPI backend plus the vendored EDMG engine packages.
 - `studio/edmg-studio/tools/launcher_gui.py`
-  Shared dev launcher and Studio Home bootstrap flow.
+  Shared NVIDIA launcher, Studio Home bootstrap flow, backend controls, and
+  legacy Electron dev controls.
 - `studio/edmg-studio/packaging/windows/`
   Windows-first packaged release automation.
 - `studio/edmg-studio/packaging/linux/`
-  Linux AppImage packaging notes and operator guidance.
+  Legacy Linux AppImage packaging notes and operator guidance.
 - `studio/nvidia-kit/`
-  Omniverse Kit app source, AI Director/Timeline/Render Queue extensions,
+  Primary Omniverse Kit app source, AI Director/Timeline/Render Queue extensions,
   OpenUSD sample project, and dependency-light validators.
 - `deployment/nvidia/`
-  NVIDIA service-profile starter for NIM/Riva/NeMo-style GPU services.
+  NVIDIA runtime launchers, Kit staging, service profiles, diagnostics, and
+  smoke tests for NIM/Riva/NeMo/Triton/Omniverse-style GPU services.
 
 ## Canonical entrypoints
 
 - `RUN_ME.bat`
 - `./run_me.sh`
+- `deployment/nvidia/start_nvidia_runtime_local.ps1`
 
 ## Internal support surfaces
 
@@ -37,8 +40,8 @@ separate user-facing products:
 - `studio/edmg-studio/scripts/`
 - `studio/edmg-studio/tools/edmgctl/`
 
-Important: these support paths exist to serve the Studio product. They are not
-alternative install flows.
+Important: these support paths exist to serve the NVIDIA Kit product. They are
+not alternative primary install flows.
 
 ## Legacy surfaces retired from the public repo entry
 
@@ -61,7 +64,7 @@ Primary Studio docs:
 - [docs/STUDIO_RELEASE_RUNBOOK.md](./STUDIO_RELEASE_RUNBOOK.md)
 - [docs/NVIDIA_OMNIVERSE_STUDIO.md](./NVIDIA_OMNIVERSE_STUDIO.md)
 
-Key validation commands run from `studio/edmg-studio/`:
+Key legacy client validation commands run from `studio/edmg-studio/`:
 
 - `pnpm run check:tooling`
 - `pnpm run validate:desktop`

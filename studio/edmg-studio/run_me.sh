@@ -2,6 +2,20 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+if [[ "${1:-}" != "legacy-electron" ]]; then
+  ROOT_DIR="$(cd ../.. && pwd)"
+  if command -v pwsh >/dev/null 2>&1; then
+    exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$ROOT_DIR/deployment/nvidia/start_nvidia_runtime_local.ps1" "$@"
+  fi
+  if command -v powershell >/dev/null 2>&1; then
+    exec powershell -NoProfile -ExecutionPolicy Bypass -File "$ROOT_DIR/deployment/nvidia/start_nvidia_runtime_local.ps1" "$@"
+  fi
+  echo "NVIDIA Kit launch requires PowerShell and an Omniverse Kit SDK path."
+  echo "For the old Electron dev UI: ./run_me.sh legacy-electron"
+  exit 1
+fi
+shift
+
 supports_studio_python() {
   "$1" -c 'import sys; raise SystemExit(0 if (3, 10) <= sys.version_info[:2] < (3, 14) else 1)' >/dev/null 2>&1
 }

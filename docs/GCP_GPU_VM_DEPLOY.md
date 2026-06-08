@@ -240,8 +240,9 @@ If you want Ollama on the VM:
   -InstallOllama
 ```
 
-If you skip Ollama, the bootstrap defaults the backend to the rule-based planner
-so the app still boots cleanly.
+If you skip Ollama, point the backend at a NVIDIA NIM/OpenAI-compatible endpoint.
+Use the rule-based planner only as the no-endpoint fallback so the app still
+boots cleanly.
 
 ## Optional model installs
 

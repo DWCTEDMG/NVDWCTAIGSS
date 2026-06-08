@@ -101,12 +101,12 @@ export default function Sidebar({
           />
         </div>
         <div className="sidebar-brandText">
-          <div className="sidebar-eyebrow">Studio Control</div>
-          <div className="sidebar-brand">EDMG Studio</div>
+          <div className="sidebar-eyebrow">NVIDIA Kit Runtime</div>
+          <div className="sidebar-brand">EDMG NVIDIA Studio</div>
         </div>
       </div>
       <div className="small sidebar-tagline">
-        NVIDIA-first Studio control for NIM planning, OpenUSD handoff, RTX render jobs, and local fallback engines
+        NVIDIA Kit control for NIM planning, OpenUSD stages, RTX render jobs, and service diagnostics
       </div>
 
       <div className="sidebar-focusCard">

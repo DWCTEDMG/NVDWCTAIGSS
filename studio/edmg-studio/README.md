@@ -1,14 +1,19 @@
 # EDMG Studio (v1.1.0)
 
-A desktop-style "studio" application:
+Legacy Electron/React client and Python backend for the NVIDIA-first EDMG
+Studio runtime. The primary desktop shell now lives in `../nvidia-kit/` and is
+launched through `../../deployment/nvidia/start_nvidia_runtime_local.ps1`.
 
-- **Electron** shell + **React** UI
+- **Omniverse Kit** shell + **OpenUSD/RTX** workflow in `studio/nvidia-kit`
+- Legacy **Electron** shell + **React** UI retained for migration/dev support
 - Local **FastAPI** backend for projects, assets, planning, rendering, and outputs
 - Bundled **EDMG Director** MCP sidecar for ChatGPT connector workflows and Studio-native directing handoff
 - Integrates with:
-  - **Studio internal renderer** as the default built-in render path
-  - **ComfyUI** as an optional still/motion render sidecar (local or remote)
-  - In-process **AI providers** for planning/transcription/features (Ollama by default)
+  - **NVIDIA NIM** for planning through the OpenAI-compatible `/v1` API
+  - **NVIDIA Riva**, **Triton**, **Audio2Face/ACE**, **Cosmos**, and **Omniverse Kit** service profiles
+  - **OpenUSD/RTX render jobs** as the primary production handoff
+  - **Studio internal renderer** and **ComfyUI** as secondary render lanes
+  - In-process **AI providers** as fallbacks when NIM is unavailable
   - Optional external **AI service** over HTTP when you want to separate that workload
   - **OpenClaw** only as an optional operator/automation shell around Studio, not as a required runtime dependency
   - **EDMG Core** (enhanced-deforum-music-generator) for Deforum template/export (optional but recommended)
@@ -51,7 +56,18 @@ Detached variant with PID and log files under `EDMG_STUDIO_HOME/logs/lightning-b
 bash scripts/start_lightning_backend_nohup.sh
 ```
 
-### UI
+### Primary NVIDIA runtime
+From the repo root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File deployment/nvidia/start_nvidia_runtime_local.ps1
+```
+
+This starts or reuses the backend, checks NVIDIA diagnostics, and launches the
+Kit app through `studio/nvidia-kit/tools/launch_edmg_kit.ps1`.
+
+### Legacy Electron UI
 ```bash
 corepack enable
 pnpm install
@@ -78,22 +94,22 @@ pnpm backend:use external http://HOST:PORT
 - Linux desktop artifacts are built as `AppImage` via `pnpm run dist:linux`
 - Use `pnpm run check:release-metadata` after staging if you want a direct version-propagation check
 
-## Setup Wizard (no command line)
+## NVIDIA Runtime Setup (legacy client)
 
-When you install the packaged app, EDMG Studio includes an in-app **Setup Wizard** (Sidebar → **Setup**) that:
+The legacy Electron client still includes **NVIDIA Runtime Setup** (Sidebar → **Setup**) used during migration. The primary install/run path is the NVIDIA Kit launcher and diagnostics flow:
 
 - Uses an assisted Windows installer, so you can choose the **app install directory** instead of being forced into the default `C:\` path
-- Lets you choose a **Studio Home** folder before large downloads, so project data, Electron data, ComfyUI Portable, and caches can live on `D:\...`
-- Checks **Ollama** availability (local AI)
-- Supports local **OpenAI-compatible** servers such as LM Studio or `llama.cpp` server through Studio Settings
-- Lets you **pull the default model** (`qwen3:8b`) via a button
+- Lets you choose a **Studio Home** folder before large downloads, so project data, NVIDIA session data, legacy UI data, portable tools, and caches can live on `D:\...`
+- Checks **NVIDIA NIM**, **Riva**, **Triton**, and **Omniverse/Audio2Face** service readiness
+- Supports local or hosted **NVIDIA NIM/OpenAI-compatible** servers through Studio Settings
+- Uses `nvidia/llama-3.3-nemotron-super-49b-v1.5` as the default NIM planning model
 - Installs the **backend runtime bundle** that powers the internal renderer
-- Checks **ComfyUI** availability and can **download + extract ComfyUI Portable** on Windows when you want the optional ComfyUI path
+- Keeps **Ollama** and **ComfyUI** as fallback/secondary lanes
 - Verifies **FFmpeg** for MP4 assembly, preferring the Studio-bundled binary when present
 
 This keeps the runtime UX like a DAW/game installer: click buttons, no terminal required.
 
-On Linux, use the packaged `AppImage` or `pnpm run dist:linux` on a Linux host. The same Setup Wizard still manages Studio Home paths, but Ollama and ComfyUI are expected to be installed manually or pointed at existing services instead of using the Windows-only managed installers.
+On Linux, use the NVIDIA backend/service deployment paths first. The legacy AppImage remains available only for React client compatibility work.
 
 OpenClaw is not part of the required Studio install path. If you use it, treat it as an optional operator shell layered around Studio for automation or monitoring rather than as a dependency of the app itself.
 
@@ -105,7 +121,7 @@ Release/operator runbook:
 
 Install/storage split:
 - **Install directory**: where the packaged app itself is installed
-- **Studio Home**: where projects, caches, Electron session data, portable tools, and large runtime payloads live
+- **Studio Home**: where projects, caches, NVIDIA runtime data, legacy UI session data, portable tools, and large runtime payloads live
 
 ## Ports
 - Studio backend: **7863**
@@ -130,12 +146,18 @@ For local Studio use, the native Director page does not require ChatGPT. If you 
 - `EDMG_STUDIO_HOME` (optional; preferred root for Studio storage)
 - `EDMG_STUDIO_DATA_DIR` (default: `./data`)
 - `EDMG_AI_MODE` (default: `local`)
-- `EDMG_AI_PROVIDER` (default: `ollama`)
+- `EDMG_AI_PROVIDER` (default: `openai_compat`)
 - `EDMG_AI_OLLAMA_URL` (default: `http://127.0.0.1:11434`)
 - `EDMG_AI_OLLAMA_MODEL` (default: `qwen3:8b`)
-- `EDMG_AI_OPENAI_COMPAT_BASE_URL` (default: `http://127.0.0.1:8000`)
-- `EDMG_AI_OPENAI_COMPAT_MODEL` (default: `qwen3-8b`)
+- `EDMG_AI_OPENAI_COMPAT_BASE_URL` (default: `http://127.0.0.1:8001/v1`)
+- `EDMG_AI_OPENAI_COMPAT_MODEL` (default: `nvidia/llama-3.3-nemotron-super-49b-v1.5`)
 - `EDMG_AI_OPENAI_COMPAT_API_KEY` (optional)
+- `EDMG_NVIDIA_MODE` (default: `1`)
+- `EDMG_NVIDIA_PROFILE` (default: `omniverse`)
+- `EDMG_NVIDIA_NIM_URL` (default: `http://127.0.0.1:8001`)
+- `EDMG_NVIDIA_RIVA_URL` (default: `127.0.0.1:50051`)
+- `EDMG_NVIDIA_TRITON_URL` (default: `http://127.0.0.1:8002`)
+- `EDMG_NVIDIA_OMNIVERSE_URL` (default: `http://127.0.0.1:8011`)
 - `EDMG_COMFYUI_URL` (default: `http://127.0.0.1:8188`)
 - `EDMG_COMFYUI_CHECKPOINT` (default: `sd_xl_base_1.0.safetensors`)
 - `EDMG_FFMPEG_PATH` (optional override; packaged Studio prefers its bundled FFmpeg, dev falls back to `ffmpeg` on PATH)
@@ -146,15 +168,16 @@ For local Studio use, the native Director page does not require ChatGPT. If you 
 
 If you need a lighter local planner for weaker CPUs or low-memory systems, set `EDMG_AI_OLLAMA_MODEL=qwen3:4b`.
 
-If you use an OpenAI-compatible gateway that exposes a different model alias than `qwen3-8b`,
-override `EDMG_AI_OPENAI_COMPAT_MODEL` to match that server.
+If your NIM/OpenAI-compatible gateway exposes a different model alias, override
+`EDMG_AI_OPENAI_COMPAT_MODEL` to match that server.
 
 S3-hosted model entries can use `source: "s3"` with either `s3_uri: "s3://bucket/key"` or `s3_key: "prefix/model.safetensors"` plus the configured model-cache bucket. Runtime resolution materializes supported single-file ComfyUI assets into the Studio models directory before rendering.
 
 ## Recommended local model stack
 
-- Planner default: `qwen3:8b`
-- Low-resource planner: `qwen3:4b`
+- Planner default: NVIDIA NIM `nvidia/llama-3.3-nemotron-super-49b-v1.5`
+- Local fallback planner: `qwen3:8b`
+- Low-resource fallback planner: `qwen3:4b`
 - Broad still-image default: SDXL Base 1.0
 - Fast still-image option: SD3.5 Large Turbo
 - Reference still guidance: SD3.5 ControlNet Blur, Canny, and Depth
@@ -163,14 +186,14 @@ S3-hosted model entries can use `source: "s3"` with either `s3_uri: "s3://bucket
 
 ## Hardware tiers
 
-- Low-spec: `qwen3:4b` + SDXL Base 1.0
-- Mid-range: `qwen3:8b` + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
-- High-end: `qwen3:8b` + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
+- Low-spec fallback: `qwen3:4b` + SDXL Base 1.0
+- Mid-range: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
+- High-end: NVIDIA NIM + RTX/OpenUSD Kit render jobs + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
 
 If `EDMG_STUDIO_HOME` is set, Studio uses it as the root for:
 - backend project data (`<studio-home>/data`)
 - models (`<studio-home>/models`)
-- Electron user/session data (`<studio-home>/electron`)
+- legacy Electron user/session data (`<studio-home>/electron`)
 - caches and temporary files (`<studio-home>/cache`)
 - logs (`<studio-home>/logs`)
 - external tools (`<studio-home>/external`)
@@ -184,18 +207,18 @@ EDMG Core integration:
 ## Workflow
 1. Create a project
 2. Upload audio
-3. Analyze + transcribe (in-process provider by default; optional external AI service)
-4. Generate plan variants
-5. Render with the internal renderer by default, or use ComfyUI optionally for supported still/motion workflows
+3. Analyze + transcribe with NVIDIA services where configured
+4. Generate NVIDIA/OpenUSD scene-plan variants with NIM
+5. Queue RTX render handoff jobs for Kit, or use internal/ComfyUI secondary lanes when explicitly selected
 6. Assemble MP4 (FFmpeg slideshow + audio)
 7. Export Deforum settings (optional)
 
 
 ## Default rendering path
 
-Studio's default render path is the **internal renderer** backed by the Studio backend runtime, local model installs, cache/history, and FFmpeg assembly.
+Studio's default production render path is the **NVIDIA Kit/OpenUSD/RTX handoff** backed by the Studio backend runtime, NIM planning, render-job JSON, and FFmpeg assembly.
 
-Use ComfyUI only when you explicitly want one of the supported ComfyUI-backed still or motion workflows.
+Use the internal renderer or ComfyUI only when you explicitly want a secondary still or motion workflow.
 
 ## Optional OpenClaw operator shell
 

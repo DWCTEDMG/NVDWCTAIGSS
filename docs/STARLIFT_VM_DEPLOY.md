@@ -8,17 +8,18 @@ This deployment path is intended for:
 - Ubuntu 24.04 VMs
 - Docker-based installs
 - browser access over one HTTP port
-- optional host-level Ollama or ComfyUI sidecars
+- optional host-level NVIDIA NIM, Ollama fallback, or ComfyUI sidecars
 
 Important limits:
 
-- Electron-only features do not exist in the browser build
+- desktop-only Kit and legacy Electron features do not exist in the browser build
 - no native folder picker
 - no native file reveal/open actions
 - no desktop restart hooks
 - CPU-only VMs are not a good fit for heavy local diffusion renders
-- the safest default for server startup is `rule_based` planning unless you
-  explicitly wire Ollama or a remote AI path
+- the safest default for server startup is NVIDIA NIM/OpenAI-compatible when a
+  GPU endpoint is configured, otherwise `rule_based` planning until you wire a
+  remote AI path
 
 ## Files added for this path
 
@@ -71,14 +72,16 @@ backend container, so it can talk to services running directly on the VM.
 
 Examples:
 
+- host NVIDIA NIM: `http://host.docker.internal:8001/v1`
 - host Ollama: `http://host.docker.internal:11434`
 - host ComfyUI: `http://host.docker.internal:8188`
 
 Override them at launch time if needed:
 
 ```bash
-EDMG_AI_PROVIDER=ollama \
-EDMG_AI_OLLAMA_URL=http://host.docker.internal:11434 \
+EDMG_AI_PROVIDER=openai_compat \
+EDMG_AI_OPENAI_COMPAT_BASE_URL=http://host.docker.internal:8001/v1 \
+EDMG_AI_OPENAI_COMPAT_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1.5 \
 EDMG_COMFYUI_URL=http://host.docker.internal:8188 \
 docker compose -f docker-compose.starlift.yml up -d --build
 ```
@@ -87,8 +90,9 @@ docker compose -f docker-compose.starlift.yml up -d --build
 
 For a plain 8 vCPU / 16 GiB CPU VM:
 
-- start with `EDMG_AI_PROVIDER=rule_based`
-- add Ollama only if you actually need local planning on the VM
+- start with NVIDIA NIM/OpenAI-compatible when a GPU endpoint is available
+- use `EDMG_AI_PROVIDER=rule_based` only for CPU-only bootstrap
+- add Ollama only if you actually need local fallback planning on the VM
 - treat ComfyUI as optional and preferably remote/GPU-backed
 - keep the built-in backend bundle for project management, exports, queueing,
   FFmpeg assembly, and the Studio UI

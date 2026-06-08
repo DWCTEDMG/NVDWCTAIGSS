@@ -6,7 +6,16 @@ if /I "%~1"=="build-inno" goto build_inno
 if /I "%~1"=="inno" goto build_inno
 if /I "%~1"=="dist-inno" goto build_inno
 if /I "%~1"=="build-inno-skip" goto build_inno_skip
+if /I "%~1"=="legacy-electron" (
+  shift
+  goto legacy_launcher
+)
 
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\deployment\nvidia\start_nvidia_runtime_local.ps1" %*
+if errorlevel 1 pause
+goto :eof
+
+:legacy_launcher
 if defined EDMG_STUDIO_PYTHON (
   "%EDMG_STUDIO_PYTHON%" -c "import sys; raise SystemExit(0 if (3, 10) <= sys.version_info[:2] < (3, 14) else 1)" >nul 2>nul
   if %errorlevel%==0 (

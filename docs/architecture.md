@@ -1,12 +1,18 @@
 # Architecture
 
 ## Goals
-- EDMG Studio provides a desktop UI (Electron) backed by a local FastAPI service.
+- EDMG NVIDIA Studio provides an Omniverse Kit desktop shell backed by a local FastAPI service.
 - The backend exposes a stable JSON API envelope: `{ "ok": true|false, ... }`.
 - Errors intended for users follow a structured `UserFacingError` format.
 
 ## High-level components
-### Desktop App (Node/TS)
+### Desktop App (NVIDIA Kit)
+- App root: `studio/nvidia-kit/`
+- Launch: `deployment/nvidia/start_nvidia_runtime_local.ps1`
+- Kit app: `studio/nvidia-kit/apps/edmg.nvidia.studio.kit`
+- Extensions: `studio/nvidia-kit/extensions/`
+
+### Legacy Client (Node/TS)
 - Package root: `studio/edmg-studio/`
 - Package manager: `pnpm@10.33.0` via `packageManager`
 - Typecheck: `pnpm run typecheck`

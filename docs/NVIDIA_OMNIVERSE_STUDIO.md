@@ -1,7 +1,7 @@
 # NVIDIA Omniverse Studio Rework
 
 This branch starts a separate NVIDIA-first direction for EDMG Studio. The goal
-is not to bolt NVIDIA services onto the current Electron app. The goal is to
+is not to bolt NVIDIA services onto the legacy Electron app. The goal is to
 define a new product lane where Omniverse, OpenUSD, RTX rendering, and NVIDIA AI
 services are the default runtime assumptions.
 
@@ -247,5 +247,5 @@ machine.
   to remote Linux GPU machines.
 - USD schema design before generated projects accumulate.
 - Model storage and license acceptance flow.
-- How much of the existing Electron UI should be preserved versus rebuilt as
-  Kit extensions.
+- Which remaining legacy Electron UI panels should be deleted once their Kit
+  extension replacements are verified.

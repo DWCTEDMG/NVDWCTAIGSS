@@ -6,7 +6,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     name: "Unreal Shot Metadata Export",
     kind: "metadataExport",
     description:
-      "Preview a non-destructive export that packages scene timing, prompt context, continuity notes, and shot metadata for Unreal ingest tooling.",
+      "Preview a non-destructive export that packages NVIDIA scene timing, prompt context, continuity notes, and shot metadata for external ingest tooling.",
     transports: ["fileExport"],
     outputs: [
       "Scene + shot manifest JSON",
@@ -24,7 +24,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     limitations:
       "Preview only. Studio Forge does not write Unreal project files or require an Unreal plugin in this phase.",
     requiredCapabilities: ["backend"],
-    optionalCapabilities: ["edmgCore"],
+    optionalCapabilities: ["nvidiaKit", "edmgCore"],
     destructive: false,
     status: "preview",
   },
@@ -33,7 +33,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     name: "Unreal Render Handoff",
     kind: "renderHandoff",
     description:
-      "Preview an external render target where NVIDIA Studio stays the planner and assembly owner while Unreal becomes a secondary execution endpoint.",
+      "Preview an external render target where NVIDIA Kit stays the planner, OpenUSD, and assembly owner while Unreal is only an optional execution endpoint.",
     transports: ["fileExport", "http"],
     outputs: [
       "Render intent manifest",
@@ -51,8 +51,8 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     },
     limitations:
       "Preview only. No Unreal render job is launched from Studio Forge, and NVIDIA/OpenUSD remains the default runtime.",
-    requiredCapabilities: ["backend", "ffmpeg"],
-    optionalCapabilities: ["internalRenderer", "edmgCore"],
+    requiredCapabilities: ["backend", "nvidiaKit", "ffmpeg"],
+    optionalCapabilities: ["nvidiaOmniverse", "edmgCore"],
     destructive: false,
     status: "preview",
   },
@@ -61,7 +61,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     name: "Unreal Live Control Bridge",
     kind: "controlBridge",
     description:
-      "Preview section-aware control outputs that could drive Unreal scenes over OSC, WebSocket, or Remote Control without making Unreal part of Studio startup.",
+      "Preview section-aware control outputs that could drive external scenes over OSC, WebSocket, or Remote Control without replacing the NVIDIA Kit startup path.",
     transports: ["websocket", "osc", "remoteControl"],
     outputs: [
       "Section and cue events",
@@ -82,7 +82,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
     limitations:
       "Preview only. Studio Forge does not open live control sockets or bind directly to Unreal in the current phase.",
     requiredCapabilities: ["backend"],
-    optionalCapabilities: ["ollama", "ffmpeg"],
+    optionalCapabilities: ["nvidiaRiva", "ffmpeg"],
     destructive: false,
     status: "preview",
   },

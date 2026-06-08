@@ -9,8 +9,8 @@ const ORIGINAL_STUDIO_FORGE_FLAG = import.meta.env.VITE_EDMG_ENABLE_STUDIO_FORGE
 
 const READY_STATUS = {
   ollama: {
-    ok: true,
-    model_present: true,
+    ok: false,
+    model_present: false,
     model: "qwen3:8b",
     url: "http://127.0.0.1:11434",
   },
@@ -29,9 +29,22 @@ const READY_STATUS = {
     available: true,
   },
   ai_config: {
-    label: "Local Ollama",
-    ollama_required: true,
-    model_required: true,
+    label: "NVIDIA NIM / OpenAI-compatible provider",
+    provider: "openai_compat",
+    base_url: "http://127.0.0.1:8001/v1",
+    model: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    ollama_required: false,
+    model_required: false,
+  },
+  nvidia_profile: {
+    enabled: true,
+    profile: "omniverse",
+    services: {
+      nim: { configured: true, base_url: "http://127.0.0.1:8001/v1", model: "nvidia/llama-3.3-nemotron-super-49b-v1.5" },
+      riva: { configured: true, base_url: "127.0.0.1:50051" },
+      triton: { configured: true, base_url: "http://127.0.0.1:8002", model: "edmg_ensemble" },
+      omniverse: { configured: true, base_url: "http://127.0.0.1:8011" },
+    },
   },
 };
 
@@ -97,10 +110,23 @@ const FETCH_FIXTURES = {
   },
   "/v1/config": {
     ai_mode: "local",
-    ai_provider: "ollama",
-    model: "qwen3:8b",
+    ai_provider: "openai_compat",
+    model: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   },
   "/v1/setup/status": READY_STATUS,
+  "/v1/nvidia/diagnostics": {
+    ok: true,
+    nvidia: {
+      profile: { enabled: true, profile: "omniverse" },
+      host: { gpu: { ok: true, gpus: [{ name: "Test RTX" }] }, docker: { ok: true, nvidia_runtime: true } },
+      services: {
+        nim: { configured: true, probe: { reachable: true, models_url: "http://127.0.0.1:8001/v1/models" } },
+        riva: { configured: true, probe: { reachable: true } },
+        triton: { configured: true, probe: { reachable: true } },
+        omniverse: { configured: true, probe: { reachable: true } },
+      },
+    },
+  },
   "/v1/comfyui/capabilities": {
     ok: true,
     nodes: [],
@@ -141,6 +167,11 @@ describe("Studio Forge", () => {
       ...FETCH_FIXTURES,
       "/v1/setup/status": {
         ...READY_STATUS,
+        nvidia_profile: {
+          enabled: false,
+          profile: "omniverse",
+          services: {},
+        },
         ollama: {
           ok: false,
           model_present: false,
@@ -157,6 +188,14 @@ describe("Studio Forge", () => {
         },
         edmg: {
           available: false,
+        },
+      },
+      "/v1/nvidia/diagnostics": {
+        ok: true,
+        nvidia: {
+          profile: { enabled: false, profile: "omniverse" },
+          host: { gpu: { ok: false, gpus: [] }, docker: { ok: false, nvidia_runtime: false } },
+          services: { nim: { configured: false, probe: { reachable: false } } },
         },
       },
       "/v1/comfyui/capabilities": () => {

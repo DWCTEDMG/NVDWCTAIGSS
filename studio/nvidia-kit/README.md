@@ -2,8 +2,8 @@
 
 This directory contains the starter Omniverse Kit version of EDMG Studio.
 
-Do not treat this as an Electron replacement yet. The starter Kit app proves the
-product boundary:
+Treat this as the replacement shell for the old Electron-first desktop app. The
+Kit app defines the NVIDIA product boundary:
 
 1. declares a Windows-launchable Kit app shape.
 2. opens a starter OpenUSD stage.

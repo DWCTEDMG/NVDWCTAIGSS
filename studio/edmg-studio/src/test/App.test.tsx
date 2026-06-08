@@ -15,14 +15,14 @@ describe("App boot", () => {
         ffmpeg: { ok: false },
         backend_bundle: { ok: false },
         sevenzip: { ok: false },
-        ai_config: { label: "Local Ollama", ollama_required: true, model_required: true },
+        ai_config: { label: "NVIDIA NIM / OpenAI-compatible provider", ollama_required: false, model_required: false },
       },
       "/v1/models/catalog": { packs: [], catalog: [], user: [] },
     });
 
     renderWithStudio(<App />);
 
-    expect(await screen.findByText("Setup Wizard")).toBeTruthy();
+    expect(await screen.findByText("NVIDIA Runtime Setup")).toBeTruthy();
     expect(await screen.findByText(/Active AI path:/)).toBeTruthy();
   });
 });

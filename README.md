@@ -2,13 +2,14 @@
 
 This repository is the single authoritative source tree for EDMG Studio.
 
-Studio is not a sidecar anymore. The desktop shell, React frontend, FastAPI
-backend, vendored EDMG engine packages, setup flow, release packaging, and
-support tooling all converge on one product path:
+Studio is not a sidecar anymore. The NVIDIA Kit shell, OpenUSD/RTX workflow,
+FastAPI backend, vendored EDMG engine packages, setup flow, release packaging,
+and support tooling all converge on one product path:
 
-- `studio/edmg-studio/`
+- `studio/nvidia-kit/` for the primary NVIDIA desktop runtime
+- `studio/edmg-studio/python_backend/` for the orchestration backend
 
-The older standalone-engine installers, duplicate Electron shell, and extra
+The older standalone-engine installers, Electron-first shell, and extra
 README entrypoints have been retired so the repo presents one product instead
 of multiple competing workflows.
 
@@ -32,23 +33,29 @@ macOS/Linux:
 ./run_me.sh
 ```
 
-Those launchers open the Studio dev launcher in `studio/edmg-studio/tools/launcher_gui.py`, which
-keeps the UI, backend, and `Studio Home` storage aligned with the same settings
-used by the packaged app.
+Those launchers start the NVIDIA Kit runtime through
+`deployment/nvidia/start_nvidia_runtime_local.ps1`. Use
+`RUN_ME.bat legacy-electron` or `./run_me.sh legacy-electron` only when you need
+the old Electron dev UI during migration.
 
 ## Canonical product layout
 
 - `studio/edmg-studio/`
-  Electron shell, preload, main-process runtime, React/Vite frontend, packaging
-  scripts, release validation, and the only Node/pnpm package root in the repo.
+  Legacy Electron/React client, packaging scripts, release validation, and the
+  only Node/pnpm package root in the repo. This is compatibility tooling, not
+  the primary runtime shell.
+- `studio/nvidia-kit/`
+  Omniverse Kit app, EDMG extensions, OpenUSD sample projects, RTX render queue,
+  AI Director panel, and dependency-light validators.
 - `studio/edmg-studio/python_backend/`
   FastAPI backend plus the vendored `enhanced_deforum_music_generator` and
   `deforum_music` engine packages that power planning, analysis, schedules, and
   EDMG Core support.
 - `studio/edmg-studio/tools/launcher_gui.py`
-  Shared dev launcher and Studio Home bootstrap flow.
-- `studio/edmg-studio/packaging/windows/`
-  Windows-first release orchestration for the packaged Studio app.
+  Shared NVIDIA launcher, Studio Home bootstrap flow, backend controls, and
+  legacy Electron dev controls.
+- `deployment/nvidia/`
+  NVIDIA runtime, Kit staging, service profile, diagnostics, and smoke helpers.
 
 ## Studio Home
 
@@ -60,7 +67,7 @@ The `Studio Home` contains:
 - `cache`
 - `logs`
 - `external`
-- `electron`
+- `kit-session`
 
 That keeps large downloads, render caches, and external tools off the app
 install path and allows migration to another drive or mount such as `D:\` on
@@ -68,9 +75,10 @@ Windows or `/mnt/media/EDMG-Studio` on Linux.
 
 ## JS Tooling
 
-- Run all JS/Electron commands from `studio/edmg-studio/`.
+- Run JS commands only for the legacy React/Electron compatibility client from
+  `studio/edmg-studio/`.
 - The canonical package manager is `pnpm@10.33.0`, pinned in `studio/edmg-studio/package.json`.
-- The shipped desktop app version also comes from `studio/edmg-studio/package.json#version`.
+- NVIDIA Kit packaging is staged by `deployment/nvidia/stage_nvidia_kit_app.ps1`.
 
 ## Release, strategy, and operator docs
 

@@ -35,11 +35,16 @@ type RuntimeCard = {
 
 const CAPABILITY_LABELS: Record<StudioForgeCapability, string> = {
   backend: "Backend",
-  ollama: "Ollama",
-  openaiCompatible: "OpenAI-Compatible",
-  comfyui: "ComfyUI",
+  ollama: "Legacy Ollama",
+  openaiCompatible: "OpenAI-compatible",
+  nvidiaKit: "NVIDIA Kit",
+  nvidiaNim: "NVIDIA NIM",
+  nvidiaRiva: "NVIDIA Riva",
+  nvidiaTriton: "NVIDIA Triton",
+  nvidiaOmniverse: "NVIDIA Omniverse",
+  comfyui: "Secondary ComfyUI",
   ffmpeg: "FFmpeg",
-  internalRenderer: "Internal Renderer",
+  internalRenderer: "Secondary Internal Renderer",
   edmgCore: "EDMG Core",
 };
 
@@ -49,9 +54,9 @@ const VALIDATION_COMMANDS = [
   "pnpm run test:ui",
   "pnpm run build",
   "pnpm run validate:desktop",
-  "pnpm run build:electron",
-  "pnpm run dist:win",
-  "pnpm run dist:linux",
+  "python ../../studio/nvidia-kit/tools/validate_kit_layout.py",
+  "python ../../studio/nvidia-kit/tools/validate_scene_plan.py ../../studio/nvidia-kit/sample_projects/audio_reactive_stage/scene_plan.json",
+  "powershell -NoProfile -ExecutionPolicy Bypass -File ../../deployment/nvidia/stage_nvidia_kit_app.ps1 -PackageMode thin",
 ];
 
 const BRIDGE_TRANSPORT_LABELS: Record<StudioForgeBridgeTransport, string> = {
@@ -299,6 +304,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
   const [setupError, setSetupError] = useState<string>("");
   const [backendConfig, setBackendConfig] = useState<any>(null);
   const [backendConfigError, setBackendConfigError] = useState<string>("");
+  const [nvidiaDiagnostics, setNvidiaDiagnostics] = useState<any>(null);
+  const [nvidiaDiagnosticsError, setNvidiaDiagnosticsError] = useState<string>("");
   const [comfyCapabilities, setComfyCapabilities] = useState<any>(null);
   const [comfyError, setComfyError] = useState<string>("");
   const [unrealPreview, setUnrealPreview] = useState<any>(null);
@@ -327,6 +334,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     void load("/health", setHealth, setHealthError);
     void load("/v1/config", setBackendConfig, setBackendConfigError);
     void load("/v1/setup/status", setSetupStatus, setSetupError);
+    void load("/v1/nvidia/diagnostics", setNvidiaDiagnostics, setNvidiaDiagnosticsError);
     void load("/v1/comfyui/capabilities", setComfyCapabilities, setComfyError);
 
     return () => {
@@ -366,9 +374,21 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
   const ollamaOk = !!setupStatus?.ollama?.ok;
   const modelOk = !modelRequired || !!setupStatus?.ollama?.model_present;
   const setupReady = backendBundleOk && ffmpegOk && (!ollamaRequired || (ollamaOk && modelOk));
+  const nvidiaProfile = setupStatus?.nvidia_profile ?? nvidiaDiagnostics?.nvidia?.profile ?? {};
+  const nvidiaEnabled = !!nvidiaProfile?.enabled || !!setupStatus?.nvidia_mode;
+  const nvidiaServices = nvidiaDiagnostics?.nvidia?.services ?? {};
+  const nvidiaHost = nvidiaDiagnostics?.nvidia?.host ?? {};
+  const nvidiaGpuOk = !!nvidiaHost?.gpu?.ok;
+  const nimReady = !!nvidiaServices?.nim?.probe?.reachable || aiConfig?.provider === "openai_compat";
+  const rivaReady = !!nvidiaServices?.riva?.configured || !!nvidiaProfile?.services?.riva?.configured;
+  const tritonReady = !!nvidiaServices?.triton?.configured || !!nvidiaProfile?.services?.triton?.configured;
+  const omniverseReady = !!nvidiaServices?.omniverse?.configured || !!nvidiaProfile?.services?.omniverse?.configured || nvidiaGpuOk;
+  const kitReady = nvidiaEnabled && (nvidiaGpuOk || omniverseReady || !nvidiaDiagnosticsError);
   const missingSetupParts = [
     !backendBundleOk ? "backend bundle" : null,
     !ffmpegOk ? "FFmpeg" : null,
+    !nvidiaEnabled ? "NVIDIA profile" : null,
+    !nimReady ? "NVIDIA NIM" : null,
     ollamaRequired && !ollamaOk ? "Ollama" : null,
     modelRequired && !modelOk ? "default model" : null,
   ].filter(Boolean);
@@ -402,6 +422,11 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     if (ffmpegOk && !setupError) capabilities.push("ffmpeg");
     if (ollamaOk && !setupError && (!ollamaRequired || modelOk)) capabilities.push("ollama");
     if (openaiCompatibleConfigured) capabilities.push("openaiCompatible");
+    if (kitReady) capabilities.push("nvidiaKit");
+    if (nimReady) capabilities.push("nvidiaNim");
+    if (rivaReady) capabilities.push("nvidiaRiva");
+    if (tritonReady) capabilities.push("nvidiaTriton");
+    if (omniverseReady) capabilities.push("nvidiaOmniverse");
     if (comfyAvailable) capabilities.push("comfyui");
     if (edmgAvailable) capabilities.push("edmgCore");
     return capabilities;
@@ -413,10 +438,16 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     health?.ok,
     healthError,
     modelOk,
+    kitReady,
+    nimReady,
+    nvidiaEnabled,
+    omniverseReady,
     ollamaOk,
     ollamaRequired,
     openaiCompatibleConfigured,
+    rivaReady,
     setupError,
+    tritonReady,
   ]);
   const recommendations = useMemo(
     () =>
@@ -451,7 +482,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     },
     {
       id: "setup",
-      label: "Setup Wizard",
+      label: "NVIDIA Runtime Setup",
       role: "Required",
       status: setupError ? "error" : setupStatus ? (setupReady ? "available" : "missing") : "unknown",
       detail: setupError || (
@@ -459,28 +490,40 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
           ? "Backend bundle, FFmpeg, and the NVIDIA AI path are ready."
           : `Still needs ${missingSetupParts.join(", ")}.`
       ),
-      impact: "Studio Forge reads setup health only; the existing Setup page remains the only place for installs and repair.",
+      impact: "Studio Forge reads setup health only; NVIDIA Kit launch and repair stay in the runtime launcher and Setup page.",
     },
     {
-      id: "ollama",
-      label: "Ollama fallback",
-      role: ollamaRequired ? "Required" : "Fallback",
-      status: setupError
-        ? "unknown"
-        : ollamaRequired
-          ? (ollamaOk && modelOk ? "available" : "missing")
-          : (ollamaOk ? "available" : "optional"),
-      detail: ollamaOk
-        ? `${ollamaUrl}${ollamaModel ? ` • model ${ollamaModel}` : ""}${modelRequired ? (modelOk ? " • default model present" : " • default model missing") : ""}`
-        : `${ollamaUrl} not detected${ollamaRequired ? " for the current AI mode." : "."}`,
-      impact: ollamaRequired
-        ? "The current AI mode expects a reachable local Ollama endpoint."
-        : "Studio can run the NVIDIA/NIM path without Ollama.",
+      id: "nvidia-nim",
+      label: "NVIDIA NIM",
+      role: "Required",
+      status: nvidiaDiagnosticsError ? (nimReady ? "available" : "unknown") : (nimReady ? "available" : "missing"),
+      detail: aiConfig?.model
+        ? `${aiConfig.model}${aiConfig?.base_url ? ` • ${aiConfig.base_url}` : ""}`
+        : "NIM/OpenAI-compatible planner model is configured through backend startup settings.",
+      impact: "NIM is the primary AI planner for Kit scene plans and OpenUSD handoff metadata.",
+    },
+    {
+      id: "nvidia-kit",
+      label: "NVIDIA Kit / RTX",
+      role: "Required",
+      status: kitReady ? "available" : "missing",
+      detail: nvidiaGpuOk
+        ? `GPU ready${nvidiaHost?.gpu?.gpus?.[0]?.name ? ` • ${nvidiaHost.gpu.gpus[0].name}` : ""}`
+        : "Kit runtime readiness depends on an installed Kit SDK and NVIDIA GPU/service profile.",
+      impact: "Kit owns the primary desktop shell, OpenUSD stage, RTX viewport, and render-job consumer.",
+    },
+    {
+      id: "nvidia-services",
+      label: "NVIDIA Services",
+      role: "Service stack",
+      status: rivaReady || tritonReady || omniverseReady ? "available" : "optional",
+      detail: `Riva ${rivaReady ? "ready" : "optional"} • Triton ${tritonReady ? "ready" : "optional"} • Omniverse ${omniverseReady ? "ready" : "optional"}`,
+      impact: "Riva, Triton, Audio2Face/ACE, Cosmos, and Omniverse service profiles extend the Kit runtime without replacing it.",
     },
     {
       id: "comfyui",
-      label: "ComfyUI",
-      role: "Optional",
+      label: "Secondary ComfyUI",
+      role: "Legacy optional",
       status: comfyAvailable ? "available" : (comfyConfigured ? "unknown" : (comfyError ? "optional" : "optional")),
       detail: comfyAvailable
         ? `${comfyUrl} responded to capability discovery.`
@@ -498,7 +541,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     {
       id: "models",
       label: "Models",
-      role: modelRequired ? "Required" : "Optional",
+      role: modelRequired ? "Fallback required" : "Optional fallback",
       status: setupError
         ? "unknown"
         : modelRequired
@@ -506,10 +549,10 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
           : (modelOk ? "available" : "optional"),
       detail: ollamaModel
         ? `${ollamaModel}${modelOk ? " is ready." : " is configured but not present yet."}`
-        : "Model configuration is available through the existing Models and Setup flows.",
+        : "NVIDIA model configuration is available through Settings; fallback local models remain in Models and Setup.",
       impact: edmgAvailable
         ? "Installed models can stay aligned with EDMG Core and the NVIDIA/OpenUSD handoff."
-        : "Model management remains owned by the current Models page and setup flow.",
+        : "Fallback model management remains owned by the current Models page and setup flow.",
     },
   ];
 
@@ -518,7 +561,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       {
         id: "runtime" as const,
         label: "Runtime Status",
-        description: "Read-only health for backend, setup, NVIDIA AI, ComfyUI, FFmpeg, and models.",
+        description: "Read-only health for backend, NVIDIA Kit, NIM, service stack, FFmpeg, and fallback models.",
       },
       {
         id: "recommendations" as const,
@@ -533,7 +576,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       {
         id: "recipes" as const,
         label: "Workflow Recipes",
-        description: "Canonical workflow previews that stay compatible with the NVIDIA-first Studio flow.",
+        description: "Canonical workflow previews that stay compatible with the NVIDIA Kit Studio flow.",
       },
       {
         id: "validation" as const,
@@ -582,8 +625,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div>
         <h2 style={{ marginBottom: 10 }}>Runtime Status</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Existing backend and setup endpoints only. Graceful read-only probes: <code>/health</code>,
-          <code> /v1/config</code>, <code> /v1/setup/status</code>, and <code> /v1/comfyui/capabilities</code>.
+          Existing backend and NVIDIA endpoints only. Graceful read-only probes: <code>/health</code>,
+          <code> /v1/config</code>, <code> /v1/setup/status</code>, <code> /v1/nvidia/diagnostics</code>, and <code> /v1/comfyui/capabilities</code>.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
           {runtimeCards.map((card) => (
@@ -603,6 +646,11 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
         {backendConfigError ? (
           <div className="small" style={{ marginTop: 10, opacity: 0.84 }}>
             Config read note: {backendConfigError}
+          </div>
+        ) : null}
+        {nvidiaDiagnosticsError ? (
+          <div className="small" style={{ marginTop: 10, opacity: 0.84 }}>
+            NVIDIA diagnostics note: {nvidiaDiagnosticsError}
           </div>
         ) : null}
       </div>
@@ -638,7 +686,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div>
         <h2 style={{ marginBottom: 10 }}>Workflow Recipes</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Preview-only recipes that stay compatible with the current Workspace, Timeline, Render, Queue, and Outputs flow.
+          Preview-only recipes that stay compatible with the NVIDIA Kit AI Director, Timeline, Render Queue, and OpenUSD output flow.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           {STUDIO_FORGE_RECIPES.map((recipe) => (
@@ -651,8 +699,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div>
         <h2 style={{ marginBottom: 10 }}>Unreal Bridge Previews</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Secondary bridge concepts only. These previews describe export, handoff, and control shapes for Unreal without
-          changing the NVIDIA/OpenUSD Setup, packaging, or Kit render-job flow.
+          Secondary bridge concepts only. These previews describe export, handoff, and control shapes for external engines without
+          changing the NVIDIA Kit/OpenUSD setup, packaging, or RTX render-job flow.
         </div>
         {projectId && unrealPreview ? (
           <div className="small" style={{ marginBottom: 10 }}>
@@ -699,8 +747,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
         <div className="timeline-kicker">Experimental Workbench</div>
         <h1>Studio Forge</h1>
         <div className="small" style={{ marginTop: 8, maxWidth: 900 }}>
-          Experimental AI builder workbench. Read-only preview mode. This surface inspects current
-          runtime state and previews future builder templates without writing files, changing setup,
+          Experimental NVIDIA builder workbench in the legacy React client. Read-only preview mode. This surface inspects
+          Kit/runtime state and previews future builder templates without writing files, changing setup,
           pulling models, launching renders, or mutating project data.
         </div>
         {onNavigate ? (

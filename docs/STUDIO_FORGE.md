@@ -1,15 +1,17 @@
 # Studio Forge
 
-Studio Forge is an experimental, opt-in AI builder workbench for EDMG Studio.
+Studio Forge is an experimental, opt-in AI builder workbench retained in the
+legacy React client while the primary product shell moves to NVIDIA Kit.
 
 It is currently read-only. It does not replace:
 
-- Electron shell
-- React frontend
+- NVIDIA Kit shell
+- OpenUSD/RTX render workflow
+- Kit AI Director, Timeline, and Render Queue extensions
 - FastAPI backend
-- Setup Wizard
-- internal renderer
-- ComfyUI integration
+- NVIDIA setup and diagnostics
+- secondary internal renderer
+- secondary ComfyUI integration
 - model manager
 - render queue
 - packaging scripts

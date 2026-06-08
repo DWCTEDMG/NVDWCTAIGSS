@@ -39,7 +39,7 @@ describe("Setup page", () => {
 
     renderWithStudio(<Setup />);
 
-    expect(await screen.findByText("Setup Wizard")).toBeTruthy();
+    expect(await screen.findByText("NVIDIA Runtime Setup")).toBeTruthy();
     expect(await screen.findByText(/Active AI path:/)).toBeTruthy();
     const activeAiPath = await screen.findByTestId("setup-active-ai-path");
     expect(activeAiPath.textContent).toContain("NVIDIA");
@@ -93,7 +93,7 @@ describe("Setup page", () => {
 
     expect(await screen.findByDisplayValue("/home/test/EDMG-Studio")).toBeTruthy();
     expect(await screen.findByText("0) System Setup")).toBeTruthy();
-    expect(await screen.findByText(/Linux and macOS use the manual setup path/)).toBeTruthy();
+    expect(await screen.findByText(/Linux and macOS use the manual NVIDIA path/)).toBeTruthy();
     expect(await screen.findByText(/Linux support expects a system-installed/i)).toBeTruthy();
     expect(await screen.findByText(/Linux support uses a manually installed ComfyUI instance.*secondary workflows/i)).toBeTruthy();
   });

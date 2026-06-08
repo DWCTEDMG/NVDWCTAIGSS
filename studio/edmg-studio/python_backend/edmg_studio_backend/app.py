@@ -4091,7 +4091,7 @@ def _creative_average(values: list[float]) -> float:
 
 def _creative_provider_mode(plan: dict[str, Any]) -> str:
     source = str((plan or {}).get("source") or "").strip().lower()
-    provider = os.getenv("EDMG_AI_PROVIDER", "ollama").strip().lower()
+    provider = os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower()
     if source == "ai":
         if provider == "ollama":
             return "ollama-contract"
