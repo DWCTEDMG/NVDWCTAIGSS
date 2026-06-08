@@ -212,6 +212,21 @@ def build_render_job_payload(*, fps: Any, width: Any, height: Any) -> dict[str, 
     }
 
 
+def build_storyboard_movie_payload(*, fps: Any, width: Any, height: Any) -> dict[str, Any]:
+    return {
+        "variant_index": 0,
+        "preset": "balanced",
+        "render_mode": "auto",
+        "apply_storyboard": True,
+        "overwrite_timeline": True,
+        "allow_hosted_fallback": True,
+        "allow_proxy_fallback": True,
+        "fps_output": max(1, min(60, _int_or_default(fps, 24))),
+        "width": max(256, min(1920, _int_or_default(width, 1920))),
+        "height": max(256, min(1080, _int_or_default(height, 1080))),
+    }
+
+
 def _project_object(response: dict[str, Any]) -> dict[str, Any]:
     project = response.get("project") if isinstance(response.get("project"), dict) else response
     return project if isinstance(project, dict) else {}
@@ -299,6 +314,40 @@ def summarize_render_job_response(response: dict[str, Any]) -> str:
         parts.append(path)
     if fps and width and height:
         parts.append(f"{width}x{height}@{fps}fps")
+    return f"{parts[0]}: {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
+
+
+def summarize_storyboard_movie_response(response: dict[str, Any]) -> str:
+    job = response.get("job") if isinstance(response.get("job"), dict) else {}
+    preflight = response.get("preflight") if isinstance(response.get("preflight"), dict) else {}
+    storyboard = response.get("storyboard") if isinstance(response.get("storyboard"), dict) else {}
+    payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+    outputs = payload.get("outputs") if isinstance(payload.get("outputs"), dict) else {}
+    job_id = str(job.get("id") or job.get("job_id") or "").strip()
+    render_mode = str(response.get("render_mode") or payload.get("render_mode") or "").strip()
+    preflight_mode = str(preflight.get("mode") or "").strip()
+    movie_path = str(outputs.get("movie") or outputs.get("path") or "").strip()
+    scene_count = storyboard.get("scene_count")
+    duration = _float_or_none(storyboard.get("duration_s") or preflight.get("duration_s"))
+    fps = payload.get("fps_output")
+    width = payload.get("width")
+    height = payload.get("height")
+    parts = ["Storyboard movie queued"]
+    if job_id:
+        parts.append(f"job {job_id}")
+    if render_mode or preflight_mode:
+        parts.append(render_mode or preflight_mode)
+    if scene_count:
+        scene_text = f"{scene_count} scenes"
+        if duration is not None:
+            scene_text = f"{scene_text}, {duration:g}s"
+        parts.append(scene_text)
+    elif duration is not None:
+        parts.append(f"{duration:g}s")
+    if fps and width and height:
+        parts.append(f"{width}x{height}@{fps}fps")
+    if movie_path:
+        parts.append(movie_path)
     return f"{parts[0]}: {', '.join(parts[1:])}" if len(parts) > 1 else parts[0]
 
 

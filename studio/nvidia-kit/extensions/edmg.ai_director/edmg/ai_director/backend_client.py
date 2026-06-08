@@ -195,6 +195,10 @@ class EdmgBackendClient:
         encoded_project_id = quote(str(project_id), safe="")
         return self._json_request("POST", f"/v1/projects/{encoded_project_id}/nvidia/render-job", payload or {})
 
+    def create_project_storyboard_movie(self, project_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        encoded_project_id = quote(str(project_id), safe="")
+        return self._json_request("POST", f"/v1/projects/{encoded_project_id}/render/storyboard_movie", payload or {})
+
     def audio2face_generate(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._json_request("POST", "/v1/nvidia/audio2face/generate", payload)
 

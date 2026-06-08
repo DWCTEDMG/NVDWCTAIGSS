@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .panel import cue_lines, load_scene_plan_summary
+from .panel import cue_lines, daw_lines, load_scene_plan_payload, summarize_daw_session, summarize_scene_plan
 
 try:
     import carb.settings  # type: ignore
@@ -57,6 +57,9 @@ class EdmgTimelineExtension(omni.ext.IExt):  # type: ignore[name-defined]
         self._window = None
         self._summary_label = None
         self._cue_label = None
+        self._daw_label = None
+        self._daw_marker_label = None
+        self._daw_mix_label = None
         print("[edmg.timeline] startup")
         self._build_window()
         self._load_sample_timeline()
@@ -69,13 +72,17 @@ class EdmgTimelineExtension(omni.ext.IExt):  # type: ignore[name-defined]
         if ui is None:
             return
         try:
-            self._window = ui.Window("EDMG Timeline", width=420, height=420)
+            self._window = ui.Window("EDMG NVIDIA Post Timeline", width=560, height=620)
             with self._window.frame:
                 with ui.VStack(spacing=8):
-                    ui.Label("NVIDIA scene timeline")
+                    ui.Label("NVIDIA Kit timeline")
                     self._summary_label = ui.Label("No timeline loaded.")
                     self._cue_label = ui.Label("")
-                    ui.Button("Reload Sample Scene Plan", clicked_fn=self._load_sample_timeline)
+                    ui.Label("Post DAW / Movie Finishing")
+                    self._daw_label = ui.Label("No post DAW session loaded.")
+                    self._daw_marker_label = ui.Label("")
+                    self._daw_mix_label = ui.Label("")
+                    ui.Button("Reload Scene Plan", clicked_fn=self._load_sample_timeline)
         except Exception as exc:
             print(f"[edmg.timeline] window unavailable: {exc}")
             self._window = None
@@ -94,13 +101,24 @@ class EdmgTimelineExtension(omni.ext.IExt):  # type: ignore[name-defined]
             print("[edmg.timeline] sample_scene_plan setting is empty")
             return
         try:
-            summary = load_scene_plan_summary(path)
+            payload = load_scene_plan_payload(path)
+            summary = summarize_scene_plan(payload)
+            daw_summary = summarize_daw_session(payload)
             cue_text = "\n".join(cue_lines(summary))
+            daw_text = "\n".join(daw_lines(daw_summary))
             print(f"[edmg.timeline] {summary.status_text}")
+            print(f"[edmg.timeline] {daw_summary.status_text}")
             self._set_label("_summary_label", summary.status_text)
             self._set_label("_cue_label", cue_text)
+            self._set_label("_daw_label", daw_summary.status_text)
+            self._set_label("_daw_marker_label", daw_text)
+            self._set_label(
+                "_daw_mix_label",
+                f"Monitor: {daw_summary.target_lufs}, {daw_summary.bus_count} buses, {daw_summary.automation_count} lanes",
+            )
         except Exception as exc:
             message = f"timeline unavailable: {exc}"
             print(f"[edmg.timeline] {message}")
             self._set_label("_summary_label", message)
+            self._set_label("_daw_label", message)
 

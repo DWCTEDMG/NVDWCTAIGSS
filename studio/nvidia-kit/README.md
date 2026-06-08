@@ -33,12 +33,16 @@ work:
   panel you can refresh setup readiness, create or load a Studio project, upload
   a local audio file, run project audio analysis or Riva transcription, generate
   the NVIDIA storyboard/scene plan, export the persisted production USDA, open
-  the generated stage as a local Kit stage, and queue an RTX render handoff. The
-  same panel keeps the typed NVIDIA service bridge for `audio2face`, `ace`,
-  `cosmos`, and `triton`: enter the service id, edit the JSON payload, then
-  invoke the backend's typed route for the configured service.
+  the generated stage as a local Kit stage, queue an audio-reactive AI
+  Storyboard Movie MP4 job from the saved storyboard, and queue an RTX render
+  handoff. The same panel keeps the typed NVIDIA service bridge for
+  `audio2face`, `ace`, `cosmos`, and `triton`: enter the service id, edit the
+  JSON payload, then invoke the backend's typed route for the configured
+  service.
 - `edmg.timeline` opens a scene timeline panel from the configured starter
-  scene-plan JSON and summarizes the OpenUSD cue boundaries.
+  scene-plan JSON, summarizes the OpenUSD cue boundaries, and shows the Kit
+  post-production DAW view: markers, buses, stems, automation lanes, and loudness
+  target for movie finishing.
 - `edmg.render_queue` opens a backend readiness panel that checks the Studio
   worker status plus NVIDIA diagnostics/readiness, scans the Studio
   `outputs/nvidia/render_jobs/*.json` handoff files, opens the referenced USDA
@@ -167,6 +171,8 @@ Kit UI panel for the first API contracts:
 - `POST /v1/projects/{project_id}/nvidia/scene-plan`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan/save`
 - `POST /v1/projects/{project_id}/nvidia/scene-plan/export`
+- `POST /v1/projects/{project_id}/render/storyboard_movie`
+- `POST /v1/projects/{project_id}/nvidia/render-job`
 - `POST /v1/projects/{project_id}/nvidia/render-job/result`
 
 Smoke those contracts from the Kit workspace with:

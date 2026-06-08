@@ -126,6 +126,7 @@ class _Handler(BaseHTTPRequestHandler):
         is_audio_analysis = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/analyze_audio")
         is_riva_transcribe = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/riva/transcribe")
         is_render_job = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/nvidia/render-job")
+        is_storyboard_movie = parsed.path.startswith("/v1/projects/") and parsed.path.endswith("/render/storyboard_movie")
         typed_service = parsed.path in {
             "/v1/nvidia/audio2face/generate",
             "/v1/nvidia/ace/generate",
@@ -141,6 +142,7 @@ class _Handler(BaseHTTPRequestHandler):
             and not is_project_generate
             and not is_project_export
             and not is_render_job
+            and not is_storyboard_movie
             and not typed_service
         ):
             self.send_error(404)
@@ -199,6 +201,20 @@ class _Handler(BaseHTTPRequestHandler):
                         }
                     },
                     "export": {"path": "outputs/nvidia/render_jobs/job.json"},
+                }
+            )
+            return
+        if is_storyboard_movie:
+            project_id = unquote(parsed.path.split("/")[3])
+            self._send_json(
+                {
+                    "ok": True,
+                    "mode": "storyboard_movie",
+                    "render_mode": payload.get("render_mode") or "auto",
+                    "project_id": project_id,
+                    "job": {"id": "storyboard-movie-1", "payload": payload},
+                    "preflight": {"mode": "proxy", "duration_s": 12.5, "estimated_frames": 300},
+                    "storyboard": {"scene_count": 3, "duration_s": 12.5, "audio_reactive": True},
                 }
             )
             return
@@ -401,6 +417,10 @@ def test_kit_backend_client_supports_guided_studio_workflow(tmp_path, monkeypatc
         analysis = client.analyze_project_audio("created-project")
         transcript = client.transcribe_project_audio_riva("created-project")
         render_job = client.create_project_render_job("created-project", {"fps": 24, "width": 1920, "height": 1080})
+        storyboard_movie = client.create_project_storyboard_movie(
+            "created-project",
+            {"fps_output": 24, "width": 1920, "height": 1080, "render_mode": "auto"},
+        )
 
         assert created["project"]["id"] == "created-project"
         assert loaded["project"]["name"] == "Loaded Project"
@@ -409,6 +429,8 @@ def test_kit_backend_client_supports_guided_studio_workflow(tmp_path, monkeypatc
         assert analysis["analysis"]["features"]["tempo_bpm"] == 128
         assert transcript["transcript"]["segments"][0]["text"] == "hush"
         assert render_job["job"]["renderer"]["resolution"]["width"] == 1920
+        assert storyboard_movie["mode"] == "storyboard_movie"
+        assert storyboard_movie["job"]["payload"]["fps_output"] == 24
     finally:
         server.shutdown()
         thread.join(timeout=5)

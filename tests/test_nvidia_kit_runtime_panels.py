@@ -72,13 +72,47 @@ def test_timeline_panel_reads_sample_scene_plan():
     panel = _import_extension_module("edmg.timeline", "timeline", "panel")
     sample_plan = KIT_ROOT / "sample_projects" / "audio_reactive_stage" / "scene_plan.json"
 
+    payload = panel.load_scene_plan_payload(sample_plan)
     summary = panel.load_scene_plan_summary(sample_plan)
+    daw_summary = panel.summarize_daw_session(payload)
     lines = panel.cue_lines(summary, limit=2)
 
     assert summary.scene_count > 0
     assert summary.duration_s > 0
     assert "cues" in summary.status_text
+    assert daw_summary.marker_count == summary.scene_count
+    assert daw_summary.bus_count >= 4
+    assert daw_summary.stem_count >= 4
+    assert "Post DAW" in daw_summary.status_text
     assert 1 <= len(lines) <= 3
+
+
+def test_timeline_panel_uses_saved_daw_session():
+    panel = _import_extension_module("edmg.timeline", "timeline", "panel")
+    payload = {
+        "title": "Saved DAW",
+        "duration_s": 12,
+        "timeline": {
+            "daw": {
+                "markers": [{"name": "ADR pickup", "start_s": 2, "end_s": 3}],
+                "buses": [{"name": "Dialogue Print", "role": "dialogue"}],
+                "stems": [{"name": "DX", "bus": "Dialogue Print"}],
+                "automation_lanes": [{"name": "Breath ducking", "target": "music.duck"}],
+                "monitor": {"target_lufs": "-18 LUFS"},
+            }
+        },
+        "scenes": [{"id": "scene-1", "start_s": 0, "end_s": 12, "prompt": "saved"}],
+    }
+
+    daw_summary = panel.summarize_daw_session(payload)
+    lines = panel.daw_lines(daw_summary)
+
+    assert daw_summary.marker_count == 1
+    assert daw_summary.bus_count == 1
+    assert daw_summary.stem_count == 1
+    assert daw_summary.automation_count == 1
+    assert daw_summary.target_lufs == "-18 LUFS"
+    assert "ADR pickup" in "\n".join(lines)
 
 
 def test_timeline_extension_starts_headless():

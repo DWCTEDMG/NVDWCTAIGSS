@@ -6,6 +6,7 @@ from .panel import (
     build_generation_payload,
     build_optional_service_payload,
     build_render_job_payload,
+    build_storyboard_movie_payload,
     default_optional_service_payload_text,
     normalize_optional_service_id,
     project_id_from_response,
@@ -19,6 +20,7 @@ from .panel import (
     summarize_render_job_response,
     summarize_riva_transcript_response,
     summarize_scene_plan_response,
+    summarize_storyboard_movie_response,
     write_usda_preview,
 )
 
@@ -192,8 +194,8 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
                         ui.Button("Export USDA", clicked_fn=self._export_project_scene_plan)
                         ui.Button("Open Preview", clicked_fn=self._open_current_preview)
 
-                    ui.Label("RTX Render")
-                    self._render_label = ui.Label("No RTX render job queued.")
+                    ui.Label("Render and Movie Output")
+                    self._render_label = ui.Label("No NVIDIA render or storyboard movie queued.")
                     with ui.HStack(spacing=6):
                         with ui.VStack(spacing=4):
                             ui.Label("FPS")
@@ -204,7 +206,9 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
                         with ui.VStack(spacing=4):
                             ui.Label("Height")
                             ui.StringField(model=self._render_height_model)
-                    ui.Button("Queue RTX Render Job", clicked_fn=self._queue_render_job)
+                    with ui.HStack(spacing=6):
+                        ui.Button("Queue AI Storyboard Movie", clicked_fn=self._queue_storyboard_movie)
+                        ui.Button("Queue RTX Render Job", clicked_fn=self._queue_render_job)
 
                     ui.Label("Advanced NVIDIA service bridge")
                     self._service_label = ui.Label("No service call yet.")
@@ -556,6 +560,21 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._set_render_summary(summarize_render_job_response(response))
         except BackendClientError as exc:
             self._set_render_summary(f"RTX render job failed: {exc}")
+
+    def _queue_storyboard_movie(self) -> None:
+        project_id = self._resolve_project_id(required=True, action="queue an AI storyboard movie")
+        if not project_id:
+            return
+        payload = build_storyboard_movie_payload(
+            fps=_model_string(self._render_fps_model, "24"),
+            width=_model_string(self._render_width_model, "1920"),
+            height=_model_string(self._render_height_model, "1080"),
+        )
+        try:
+            response = self._backend.create_project_storyboard_movie(project_id, payload)
+            self._set_render_summary(summarize_storyboard_movie_response(response))
+        except BackendClientError as exc:
+            self._set_render_summary(f"storyboard movie failed: {exc}")
 
     def _open_current_preview(self) -> None:
         if self._last_response is None:

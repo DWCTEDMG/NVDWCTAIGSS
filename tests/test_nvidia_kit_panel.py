@@ -77,6 +77,16 @@ def test_kit_panel_builds_workflow_summaries():
             "export": {"path": "outputs/nvidia/render_jobs/job.json"},
         }
     )
+    storyboard_payload = panel.build_storyboard_movie_payload(fps="999", width="3840", height="72")
+    storyboard_summary = panel.summarize_storyboard_movie_response(
+        {
+            "mode": "storyboard_movie",
+            "render_mode": "proxy",
+            "job": {"id": "movie-job-1", "payload": {"fps_output": 24, "width": 1920, "height": 1080}},
+            "preflight": {"mode": "proxy", "duration_s": 30},
+            "storyboard": {"scene_count": 4, "duration_s": 30},
+        }
+    )
 
     assert project_summary.project_id == "project-one"
     assert "Project One" in project_summary.status_text
@@ -85,6 +95,15 @@ def test_kit_panel_builds_workflow_summaries():
     assert "transcript text available" in analysis_summary
     assert render_payload == {"fps": 240, "width": 3840, "height": 2160}
     assert "outputs/nvidia/render_jobs/job.json" in render_summary
+    assert storyboard_payload["apply_storyboard"] is True
+    assert storyboard_payload["overwrite_timeline"] is True
+    assert storyboard_payload["allow_hosted_fallback"] is True
+    assert storyboard_payload["allow_proxy_fallback"] is True
+    assert storyboard_payload["fps_output"] == 60
+    assert storyboard_payload["width"] == 1920
+    assert storyboard_payload["height"] == 256
+    assert "Storyboard movie queued" in storyboard_summary
+    assert "movie-job-1" in storyboard_summary
 
 
 def test_kit_panel_summarizes_and_writes_usda_preview(tmp_path):
@@ -292,6 +311,17 @@ def test_kit_ai_director_runs_guided_project_audio_render_flow():
                 "export": {"path": "outputs/nvidia/render_jobs/job.json"},
             }
 
+        def create_project_storyboard_movie(self, project_id: str, payload: dict) -> dict:
+            self.calls.append(("storyboard_movie", project_id, payload))
+            return {
+                "ok": True,
+                "mode": "storyboard_movie",
+                "render_mode": "proxy",
+                "job": {"id": "movie-job-1", "payload": payload},
+                "preflight": {"mode": "proxy", "duration_s": 14},
+                "storyboard": {"scene_count": 2, "duration_s": 14, "audio_reactive": True},
+            }
+
     backend = FakeBackend()
     ext = extension.EdmgAiDirectorExtension()
     ext._backend = backend
@@ -316,14 +346,31 @@ def test_kit_ai_director_runs_guided_project_audio_render_flow():
     ext._analyze_audio()
     ext._transcribe_audio_with_riva()
     ext._queue_render_job()
+    ext._queue_storyboard_movie()
 
     assert ext._project_model.value == "project-one"
     assert "Audio uploaded" in ext._audio_label.text
     assert ext._duration_model.value == "14"
     assert ext._bpm_model.value == "130"
     assert "Riva transcript ready" in ext._analysis_label.text
-    assert "outputs/nvidia/render_jobs/job.json" in ext._render_label.text
+    assert "Storyboard movie queued" in ext._render_label.text
     assert ("render_job", "project-one", {"fps": 24, "width": 1920, "height": 1080}) in backend.calls
+    assert (
+        "storyboard_movie",
+        "project-one",
+        {
+            "variant_index": 0,
+            "preset": "balanced",
+            "render_mode": "auto",
+            "apply_storyboard": True,
+            "overwrite_timeline": True,
+            "allow_hosted_fallback": True,
+            "allow_proxy_fallback": True,
+            "fps_output": 24,
+            "width": 1920,
+            "height": 1080,
+        },
+    ) in backend.calls
 
 
 def test_kit_ai_director_extension_starts_headless_with_fake_backend(monkeypatch):
