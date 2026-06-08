@@ -17,8 +17,60 @@ type Selected =
   | { kind: "camera"; kfIdx: number }
   | null;
 
-type DockSection = "handoffs" | "inspector" | "proxy" | "diffusion" | "curves";
+type DockSection = "handoffs" | "inspector" | "daw" | "proxy" | "diffusion" | "curves";
 type TimelineDensity = "compact" | "comfortable";
+
+type DawMarker = {
+  id: string;
+  label: string;
+  time_s: number;
+  type: "scene" | "cue" | "adr" | "fx" | "music" | "delivery";
+  status: "todo" | "record" | "edit" | "approved";
+};
+
+type DawBus = {
+  id: string;
+  name: string;
+  role: string;
+  gain_db: number;
+  pan: number;
+  mute: boolean;
+  solo: boolean;
+  record: boolean;
+  stem: boolean;
+};
+
+type DawAutomationLane = {
+  id: string;
+  name: string;
+  target: string;
+  mode: "read" | "write" | "touch" | "latch";
+  enabled: boolean;
+  points: Array<{ time_s: number; value: number }>;
+};
+
+type DawStem = {
+  id: string;
+  name: string;
+  source: string;
+  enabled: boolean;
+  format: "wav" | "mp4" | "adm-note";
+};
+
+type DawSession = {
+  markers: DawMarker[];
+  buses: DawBus[];
+  automation_lanes: DawAutomationLane[];
+  stems: DawStem[];
+  monitor: {
+    target_lufs: number;
+    surround_bed: string;
+    object_audio_ready: boolean;
+    adr_enabled: boolean;
+  };
+  notes: string;
+  updated_at?: number;
+};
 
 const TIMELINE_MIN_ZOOM = 4;
 const TIMELINE_MAX_ZOOM = 360;
@@ -32,6 +84,282 @@ function fmtTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds - mins * 60;
   return `${mins}:${secs.toFixed(1).padStart(4, "0")}`;
+}
+
+function slugId(value: string, fallback: string): string {
+  const slug = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+  return slug || fallback;
+}
+
+function numOr(value: any, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function boolOr(value: any, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function clamp01(value: number): number {
+  return clamp(value, 0, 1);
+}
+
+function defaultDawBuses(): DawBus[] {
+  return [
+    {
+      id: "music",
+      name: "Music",
+      role: "Full mix and score bed",
+      gain_db: -3,
+      pan: 0,
+      mute: false,
+      solo: false,
+      record: false,
+      stem: true,
+    },
+    {
+      id: "dialog",
+      name: "Dialog / VO",
+      role: "Voice, narration, ADR, transcript cues",
+      gain_db: -6,
+      pan: 0,
+      mute: false,
+      solo: false,
+      record: true,
+      stem: true,
+    },
+    {
+      id: "fx",
+      name: "FX",
+      role: "Impacts, Foley, texture, transition accents",
+      gain_db: -8,
+      pan: 0,
+      mute: false,
+      solo: false,
+      record: false,
+      stem: true,
+    },
+    {
+      id: "reactive",
+      name: "Reactive Control",
+      role: "Audio-to-motion intensity and render automation",
+      gain_db: 0,
+      pan: 0,
+      mute: false,
+      solo: false,
+      record: false,
+      stem: false,
+    },
+  ];
+}
+
+function defaultDawAutomation(durationS: number, energy: number): DawAutomationLane[] {
+  const mid = Math.max(0, durationS / 2);
+  const end = Math.max(0, durationS);
+  return [
+    {
+      id: "visual_intensity",
+      name: "Visual intensity",
+      target: "renderer.motion.energy",
+      mode: "read",
+      enabled: true,
+      points: [
+        { time_s: 0, value: clamp01(energy * 0.72) },
+        { time_s: mid, value: clamp01(energy * 1.05) },
+        { time_s: end, value: clamp01(energy * 0.82) },
+      ],
+    },
+    {
+      id: "music_ducking",
+      name: "Music ducking",
+      target: "bus.music.gain_db",
+      mode: "touch",
+      enabled: true,
+      points: [
+        { time_s: 0, value: -3 },
+        { time_s: mid, value: -5 },
+        { time_s: end, value: -3 },
+      ],
+    },
+    {
+      id: "fx_emphasis",
+      name: "FX emphasis",
+      target: "bus.fx.gain_db",
+      mode: "read",
+      enabled: true,
+      points: [
+        { time_s: 0, value: -10 },
+        { time_s: mid, value: -7 },
+        { time_s: end, value: -9 },
+      ],
+    },
+  ];
+}
+
+function defaultDawStems(): DawStem[] {
+  return [
+    { id: "master", name: "Master movie mix", source: "master", enabled: true, format: "mp4" },
+    { id: "music", name: "Music stem", source: "bus.music", enabled: true, format: "wav" },
+    { id: "dialog", name: "Dialog / VO stem", source: "bus.dialog", enabled: true, format: "wav" },
+    { id: "fx", name: "FX stem", source: "bus.fx", enabled: true, format: "wav" },
+    {
+      id: "immersive_notes",
+      name: "Immersive/object mix notes",
+      source: "daw.monitor",
+      enabled: false,
+      format: "adm-note",
+    },
+  ];
+}
+
+function sceneMarkersFromPlan(planVariant: AnyDict | null, durationS: number): DawMarker[] {
+  const scenes: AnyDict[] =
+    planVariant?.scenes && Array.isArray(planVariant.scenes) ? planVariant.scenes : [];
+  const markers: DawMarker[] = scenes.slice(0, 48).map((scene, index) => {
+    const start = clamp(numOr(scene?.start_s, index * 5), 0, Math.max(0, durationS));
+    const label = String(scene?.name || scene?.title || `Scene ${index + 1}`).trim();
+    return {
+      id: `scene_${slugId(label, String(index + 1))}_${Math.round(start * 1000)}`,
+      label,
+      time_s: start,
+      type: "scene",
+      status: "edit",
+    };
+  });
+  if (!markers.length) {
+    markers.push({
+      id: "program_start",
+      label: "Program start",
+      time_s: 0,
+      type: "delivery",
+      status: "approved",
+    });
+  }
+  if (durationS > 0) {
+    markers.push({
+      id: "program_end",
+      label: "Program end",
+      time_s: durationS,
+      type: "delivery",
+      status: "todo",
+    });
+  }
+  return markers;
+}
+
+function sanitizeDawSession(
+  timeline: AnyDict,
+  planVariant: AnyDict | null,
+  durationS: number,
+  features: AnyDict,
+): DawSession {
+  const source = timeline?.daw && typeof timeline.daw === "object" ? timeline.daw : {};
+  const energy = clamp01(numOr(features?.energy ?? features?.rms_energy ?? features?.dynamic_energy, 0.58));
+  const defaultMonitor = {
+    target_lufs: -16,
+    surround_bed: "stereo",
+    object_audio_ready: false,
+    adr_enabled: true,
+  };
+
+  const markers = Array.isArray(source.markers)
+    ? source.markers.map((marker: any, index: number) => ({
+        id: String(marker?.id || `marker_${index}`),
+        label: String(marker?.label || `Marker ${index + 1}`),
+        time_s: clamp(numOr(marker?.time_s ?? marker?.time, 0), 0, Math.max(0, durationS)),
+        type: ["scene", "cue", "adr", "fx", "music", "delivery"].includes(String(marker?.type))
+          ? marker.type
+          : "cue",
+        status: ["todo", "record", "edit", "approved"].includes(String(marker?.status))
+          ? marker.status
+          : "todo",
+      }))
+    : sceneMarkersFromPlan(planVariant, durationS);
+
+  const defaultBuses = defaultDawBuses();
+  const buses = Array.isArray(source.buses)
+    ? defaultBuses.map((fallbackBus) => {
+        const match = source.buses.find((bus: any) => String(bus?.id || "") === fallbackBus.id);
+        return match
+          ? {
+              ...fallbackBus,
+              ...match,
+              gain_db: clamp(numOr(match.gain_db, fallbackBus.gain_db), -60, 12),
+              pan: clamp(numOr(match.pan, fallbackBus.pan), -100, 100),
+              mute: boolOr(match.mute, fallbackBus.mute),
+              solo: boolOr(match.solo, fallbackBus.solo),
+              record: boolOr(match.record, fallbackBus.record),
+              stem: boolOr(match.stem, fallbackBus.stem),
+            }
+          : fallbackBus;
+      })
+    : defaultBuses;
+
+  const defaultAutomation = defaultDawAutomation(durationS, energy);
+  const automation_lanes = Array.isArray(source.automation_lanes)
+    ? defaultAutomation.map((fallbackLane) => {
+        const match = source.automation_lanes.find((lane: any) => String(lane?.id || "") === fallbackLane.id);
+        const points = Array.isArray(match?.points)
+          ? match.points
+              .map((point: any) => ({
+                time_s: clamp(numOr(point?.time_s ?? point?.time, 0), 0, Math.max(0, durationS)),
+                value: numOr(point?.value, 0),
+              }))
+              .sort((a: any, b: any) => a.time_s - b.time_s)
+          : fallbackLane.points;
+        return match
+          ? {
+              ...fallbackLane,
+              ...match,
+              enabled: boolOr(match.enabled, fallbackLane.enabled),
+              mode: ["read", "write", "touch", "latch"].includes(String(match.mode))
+                ? match.mode
+                : fallbackLane.mode,
+              points,
+            }
+          : fallbackLane;
+      })
+    : defaultAutomation;
+
+  const defaultStems = defaultDawStems();
+  const stems = Array.isArray(source.stems)
+    ? defaultStems.map((fallbackStem) => {
+        const match = source.stems.find((stem: any) => String(stem?.id || "") === fallbackStem.id);
+        return match
+          ? {
+              ...fallbackStem,
+              ...match,
+              enabled: boolOr(match.enabled, fallbackStem.enabled),
+              format: ["wav", "mp4", "adm-note"].includes(String(match.format))
+                ? match.format
+                : fallbackStem.format,
+            }
+          : fallbackStem;
+      })
+    : defaultStems;
+
+  const monitor = source.monitor && typeof source.monitor === "object" ? source.monitor : {};
+  return {
+    markers: markers.sort((a, b) => a.time_s - b.time_s),
+    buses,
+    automation_lanes,
+    stems,
+    monitor: {
+      ...defaultMonitor,
+      ...monitor,
+      target_lufs: clamp(numOr(monitor.target_lufs, defaultMonitor.target_lufs), -31, -8),
+      surround_bed: String(monitor.surround_bed || defaultMonitor.surround_bed),
+      object_audio_ready: boolOr(monitor.object_audio_ready, defaultMonitor.object_audio_ready),
+      adr_enabled: boolOr(monitor.adr_enabled, defaultMonitor.adr_enabled),
+    },
+    notes: String(source.notes || ""),
+    updated_at: numOr(source.updated_at, 0) || undefined,
+  };
 }
 
 function parseDeforumSchedule(s: string): Array<[number, number]> {
@@ -423,6 +751,29 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
   const camKeyframes: AnyDict[] = Array.isArray(timeline?.camera?.keyframes)
     ? timeline.camera.keyframes
     : [];
+  const activePlanVariant = (plan?.variants || [])[selectedVariant] || null;
+  const analysisFeatures: AnyDict =
+    project?.meta?.analysis?.features && typeof project.meta.analysis.features === "object"
+      ? project.meta.analysis.features
+      : {};
+  const dawSession = sanitizeDawSession(timeline, activePlanVariant, durationS, analysisFeatures);
+  const dawMarkerCount = dawSession.markers.length;
+  const dawStemCount = dawSession.stems.filter((stem) => stem.enabled).length;
+  const dawSoloCount = dawSession.buses.filter((bus) => bus.solo).length;
+  const estimatedLufs = numOr(
+    analysisFeatures.integrated_lufs ??
+      analysisFeatures.lufs_i ??
+      analysisFeatures.loudness_lufs ??
+      analysisFeatures.loudness,
+    -18 + clamp01(numOr(analysisFeatures.energy, 0.58)) * 8,
+  );
+  const estimatedPeak = numOr(
+    analysisFeatures.true_peak_db ??
+      analysisFeatures.peak_db ??
+      analysisFeatures.sample_peak_db,
+    -2.8 + clamp01(numOr(analysisFeatures.energy, 0.58)) * 1.4,
+  );
+  const dialogCueCount = dawSession.markers.filter((marker) => marker.type === "adr").length;
 
   const onWaveformClick = (e: React.MouseEvent) => {
     const c = canvasRef.current;
@@ -650,6 +1001,141 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
     } catch (e: any) {
       setErr(String(e));
     }
+  };
+
+  const setDawSession = (nextDaw: DawSession) => {
+    setTimeline({
+      ...timeline,
+      daw: {
+        ...nextDaw,
+        updated_at: Date.now(),
+      },
+    });
+    setTimelineDirty(true);
+  };
+
+  const patchDawSession = (patch: Partial<DawSession>) => {
+    setDawSession({ ...dawSession, ...patch });
+  };
+
+  const addDawMarkerAtPlayhead = (type: DawMarker["type"] = "cue") => {
+    const time = clamp(playheadS, 0, durationS);
+    const label =
+      type === "adr"
+        ? `ADR cue ${dialogCueCount + 1}`
+        : type === "fx"
+          ? `FX cue ${dawMarkerCount + 1}`
+          : type === "music"
+            ? `Music cue ${dawMarkerCount + 1}`
+            : `Cue ${dawMarkerCount + 1}`;
+    const marker: DawMarker = {
+      id: `marker_${Date.now()}`,
+      label,
+      time_s: time,
+      type,
+      status: type === "adr" ? "record" : "todo",
+    };
+    patchDawSession({
+      markers: [...dawSession.markers, marker].sort((a, b) => a.time_s - b.time_s),
+    });
+  };
+
+  const updateDawMarker = (markerId: string, patch: Partial<DawMarker>) => {
+    patchDawSession({
+      markers: dawSession.markers
+        .map((marker) =>
+          marker.id === markerId
+            ? {
+                ...marker,
+                ...patch,
+                time_s: clamp(
+                  numOr(patch.time_s ?? marker.time_s, marker.time_s),
+                  0,
+                  durationS,
+                ),
+              }
+            : marker,
+        )
+        .sort((a, b) => a.time_s - b.time_s),
+    });
+  };
+
+  const removeDawMarker = (markerId: string) => {
+    patchDawSession({
+      markers: dawSession.markers.filter((marker) => marker.id !== markerId),
+    });
+  };
+
+  const jumpToDawMarker = (timeS: number) => {
+    const t = clamp(timeS, 0, durationS);
+    setPlayheadS(t);
+    if (audioRef.current) audioRef.current.currentTime = t;
+  };
+
+  const updateDawBus = (busId: string, patch: Partial<DawBus>) => {
+    patchDawSession({
+      buses: dawSession.buses.map((bus) =>
+        bus.id === busId
+          ? {
+              ...bus,
+              ...patch,
+              gain_db: clamp(numOr(patch.gain_db ?? bus.gain_db, bus.gain_db), -60, 12),
+              pan: clamp(numOr(patch.pan ?? bus.pan, bus.pan), -100, 100),
+              mute: boolOr(patch.mute, bus.mute),
+              solo: boolOr(patch.solo, bus.solo),
+              record: boolOr(patch.record, bus.record),
+              stem: boolOr(patch.stem, bus.stem),
+            }
+          : bus,
+      ),
+    });
+  };
+
+  const updateDawAutomationLane = (
+    laneId: string,
+    patch: Partial<DawAutomationLane>,
+  ) => {
+    patchDawSession({
+      automation_lanes: dawSession.automation_lanes.map((lane) =>
+        lane.id === laneId
+          ? {
+              ...lane,
+              ...patch,
+              enabled: boolOr(patch.enabled, lane.enabled),
+              mode: patch.mode || lane.mode,
+              points: patch.points || lane.points,
+            }
+          : lane,
+      ),
+    });
+  };
+
+  const addDawAutomationPoint = (laneId: string, value?: number) => {
+    const lane = dawSession.automation_lanes.find((item) => item.id === laneId);
+    if (!lane) return;
+    const lastValue = lane.points.length ? lane.points[lane.points.length - 1].value : 0;
+    const point = {
+      time_s: clamp(playheadS, 0, durationS),
+      value: value ?? lastValue,
+    };
+    updateDawAutomationLane(laneId, {
+      points: [...lane.points, point].sort((a, b) => a.time_s - b.time_s),
+    });
+  };
+
+  const updateDawStem = (stemId: string, patch: Partial<DawStem>) => {
+    patchDawSession({
+      stems: dawSession.stems.map((stem) =>
+        stem.id === stemId
+          ? {
+              ...stem,
+              ...patch,
+              enabled: boolOr(patch.enabled, stem.enabled),
+              format: patch.format || stem.format,
+            }
+          : stem,
+      ),
+    });
   };
 
   const addClip = (type: "prompt" | "motion") => {
@@ -1153,8 +1639,8 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
           <span className="badge">{timelineDirty ? "Unsaved edits" : "Saved"}</span>
         </div>
         <div className="small timeline-headerCopy">
-          Console-style top bar, shared session state, fit-all overview zoom, and a utility dock
-          that keeps planning and reactive handoffs visible without flooding the screen.
+          Console-style top bar, DAW markers, mixer buses, stem planning, shared session state,
+          fit-all overview zoom, and a utility dock for finishing the audio-reactive movie.
         </div>
       </div>
       <div className="timeline-statusStrip">
@@ -1173,6 +1659,10 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
         <div className="timeline-stat">
           <span className="small">Handoffs</span>
           <strong>{handoffReadyCount}/2 ready</strong>
+        </div>
+        <div className="timeline-stat">
+          <span className="small">DAW</span>
+          <strong>{dawMarkerCount} cues / {dawStemCount} stems</strong>
         </div>
       </div>
     </div>
@@ -1476,6 +1966,18 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
                   <div className="timeline-rulerTickLine" />
                   <div className="timeline-rulerTickLabel">{fmtTime(tick)}</div>
                 </div>
+              ))}
+              {dawSession.markers.map((marker) => (
+                <button
+                  key={marker.id}
+                  type="button"
+                  className={`timeline-dawMarker timeline-dawMarker--${marker.type}`}
+                  style={{ left: clipPx(marker.time_s) }}
+                  title={`${marker.label} - ${fmtTime(marker.time_s)}`}
+                  onClick={() => jumpToDawMarker(marker.time_s)}
+                >
+                  <span>{marker.label}</span>
+                </button>
               ))}
               <div className="timeline-playhead" style={{ left: clipPx(playheadS) }} />
             </div>
@@ -1829,6 +2331,316 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
           Clear notice
         </button>
       </div>
+    </div>
+  );
+
+  const dawPanel = (
+    <div className="timeline-dockPanel timeline-dawPanel">
+      <div className="timeline-panelHeader">
+        <div>
+          <div className="timeline-panelTitle">Post DAW</div>
+          <div className="small">
+            Marker, mixer, automation, loudness, ADR, and stem controls saved into the timeline.
+          </div>
+        </div>
+        <span className="badge">{dawSoloCount ? `${dawSoloCount} solo` : "mix"}</span>
+      </div>
+
+      <div className="timeline-dawHero">
+        <div className="timeline-dawMeter">
+          <div className="timeline-dawMeterScale">
+            <span>-30</span>
+            <span>-18</span>
+            <span>-6</span>
+          </div>
+          <div className="timeline-dawMeterTrack">
+            <div
+              className="timeline-dawMeterFill"
+              style={{
+                height: `${clamp(((estimatedLufs + 32) / 24) * 100, 8, 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+        <div className="timeline-dawHeroStats">
+          <div className="timeline-dawStat">
+            <span className="small">Integrated loudness</span>
+            <strong>{estimatedLufs.toFixed(1)} LUFS</strong>
+          </div>
+          <div className="timeline-dawStat">
+            <span className="small">True peak estimate</span>
+            <strong>{estimatedPeak.toFixed(1)} dBTP</strong>
+          </div>
+          <div className="timeline-dawStat">
+            <span className="small">Monitor target</span>
+            <strong>{dawSession.monitor.target_lufs.toFixed(0)} LUFS</strong>
+          </div>
+        </div>
+      </div>
+
+      <details className="timeline-dawSection" open>
+        <summary>Markers and ADR cues</summary>
+        <div className="timeline-inlineActions">
+          <button className="secondary" type="button" onClick={() => addDawMarkerAtPlayhead("cue")}>
+            Add cue
+          </button>
+          <button className="secondary" type="button" onClick={() => addDawMarkerAtPlayhead("adr")}>
+            Add ADR
+          </button>
+          <button className="secondary" type="button" onClick={() => addDawMarkerAtPlayhead("fx")}>
+            Add FX
+          </button>
+        </div>
+        <div className="timeline-dawMarkerList">
+          {dawSession.markers.slice(0, 12).map((marker) => (
+            <div key={marker.id} className="timeline-dawMarkerRow">
+              <button
+                className="timeline-dawMarkerJump"
+                type="button"
+                onClick={() => jumpToDawMarker(marker.time_s)}
+              >
+                {fmtTime(marker.time_s)}
+              </button>
+              <input
+                value={marker.label}
+                onChange={(e) => updateDawMarker(marker.id, { label: e.target.value })}
+                aria-label={`${marker.label} marker label`}
+              />
+              <select
+                value={marker.type}
+                onChange={(e) => updateDawMarker(marker.id, { type: e.target.value as DawMarker["type"] })}
+                aria-label={`${marker.label} marker type`}
+              >
+                <option value="scene">Scene</option>
+                <option value="cue">Cue</option>
+                <option value="adr">ADR</option>
+                <option value="fx">FX</option>
+                <option value="music">Music</option>
+                <option value="delivery">Delivery</option>
+              </select>
+              <select
+                value={marker.status}
+                onChange={(e) =>
+                  updateDawMarker(marker.id, { status: e.target.value as DawMarker["status"] })
+                }
+                aria-label={`${marker.label} marker status`}
+              >
+                <option value="todo">Todo</option>
+                <option value="record">Record</option>
+                <option value="edit">Edit</option>
+                <option value="approved">Approved</option>
+              </select>
+              <button className="secondary" type="button" onClick={() => removeDawMarker(marker.id)}>
+                Del
+              </button>
+            </div>
+          ))}
+        </div>
+        {dawSession.markers.length > 12 ? (
+          <div className="small">Showing first 12 of {dawSession.markers.length} markers.</div>
+        ) : null}
+      </details>
+
+      <details className="timeline-dawSection" open>
+        <summary>Mixer buses</summary>
+        <div className="timeline-dawMixer">
+          {dawSession.buses.map((bus) => (
+            <div key={bus.id} className={`timeline-dawChannel${bus.solo ? " is-solo" : ""}${bus.mute ? " is-muted" : ""}`}>
+              <div className="timeline-dawChannelTop">
+                <strong>{bus.name}</strong>
+                <span className="small">{bus.gain_db.toFixed(1)} dB</span>
+              </div>
+              <div className="small timeline-dawChannelRole">{bus.role}</div>
+              <input
+                type="range"
+                min={-60}
+                max={12}
+                step={0.5}
+                value={bus.gain_db}
+                onChange={(e) => updateDawBus(bus.id, { gain_db: Number(e.target.value) })}
+                aria-label={`${bus.name} gain`}
+              />
+              <div className="timeline-dawPanRow">
+                <span className="small">L</span>
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={bus.pan}
+                  onChange={(e) => updateDawBus(bus.id, { pan: Number(e.target.value) })}
+                  aria-label={`${bus.name} pan`}
+                />
+                <span className="small">R</span>
+              </div>
+              <div className="timeline-dawToggleRow">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={bus.mute}
+                    onChange={(e) => updateDawBus(bus.id, { mute: e.target.checked })}
+                  />
+                  Mute
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={bus.solo}
+                    onChange={(e) => updateDawBus(bus.id, { solo: e.target.checked })}
+                  />
+                  Solo
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={bus.record}
+                    onChange={(e) => updateDawBus(bus.id, { record: e.target.checked })}
+                  />
+                  Rec
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={bus.stem}
+                    onChange={(e) => updateDawBus(bus.id, { stem: e.target.checked })}
+                  />
+                  Stem
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <details className="timeline-dawSection">
+        <summary>Automation lanes</summary>
+        <div className="timeline-dawAutomationList">
+          {dawSession.automation_lanes.map((lane) => (
+            <div key={lane.id} className="timeline-dawAutomationRow">
+              <div>
+                <strong>{lane.name}</strong>
+                <div className="small">{lane.target} • {lane.points.length} points</div>
+              </div>
+              <select
+                value={lane.mode}
+                onChange={(e) =>
+                  updateDawAutomationLane(lane.id, { mode: e.target.value as DawAutomationLane["mode"] })
+                }
+                aria-label={`${lane.name} automation mode`}
+              >
+                <option value="read">Read</option>
+                <option value="write">Write</option>
+                <option value="touch">Touch</option>
+                <option value="latch">Latch</option>
+              </select>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={lane.enabled}
+                  onChange={(e) => updateDawAutomationLane(lane.id, { enabled: e.target.checked })}
+                />
+                On
+              </label>
+              <button className="secondary" type="button" onClick={() => addDawAutomationPoint(lane.id)}>
+                Write point
+              </button>
+            </div>
+          ))}
+        </div>
+      </details>
+
+      <details className="timeline-dawSection">
+        <summary>Delivery stems and monitor</summary>
+        <div className="timeline-fieldGrid timeline-fieldGrid--compact">
+          <label className="small">target LUFS</label>
+          <input
+            type="number"
+            step={1}
+            value={dawSession.monitor.target_lufs}
+            onChange={(e) =>
+              patchDawSession({
+                monitor: {
+                  ...dawSession.monitor,
+                  target_lufs: Number(e.target.value),
+                },
+              })
+            }
+          />
+          <label className="small">bed</label>
+          <select
+            value={dawSession.monitor.surround_bed}
+            onChange={(e) =>
+              patchDawSession({
+                monitor: {
+                  ...dawSession.monitor,
+                  surround_bed: e.target.value,
+                },
+              })
+            }
+          >
+            <option value="stereo">Stereo</option>
+            <option value="5.1">5.1</option>
+            <option value="7.1.4">7.1.4</option>
+            <option value="9.1.6">9.1.6 notes</option>
+          </select>
+        </div>
+        <div className="timeline-dawStemList">
+          {dawSession.stems.map((stem) => (
+            <div key={stem.id} className="timeline-dawStemRow">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={stem.enabled}
+                  onChange={(e) => updateDawStem(stem.id, { enabled: e.target.checked })}
+                />
+                {stem.name}
+              </label>
+              <span className="small">{stem.source}</span>
+              <select
+                value={stem.format}
+                onChange={(e) => updateDawStem(stem.id, { format: e.target.value as DawStem["format"] })}
+                aria-label={`${stem.name} stem format`}
+              >
+                <option value="wav">WAV</option>
+                <option value="mp4">MP4</option>
+                <option value="adm-note">ADM note</option>
+              </select>
+            </div>
+          ))}
+        </div>
+        <div className="timeline-dawToggleRow">
+          <label>
+            <input
+              type="checkbox"
+              checked={dawSession.monitor.object_audio_ready}
+              onChange={(e) =>
+                patchDawSession({
+                  monitor: { ...dawSession.monitor, object_audio_ready: e.target.checked },
+                })
+              }
+            />
+            Object audio ready
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={dawSession.monitor.adr_enabled}
+              onChange={(e) =>
+                patchDawSession({
+                  monitor: { ...dawSession.monitor, adr_enabled: e.target.checked },
+                })
+              }
+            />
+            ADR enabled
+          </label>
+        </div>
+        <textarea
+          className="timeline-dawNotes"
+          value={dawSession.notes}
+          onChange={(e) => patchDawSession({ notes: e.target.value })}
+          placeholder="Mix notes, delivery requirements, dialogue fixes, or object-audio reminders."
+        />
+      </details>
     </div>
   );
 
@@ -2197,6 +3009,11 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
       meta: selected ? selectionStatus : "idle",
     },
     {
+      id: "daw",
+      label: "Post DAW",
+      meta: `${dawMarkerCount} cues`,
+    },
+    {
       id: "proxy",
       label: "Proxy",
       meta: proxyUrl ? "ready" : "draft",
@@ -2220,6 +3037,8 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
   const activeDockPanel =
     dockSection === "handoffs"
       ? handoffsPanel
+      : dockSection === "daw"
+        ? dawPanel
       : dockSection === "proxy"
       ? proxyPanel
       : dockSection === "diffusion"
@@ -2268,7 +3087,7 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
           <div className="guide-grid">
             <section className="guide-block">
               <div className="guide-kicker">What this view does</div>
-              <p>Timeline is the full arrangement editor for the saved Studio plan. It combines prompt clips, motion clips, overlays, camera moves, and look-development tools in one horizontal workspace.</p>
+              <p>Timeline is the full arrangement editor for the saved Studio plan. It combines prompt clips, motion clips, overlays, camera moves, DAW markers, mixer buses, automation, stems, and look-development tools in one horizontal workspace.</p>
             </section>
             <section className="guide-block">
               <div className="guide-kicker">Capabilities</div>
@@ -2276,7 +3095,7 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
                 <li>Play audio, move the playhead, switch variants, and review timing against the active soundtrack.</li>
                 <li>Zoom with buttons, slider, numeric entry, Fit all, or Ctrl/Cmd plus mouse wheel.</li>
                 <li>Switch density between compact and comfortable depending on how many tracks or keyframes you need to see.</li>
-                <li>Use the dock for handoffs, inspector, proxy renders, look-dev, and motion-curve editing without removing advanced controls.</li>
+                <li>Use the dock for handoffs, inspector, post-DAW controls, proxy renders, look-dev, and motion-curve editing without removing advanced controls.</li>
               </ul>
             </section>
             <section className="guide-block">
@@ -2284,6 +3103,7 @@ export default function Timeline({ backendUrl: backendUrlProp }: PageProps) {
               <ul className="guide-list">
                 <li>Start in Fit all mode to see the whole arrangement, then zoom into dense sections for clip or keyframe edits.</li>
                 <li>Check the Handoffs tab before editing so planner and reactive sync state is visible without leaving Timeline.</li>
+                <li>Use Post DAW to place ADR/dialog/FX cues, shape buses, write automation points, and decide which stems should travel with the movie render.</li>
                 <li>Keep the inspector open for clip-level adjustments, and switch to proxy or look-dev when you need validation renders.</li>
                 <li>Use Timeline after Workspace or Storyboard when the plan is ready for precise arrangement and finishing decisions.</li>
               </ul>

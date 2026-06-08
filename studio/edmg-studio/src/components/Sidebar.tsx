@@ -1,4 +1,22 @@
 import React, { useState } from "react";
+import {
+  Activity,
+  AudioWaveform,
+  Cloud,
+  Cpu,
+  FolderOpen,
+  Gauge,
+  Hammer,
+  ListChecks,
+  Monitor,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Video,
+  WandSparkles,
+  Workflow,
+  type LucideIcon,
+} from "lucide-react";
 import { isStudioForgeEnabled } from "../features";
 import { preloadNavigationIntent, type Page } from "../pageRouting";
 
@@ -8,6 +26,7 @@ type NavItem = {
   page: Page;
   label: string;
   hint: string;
+  icon: LucideIcon;
 };
 
 type NavGroup = {
@@ -19,12 +38,12 @@ type NavGroup = {
 
 function getNavGroups(): NavGroup[] {
   const labs: NavItem[] = [
-    { page: "directorLab", label: "EDMG Director", hint: "combined planning + reactive" },
-    { page: "plannerLab", label: "AI Planner Lab", hint: "deep prompt authoring" },
-    { page: "reactiveLab", label: "Reactive Lab", hint: "audio-reactive scheduling" },
+    { page: "directorLab", label: "EDMG Director", hint: "combined planning + reactive", icon: Sparkles },
+    { page: "plannerLab", label: "AI Planner Lab", hint: "deep prompt authoring", icon: WandSparkles },
+    { page: "reactiveLab", label: "Reactive Lab", hint: "audio-reactive scheduling", icon: AudioWaveform },
   ];
   if (isStudioForgeEnabled()) {
-    labs.push({ page: "studioForge", label: "Studio Forge", hint: "AI builder preview" });
+    labs.push({ page: "studioForge", label: "Studio Forge", hint: "AI builder preview", icon: Hammer });
   }
 
   return [
@@ -33,10 +52,10 @@ function getNavGroups(): NavGroup[] {
       label: "Core Flow",
       hint: "Canonical studio path",
       items: [
-        { page: "dashboard", label: "Dashboard", hint: "status + quick access" },
-        { page: "projects", label: "Projects", hint: "create and pick sessions" },
-        { page: "workspace", label: "Workspace", hint: "ingest, plan, reactive handoff" },
-        { page: "timeline", label: "Timeline", hint: "arrange full track and cues" },
+        { page: "dashboard", label: "Dashboard", hint: "status + quick access", icon: Gauge },
+        { page: "projects", label: "Projects", hint: "create and pick sessions", icon: FolderOpen },
+        { page: "workspace", label: "Workspace", hint: "ingest, plan, reactive handoff", icon: Workflow },
+        { page: "timeline", label: "Timeline", hint: "arrange full track and cues", icon: Activity },
       ],
     },
     {
@@ -44,9 +63,9 @@ function getNavGroups(): NavGroup[] {
       label: "Delivery",
       hint: "Render and review",
       items: [
-        { page: "render", label: "Render", hint: "launch outputs" },
-        { page: "queue", label: "Render Queue", hint: "logs, retries, progress" },
-        { page: "outputs", label: "Outputs", hint: "browse generated media" },
+        { page: "render", label: "Render", hint: "launch outputs", icon: Video },
+        { page: "queue", label: "Render Queue", hint: "logs, retries, progress", icon: ListChecks },
+        { page: "outputs", label: "Outputs", hint: "browse generated media", icon: Monitor },
       ],
     },
     {
@@ -60,10 +79,10 @@ function getNavGroups(): NavGroup[] {
       label: "System",
       hint: "Models, setup, services",
       items: [
-        { page: "cloud", label: "Cloud", hint: "remote integrations" },
-        { page: "models", label: "Models", hint: "packs and availability" },
-        { page: "settings", label: "Settings", hint: "paths and preferences" },
-        { page: "setup", label: "Setup", hint: "dependency health" },
+        { page: "cloud", label: "Cloud", hint: "remote integrations", icon: Cloud },
+        { page: "models", label: "Models", hint: "packs and availability", icon: Cpu },
+        { page: "settings", label: "Settings", hint: "paths and preferences", icon: Settings },
+        { page: "setup", label: "Setup", hint: "dependency health", icon: SlidersHorizontal },
       ],
     },
   ];
@@ -136,20 +155,26 @@ export default function Sidebar({
               </summary>
 
               <div className="sidebar-groupBody">
-                {group.items.map((item) => (
-                  <button
-                    key={item.page}
-                    onClick={() => onNavigate(item.page)}
-                    onMouseEnter={() => preloadNavigationIntent(item.page)}
-                    onFocus={() => preloadNavigationIntent(item.page)}
-                    className={`sidebar-navButton${page === item.page ? " is-active" : ""}`}
-                  >
-                    <span className="sidebar-navCopy">
-                      <span className="sidebar-navText">{item.label}</span>
-                      <span className="sidebar-navMeta">{item.hint}</span>
-                    </span>
-                  </button>
-                ))}
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.page}
+                      onClick={() => onNavigate(item.page)}
+                      onMouseEnter={() => preloadNavigationIntent(item.page)}
+                      onFocus={() => preloadNavigationIntent(item.page)}
+                      className={`sidebar-navButton${page === item.page ? " is-active" : ""}`}
+                    >
+                      <span className="sidebar-navIcon" aria-hidden="true">
+                        <Icon size={16} strokeWidth={2.2} />
+                      </span>
+                      <span className="sidebar-navCopy">
+                        <span className="sidebar-navText">{item.label}</span>
+                        <span className="sidebar-navMeta">{item.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </details>
           );
