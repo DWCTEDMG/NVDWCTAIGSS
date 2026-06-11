@@ -30,8 +30,8 @@ def riva_asr_enabled() -> bool:
 
 
 def riva_fallback_enabled() -> bool:
-    raw = _env("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "1")
-    return raw == "" or _truthy(raw)
+    raw = _env("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "0")
+    return _truthy(raw)
 
 
 def riva_language_code() -> str:

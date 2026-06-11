@@ -37,8 +37,8 @@ def hint_from_exception(e: Exception) -> str | None:
         return "Install FFmpeg, add it to PATH, or set EDMG_FFMPEG_PATH. Then re-run Assemble."
 
     if "connection refused" in sl or "failed to establish a new connection" in sl or "max retries exceeded" in sl:
-        if "11434" in sl or "ollama" in sl:
-            return "Start Ollama (app or `ollama serve`) and ensure EDMG_AI_OLLAMA_URL is correct (default http://127.0.0.1:11434)."
+        if "8001" in sl or "nim" in sl or "openai-compatible" in sl:
+            return "Start the NVIDIA NIM/OpenAI-compatible planner endpoint and ensure EDMG_NVIDIA_NIM_URL is correct (default http://127.0.0.1:8001)."
         return "Start ComfyUI and make sure EDMG_COMFYUI_URL points to it (default http://127.0.0.1:8188)."
 
     if "missing_node_classes" in sl or "ade_" in sl:

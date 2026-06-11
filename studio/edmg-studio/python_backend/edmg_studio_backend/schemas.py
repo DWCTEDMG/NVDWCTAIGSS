@@ -131,7 +131,7 @@ class RenderMotionRequest(BaseModel):
     svd_fps_id: int = 6
     svd_cond_aug: float = 0.02
     svd_decoding_t: int = 14
-    device: Literal["cuda","cpu"] = "cuda"
+    device: Literal["cuda"] = "cuda"
 
 class AssembleVideoRequest(BaseModel):
     variant_index: int = 0
@@ -141,10 +141,8 @@ class InternalVideoRenderRequest(BaseModel):
     """Render a full video using the internal renderer.
 
     Modes:
-      - auto: prefer diffusion if an internal model is installed, otherwise fall back to proxy
+      - auto: prefer CUDA diffusion if an internal model is installed, otherwise fail fast
       - diffusion: require an internal diffusion model
-      - hosted: use the configured hosted still-image provider for keyframes, then assemble locally
-      - proxy: render a local draft video using timeline compositing only
     """
     variant_index: int = 0
 
@@ -161,14 +159,11 @@ class InternalVideoRenderRequest(BaseModel):
 
     interpolation_engine: Literal["auto","minterpolate","fps","rife"] = "auto"
     model_id: str = "auto"
-    render_mode: Literal["auto","diffusion","hosted","proxy"] = "auto"
+    render_mode: Literal["auto","diffusion"] = "auto"
     render_tier: Literal["auto","draft","balanced","quality"] = "auto"
-    device_preference: Literal["auto","cpu","cuda","mps","directml"] = "auto"
-    allow_hosted_fallback: bool = True
-    allow_proxy_fallback: bool = True
-    hosted_service: Literal["default","core","ultra","sd3"] = "default"
-    hosted_model: str | None = None
-    hosted_style_preset: str | None = None
+    device_preference: Literal["auto","cuda"] = "auto"
+    allow_hosted_fallback: bool = False
+    allow_proxy_fallback: bool = False
     negative_prompt: str = "blurry, low quality, watermark, text, logo"
     loras: list[LoraSelection] = Field(default_factory=list)
     vae: str | None = None
@@ -195,12 +190,12 @@ class StoryboardMovieRenderRequest(BaseModel):
 
     variant_index: int = Field(default=0, ge=0)
     preset: Literal["fast", "balanced", "quality", "ultra"] = "balanced"
-    render_mode: Literal["auto", "diffusion", "hosted", "proxy"] = "auto"
+    render_mode: Literal["auto", "diffusion"] = "auto"
     model_id: str = "auto"
     apply_storyboard: bool = True
     overwrite_timeline: bool = True
-    allow_hosted_fallback: bool = True
-    allow_proxy_fallback: bool = True
+    allow_hosted_fallback: bool = False
+    allow_proxy_fallback: bool = False
 
     fps_output: int | None = Field(default=None, ge=1, le=60)
     fps_render: int | None = Field(default=None, ge=1, le=30)
@@ -475,7 +470,6 @@ class RenderIntent(BaseModel):
             "internal",
             "comfyui_still",
             "comfyui_motion",
-            "hosted_video",
             "proxy",
             "deforum_export",
         ]
@@ -546,7 +540,6 @@ class RenderConductorPlanRequest(BaseModel):
             "internal",
             "comfyui_still",
             "comfyui_motion",
-            "hosted_video",
             "proxy",
             "deforum_export",
         ]

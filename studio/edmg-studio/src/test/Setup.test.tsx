@@ -9,13 +9,18 @@ describe("Setup page", () => {
     installEdmgBridge();
     installFetchMock({
       "/v1/setup/status": {
-        ollama: { ok: true, model_present: true },
         comfyui: { ok: false },
         ffmpeg: { ok: true },
         backend_bundle: { ok: true },
         sevenzip: { ok: true },
-        ai_config: { label: "Local llama.cpp server", ollama_required: false, model_required: false },
+        ai_config: {
+          label: "NVIDIA NIM / OpenAI-compatible provider",
+          provider: "openai_compat",
+          base_url: "http://127.0.0.1:8001/v1",
+          model: "nvidia/model",
+        },
         nvidia_profile: { enabled: true, profile: "omniverse" },
+        nvidia_planner: { ok: true },
       },
       "/v1/nvidia/diagnostics": {
         ok: true,
@@ -68,14 +73,13 @@ describe("Setup page", () => {
     });
     installFetchMock({
       "/v1/setup/status": {
-        ollama: { ok: false, model_present: false, launch_available: true },
         comfyui: { ok: false, url: "http://127.0.0.1:8188" },
         ffmpeg: { ok: true },
         backend_bundle: { ok: true },
-        backend_bundle_directml: { ok: false, missing: ["onnxruntime-directml"] },
         sevenzip: { ok: true, hint: "optional on linux" },
-        hardware: { supports_directml: false },
-        ai_config: { label: "Local Ollama", ollama_required: true, model_required: true },
+        ai_config: { label: "NVIDIA NIM / OpenAI-compatible provider", provider: "openai_compat" },
+        nvidia_profile: { enabled: true, profile: "omniverse" },
+        nvidia_planner: { ok: true },
       },
       "/v1/nvidia/diagnostics": {
         ok: true,
@@ -94,7 +98,6 @@ describe("Setup page", () => {
     expect(await screen.findByDisplayValue("/home/test/EDMG-Studio")).toBeTruthy();
     expect(await screen.findByText("0) System Setup")).toBeTruthy();
     expect(await screen.findByText(/Linux and macOS use the manual NVIDIA path/)).toBeTruthy();
-    expect(await screen.findByText(/Linux support expects a system-installed/i)).toBeTruthy();
     expect(await screen.findByText(/Linux support uses a manually installed ComfyUI instance.*secondary workflows/i)).toBeTruthy();
   });
 
@@ -103,12 +106,13 @@ describe("Setup page", () => {
     let taskStatus = "running";
     const fetchMock = installFetchMock({
       "/v1/setup/status": () => ({
-        ollama: { ok: false, model_present: false },
         comfyui: { ok: false },
         ffmpeg: { ok: true },
         backend_bundle: { ok: true },
         sevenzip: { ok: false },
-        ai_config: { label: "Local Ollama", ollama_required: true, model_required: true },
+        ai_config: { label: "NVIDIA NIM / OpenAI-compatible provider", provider: "openai_compat" },
+        nvidia_profile: { enabled: true, profile: "omniverse" },
+        nvidia_planner: { ok: true },
         tasks: [
           {
             id: "task1234",

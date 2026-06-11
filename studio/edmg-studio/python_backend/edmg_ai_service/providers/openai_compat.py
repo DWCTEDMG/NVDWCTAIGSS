@@ -7,7 +7,6 @@ from typing import Optional
 import requests
 
 from .base import PlanProvider
-from .fallback import RuleBasedPlanner
 from ..schemas import PlanRequest, PlanResponse, PlanVariant
 
 
@@ -86,7 +85,6 @@ class OpenAICompatPlanner(PlanProvider):
         self._api_key = api_key
         self._model = model
         self._timeout_s = timeout_s
-        self._fallback = RuleBasedPlanner()
 
     @property
     def name(self) -> str:
@@ -151,19 +149,19 @@ class OpenAICompatPlanner(PlanProvider):
                 timeout=self._timeout_s,
             )
             if getattr(r, "status_code", 200) in (400, 422) and payload.get("response_format"):
-                fallback_payload = dict(payload)
-                fallback_payload.pop("response_format", None)
+                retry_payload = dict(payload)
+                retry_payload.pop("response_format", None)
                 r = requests.post(
                     f"{self._base_url}/v1/chat/completions",
                     headers=headers,
-                    json=fallback_payload,
+                    json=retry_payload,
                     timeout=self._timeout_s,
                 )
             r.raise_for_status()
             data = r.json()
             text = data["choices"][0]["message"]["content"]
-        except Exception:
-            return self._fallback.plan(req)
+        except Exception as exc:
+            raise RuntimeError(f"NVIDIA/OpenAI-compatible planner request failed: {exc}") from exc
 
         obj = _extract_json(text)
         if obj and "variants" not in obj and isinstance(obj.get("scenes"), list):
@@ -180,10 +178,10 @@ class OpenAICompatPlanner(PlanProvider):
                 ]
             }
         if not obj or "variants" not in obj:
-            return self._fallback.plan(req)
+            raise RuntimeError("NVIDIA/OpenAI-compatible planner returned a response without variants.")
 
         try:
             variants = [PlanVariant.model_validate(_coerce_variant(v)) for v in obj["variants"]]
             return PlanResponse(provider=self.name, model=self._model, variants=variants)
-        except Exception:
-            return self._fallback.plan(req)
+        except Exception as exc:
+            raise RuntimeError(f"NVIDIA/OpenAI-compatible planner response validation failed: {exc}") from exc

@@ -124,6 +124,10 @@ export function createBackendRuntime({
       MPLBACKEND: process.env.MPLBACKEND || "Agg",
     };
 
+    for (const removedKey of ["EDMG_AI_OLLAMA_URL", "EDMG_AI_OLLAMA_MODEL", "OLLAMA_MODELS"]) {
+      delete env[removedKey];
+    }
+
     for (const key of [
       "ELECTRON_RUN_AS_NODE",
       "ELECTRON_NO_ATTACH_CONSOLE",
@@ -311,7 +315,6 @@ export function createBackendRuntime({
     console.log("[backend] EDMG_STUDIO_DATA_DIR=", backendDataDir);
     console.log("[backend] EDMG_STUDIO_MODELS_DIR=", managedStudioEnv.EDMG_STUDIO_MODELS_DIR);
     console.log("[backend] EDMG_STUDIO_EXTERNAL_DIR=", managedStudioEnv.EDMG_STUDIO_EXTERNAL_DIR);
-    console.log("[backend] OLLAMA_MODELS=", managedStudioEnv.OLLAMA_MODELS);
     console.log("[backend] EDMG_FFMPEG_PATH=", ffmpegPath);
     console.log("[backend] log files=", logPaths);
 

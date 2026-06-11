@@ -114,7 +114,7 @@ def deforum_template() -> dict[str, Any]:
     return json.loads(proc.stdout)
 
 
-def install_core(task: Any, data_dir: Path, *, mode: str = "standard", backend: str = "cpu") -> None:
+def install_core(task: Any, data_dir: Path, *, mode: str = "standard", backend: str = "cu124") -> None:
     installer = _installer_path()
     if installer is None or not installer.exists():
         raise RuntimeError("EDMG Core repair installer is not available in this Studio build.")

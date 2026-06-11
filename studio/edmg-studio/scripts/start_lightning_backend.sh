@@ -73,16 +73,24 @@ echo "[edmg] studio root: ${STUDIO_ROOT}"
 echo "[edmg] backend dir: ${BACKEND_DIR}"
 echo "[edmg] studio home: ${EDMG_STUDIO_HOME}"
 echo "[edmg] backend url: http://${EDMG_STUDIO_BACKEND_HOST}:${EDMG_STUDIO_BACKEND_PORT}"
-echo "[edmg] ai provider: ${EDMG_AI_PROVIDER:-ollama}"
+export EDMG_NVIDIA_MODE="${EDMG_NVIDIA_MODE:-1}"
+export EDMG_NVIDIA_PROFILE="${EDMG_NVIDIA_PROFILE:-omniverse}"
+export EDMG_NVIDIA_NIM_URL="${EDMG_NVIDIA_NIM_URL:-http://127.0.0.1:8001}"
+export EDMG_AI_PROVIDER="${EDMG_AI_PROVIDER:-openai_compat}"
+export EDMG_AI_OPENAI_COMPAT_BASE_URL="${EDMG_AI_OPENAI_COMPAT_BASE_URL:-${EDMG_NVIDIA_NIM_URL%/}/v1}"
+export EDMG_AI_OPENAI_COMPAT_MODEL="${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
+export EDMG_NVIDIA_RIVA_URL="${EDMG_NVIDIA_RIVA_URL:-127.0.0.1:50051}"
+export EDMG_NVIDIA_RIVA_ASR="${EDMG_NVIDIA_RIVA_ASR:-1}"
+export EDMG_NVIDIA_RIVA_ASR_FALLBACK="${EDMG_NVIDIA_RIVA_ASR_FALLBACK:-0}"
+echo "[edmg] ai provider: ${EDMG_AI_PROVIDER}"
 echo "[edmg] comfyui url: ${EDMG_COMFYUI_URL:-http://127.0.0.1:8188}"
 
-if [[ "${EDMG_AI_PROVIDER:-ollama}" == "openai_compat" ]]; then
-  warn_if_unset "EDMG_AI_OPENAI_COMPAT_BASE_URL" "http://127.0.0.1:8000"
-  warn_if_unset "EDMG_AI_OPENAI_COMPAT_MODEL" "qwen3-8b"
-else
-  warn_if_unset "EDMG_AI_OLLAMA_URL" "http://127.0.0.1:11434"
-  warn_if_unset "EDMG_AI_OLLAMA_MODEL" "qwen3:8b"
+if [[ "${EDMG_AI_PROVIDER}" != "openai_compat" ]]; then
+  echo "[error] NVIDIA-only profile requires EDMG_AI_PROVIDER=openai_compat." >&2
+  exit 1
 fi
+warn_if_unset "EDMG_AI_OPENAI_COMPAT_BASE_URL" "http://127.0.0.1:8001/v1"
+warn_if_unset "EDMG_AI_OPENAI_COMPAT_MODEL" "nvidia/llama-3.3-nemotron-super-49b-v1.5"
 
 exec python -m edmg_studio_backend serve \
   --host "${EDMG_STUDIO_BACKEND_HOST}" \

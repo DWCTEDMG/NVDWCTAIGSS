@@ -245,30 +245,37 @@ def test_storyboard_movie_route_applies_reactive_timeline_and_queues_job(tmp_pat
         backend_app,
         "_hardware_profile",
         lambda: {
-            "backend": "cpu",
-            "backend_family": "cpu_only",
+            "backend": "cuda",
+            "backend_family": "discrete_gpu",
+            "cuda_runtime_ready": True,
+            "available_backends": ["cuda"],
+            "vram_gb": 16.0,
             "ram_gb": 16.0,
             "cpu_threads": 8,
-            "device_name": "test cpu",
+            "device_name": "test cuda",
+            "preferred_internal_model": "hf_sd15_internal",
         },
     )
+    model_dir = tmp_path / "models" / "hf_sd15_internal"
+    model_dir.mkdir(parents=True)
+    monkeypatch.setattr(backend_app.models, "installed_path", lambda mid: model_dir if mid == "hf_sd15_internal" else None)
 
     response = backend_app.render_storyboard_movie(
         proj.id,
         StoryboardMovieRenderRequest(
             variant_index=0,
             preset="fast",
-            render_mode="proxy",
+            render_mode="auto",
             fps_output=24,
             fps_render=1,
         ),
     )
 
     assert response["ok"] is True
-    assert response["render_mode"] == "proxy"
+    assert response["render_mode"] == "diffusion"
     assert response["job"]["type"] == "internal_video"
     assert response["job"]["payload"]["storyboard_movie"]["audio_reactive"] is True
-    assert response["preflight"]["mode"] == "proxy"
+    assert response["preflight"]["mode"] == "diffusion"
 
     saved = store.get(proj.id)
     assert saved is not None

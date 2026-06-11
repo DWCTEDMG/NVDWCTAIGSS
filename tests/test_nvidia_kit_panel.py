@@ -97,8 +97,8 @@ def test_kit_panel_builds_workflow_summaries():
     assert "outputs/nvidia/render_jobs/job.json" in render_summary
     assert storyboard_payload["apply_storyboard"] is True
     assert storyboard_payload["overwrite_timeline"] is True
-    assert storyboard_payload["allow_hosted_fallback"] is True
-    assert storyboard_payload["allow_proxy_fallback"] is True
+    assert storyboard_payload["allow_hosted_fallback"] is False
+    assert storyboard_payload["allow_proxy_fallback"] is False
     assert storyboard_payload["fps_output"] == 60
     assert storyboard_payload["width"] == 1920
     assert storyboard_payload["height"] == 256
@@ -364,8 +364,8 @@ def test_kit_ai_director_runs_guided_project_audio_render_flow():
             "render_mode": "auto",
             "apply_storyboard": True,
             "overwrite_timeline": True,
-            "allow_hosted_fallback": True,
-            "allow_proxy_fallback": True,
+            "allow_hosted_fallback": False,
+            "allow_proxy_fallback": False,
             "fps_output": 24,
             "width": 1920,
             "height": 1080,

@@ -10,11 +10,10 @@ DEFAULT_MODEL_FALLBACK_CHAIN = ("turbo", "large-v3", "medium", "small")
 
 @lru_cache(maxsize=4)
 def _load_model(model_size: str):
-    try:
-        from faster_whisper import WhisperModel  # type: ignore
-    except Exception as e:
-        raise RuntimeError("ASR requires optional deps: pip install -e '.[asr]'") from e
-    return WhisperModel(model_size, device="cpu", compute_type="int8")
+    raise RuntimeError(
+        "Local faster-whisper ASR is disabled by the NVIDIA-only profile. "
+        "Use NVIDIA Riva ASR through the NVIDIA runtime profile."
+    )
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -142,9 +141,5 @@ def transcribe_detailed(path: str, model_size: str = DEFAULT_MODEL_SIZE) -> dict
 
 
 def transcribe(path: str, model_size: str = DEFAULT_MODEL_SIZE) -> str:
-    """Transcribe audio to text using optional faster-whisper (CPU-friendly).
-
-    Install:
-      pip install -e ".[asr]"
-    """
+    """Transcribe audio through the configured NVIDIA ASR path."""
     return str(transcribe_detailed(path, model_size=model_size).get("text") or "")

@@ -234,7 +234,6 @@ def _default_storage_env(studio_home: Path, data_dir: Path | None = None) -> dic
         "EDMG_STUDIO_CACHE_DIR": str((home / "cache").resolve()),
         "EDMG_STUDIO_LOGS_DIR": str((home / "logs").resolve()),
         "EDMG_STUDIO_EXTERNAL_DIR": str((home / "external").resolve()),
-        "OLLAMA_MODELS": str((models / "ollama").resolve()),
     }
 
 def _default_nvidia_env() -> dict[str, str]:
@@ -247,9 +246,9 @@ def _default_nvidia_env() -> dict[str, str]:
         "EDMG_AI_OPENAI_COMPAT_BASE_URL": DEFAULT_NVIDIA_NIM_OPENAI_BASE_URL,
         "EDMG_AI_OPENAI_COMPAT_MODEL": DEFAULT_NVIDIA_NIM_MODEL,
         "EDMG_NVIDIA_RIVA_URL": DEFAULT_NVIDIA_RIVA_URL,
-        "EDMG_NVIDIA_RIVA_ASR": "0",
+        "EDMG_NVIDIA_RIVA_ASR": "1",
         "EDMG_NVIDIA_RIVA_LANGUAGE_CODE": "en-US",
-        "EDMG_NVIDIA_RIVA_ASR_FALLBACK": "1",
+        "EDMG_NVIDIA_RIVA_ASR_FALLBACK": "0",
         "EDMG_NVIDIA_TRITON_URL": DEFAULT_NVIDIA_TRITON_URL,
         "EDMG_NVIDIA_OMNIVERSE_URL": DEFAULT_NVIDIA_OMNIVERSE_URL,
     }

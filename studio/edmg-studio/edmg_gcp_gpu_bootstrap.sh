@@ -15,8 +15,6 @@ BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-7863}"
 UI_HOST="${UI_HOST:-0.0.0.0}"
 UI_PORT="${UI_PORT:-5173}"
-OLLAMA_PORT="${OLLAMA_PORT:-11434}"
-INSTALL_OLLAMA="${INSTALL_OLLAMA:-0}"
 START_UI="${START_UI:-1}"
 ENABLE_BACKEND_SERVICE="${ENABLE_BACKEND_SERVICE:-1}"
 QUEUE_DEFAULT_MODELS="${QUEUE_DEFAULT_MODELS:-0}"
@@ -34,20 +32,16 @@ LOG_DIR="${STUDIO_HOME}/logs"
 EXTERNAL_DIR="${STUDIO_HOME}/external"
 HF_HOME_DIR="${CACHE_DIR}/huggingface"
 TORCH_HOME_DIR="${CACHE_DIR}/torch"
-OLLAMA_MODELS_DIR="${MODELS_DIR}/ollama"
 UI_LOG_PATH="${LOG_DIR}/ui.log"
-OLLAMA_LOG_PATH="${LOG_DIR}/ollama.log"
 MODEL_QUEUE_LOG_PATH="${LOG_DIR}/queue-default-models.log"
 BACKEND_SERVICE_NAME="edmg-backend"
 
-if [[ "$INSTALL_OLLAMA" == "1" ]]; then
-  AI_PROVIDER="${AI_PROVIDER:-ollama}"
-else
-  AI_PROVIDER="${AI_PROVIDER:-rule_based}"
-fi
 AI_MODE="${AI_MODE:-local}"
-AI_OLLAMA_URL="${AI_OLLAMA_URL:-http://127.0.0.1:${OLLAMA_PORT}}"
-AI_OLLAMA_MODEL="${AI_OLLAMA_MODEL:-qwen3:8b}"
+AI_PROVIDER="${AI_PROVIDER:-openai_compat}"
+NVIDIA_NIM_URL="${EDMG_NVIDIA_NIM_URL:-${NVIDIA_NIM_URL:-http://127.0.0.1:8001}}"
+NVIDIA_NIM_BASE_URL="${EDMG_AI_OPENAI_COMPAT_BASE_URL:-${NVIDIA_NIM_URL%/}/v1}"
+NVIDIA_NIM_MODEL="${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
+NVIDIA_RIVA_URL="${EDMG_NVIDIA_RIVA_URL:-${NVIDIA_RIVA_URL:-127.0.0.1:50051}}"
 
 if [[ $EUID -eq 0 ]]; then
   SUDO=()
@@ -105,13 +99,18 @@ export EDMG_STUDIO_LOGS_DIR=${LOG_DIR}
 export EDMG_STUDIO_EXTERNAL_DIR=${EXTERNAL_DIR}
 export HF_HOME=${HF_HOME_DIR}
 export TORCH_HOME=${TORCH_HOME_DIR}
-export OLLAMA_MODELS=${OLLAMA_MODELS_DIR}
 export EDMG_STUDIO_BACKEND_HOST=${BACKEND_HOST}
 export EDMG_STUDIO_BACKEND_PORT=${BACKEND_PORT}
+export EDMG_NVIDIA_MODE=1
+export EDMG_NVIDIA_PROFILE=omniverse
+export EDMG_NVIDIA_NIM_URL=${NVIDIA_NIM_URL}
+export EDMG_NVIDIA_RIVA_URL=${NVIDIA_RIVA_URL}
+export EDMG_NVIDIA_RIVA_ASR=1
+export EDMG_NVIDIA_RIVA_ASR_FALLBACK=0
 export EDMG_AI_MODE=${AI_MODE}
 export EDMG_AI_PROVIDER=${AI_PROVIDER}
-export EDMG_AI_OLLAMA_URL=${AI_OLLAMA_URL}
-export EDMG_AI_OLLAMA_MODEL=${AI_OLLAMA_MODEL}
+export EDMG_AI_OPENAI_COMPAT_BASE_URL=${NVIDIA_NIM_BASE_URL}
+export EDMG_AI_OPENAI_COMPAT_MODEL=${NVIDIA_NIM_MODEL}
 export PATH=${BIN_DIR}:\$PATH
 EOF
   append_once "${USER_HOME}/.bashrc" "source ${EDMG_ENV_FILE}"
@@ -119,7 +118,7 @@ EOF
 
 ensure_directories() {
   step "Creating runtime directories under ${STUDIO_HOME}"
-  "${SUDO[@]}" mkdir -p "${REPO_PARENT}" "${DATA_DIR}" "${MODELS_DIR}" "${CACHE_DIR}" "${LOG_DIR}" "${EXTERNAL_DIR}" "${HF_HOME_DIR}" "${TORCH_HOME_DIR}" "${OLLAMA_MODELS_DIR}" "${BIN_DIR}"
+  "${SUDO[@]}" mkdir -p "${REPO_PARENT}" "${DATA_DIR}" "${MODELS_DIR}" "${CACHE_DIR}" "${LOG_DIR}" "${EXTERNAL_DIR}" "${HF_HOME_DIR}" "${TORCH_HOME_DIR}" "${BIN_DIR}"
   "${SUDO[@]}" chown -R "${BOOTSTRAP_USER}:${BOOTSTRAP_USER}" "${REPO_PARENT}" "${STUDIO_HOME}" "${BIN_DIR}"
 }
 
@@ -304,28 +303,13 @@ EOF
   chmod +x "${BIN_DIR}/edmg-start-backend" "${BIN_DIR}/edmg-start-ui" "${BIN_DIR}/edmg-check-cuda" "${BIN_DIR}/edmg-queue-default-models"
 }
 
-install_optional_ollama() {
-  if [[ "${INSTALL_OLLAMA}" != "1" ]]; then
-    warn "Skipping Ollama install. Backend will default to ${AI_PROVIDER}."
-    return
+validate_nvidia_profile() {
+  step "Using NVIDIA-only profile"
+  if [[ "${AI_PROVIDER}" != "openai_compat" ]]; then
+    fail "AI_PROVIDER must be openai_compat for the NVIDIA-only profile."
   fi
-
-  step "Installing and starting Ollama"
-  if ! command -v ollama >/dev/null 2>&1; then
-    curl -fsSL https://ollama.com/install.sh | sh
-  fi
-
-  pkill -f "ollama serve" || true
-  nohup env OLLAMA_HOST="127.0.0.1:${OLLAMA_PORT}" OLLAMA_MODELS="${OLLAMA_MODELS_DIR}" ollama serve >"${OLLAMA_LOG_PATH}" 2>&1 &
-
-  for _ in $(seq 1 60); do
-    if curl -fsS "http://127.0.0.1:${OLLAMA_PORT}/api/version" >/dev/null 2>&1; then
-      break
-    fi
-    sleep 2
-  done
-
-  OLLAMA_HOST="http://127.0.0.1:${OLLAMA_PORT}" OLLAMA_MODELS="${OLLAMA_MODELS_DIR}" ollama pull "${AI_OLLAMA_MODEL}"
+  step "NVIDIA NIM endpoint: ${NVIDIA_NIM_BASE_URL}"
+  step "NVIDIA Riva endpoint: ${NVIDIA_RIVA_URL}"
 }
 
 install_backend_service() {
@@ -424,9 +408,6 @@ print_summary() {
   echo "Studio Home: ${STUDIO_HOME}"
   echo "Backend log dir: ${LOG_DIR}"
   echo "UI log: ${UI_LOG_PATH}"
-  if [[ "${INSTALL_OLLAMA}" == "1" ]]; then
-    echo "Ollama log: ${OLLAMA_LOG_PATH}"
-  fi
   if [[ "${QUEUE_DEFAULT_MODELS}" == "1" ]]; then
     echo "Model queue log: ${MODEL_QUEUE_LOG_PATH}"
   fi
@@ -446,7 +427,7 @@ main() {
   install_backend
   install_frontend
   write_helper_scripts
-  install_optional_ollama
+  validate_nvidia_profile
   install_backend_service
   start_ui_if_requested
   wait_for_health

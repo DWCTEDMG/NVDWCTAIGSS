@@ -505,60 +505,12 @@ def _try_load_diffusers(model_dir: Path, device: str, *, role: str = "video") ->
 
 
 def _try_load_directml(model_dir: Path, *, role: str = "video") -> _Pipes:
-    family = _model_family_from_dir(model_dir)
-    if family not in {"sd15", "sdxl"}:
-        raise UserFacingError(
-            "DirectML acceleration currently supports SD 1.5 and SDXL only.",
-            hint="Use SDXL or SD 1.5 for AMD / DirectML renders, or switch device preference to CPU for SD3.5.",
-            code="DIRECTML_MODEL_UNSUPPORTED",
-            status_code=400,
-        )
-
-    try:
-        import onnxruntime as ort  # type: ignore
-        from optimum.onnxruntime import (  # type: ignore
-            ORTStableDiffusionImg2ImgPipeline,
-            ORTStableDiffusionPipeline,
-            ORTStableDiffusionXLImg2ImgPipeline,
-            ORTStableDiffusionXLPipeline,
-        )
-    except Exception as e:
-        raise UserFacingError(
-            "DirectML runtime is not installed.",
-            hint="Open Setup and install the AMD / DirectML backend runtime, then retry.",
-            code="DIRECTML_DEPS",
-            status_code=500,
-        ) from e
-
-    providers = list(ort.get_available_providers() or [])
-    if "DmlExecutionProvider" not in providers:
-        raise UserFacingError(
-            "DirectML execution provider is unavailable in this backend environment.",
-            hint="Reinstall the AMD / DirectML backend runtime from Setup, then retry.",
-            code="DIRECTML_UNAVAILABLE",
-            status_code=500,
-        )
-
-    cache_key = (str(model_dir), "directml", str(role or "video"))
-    cached = _PipelineCache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    common_kwargs = {
-        "export": True,
-        "provider": "DmlExecutionProvider",
-    }
-    if family == "sdxl":
-        txt = ORTStableDiffusionXLPipeline.from_pretrained(str(model_dir), **common_kwargs)
-        img = ORTStableDiffusionXLImg2ImgPipeline.from_pretrained(str(model_dir), **common_kwargs)
-        pipes = _Pipes(txt2img=txt, img2img=img, inpaint=None, device="directml", family="sdxl", backend="directml")
-    else:
-        txt = ORTStableDiffusionPipeline.from_pretrained(str(model_dir), **common_kwargs)
-        img = ORTStableDiffusionImg2ImgPipeline.from_pretrained(str(model_dir), **common_kwargs)
-        pipes = _Pipes(txt2img=txt, img2img=img, inpaint=None, device="directml", family="sd15", backend="directml")
-
-    _PipelineCache.set(cache_key, pipes)
-    return pipes
+    raise UserFacingError(
+        "DirectML rendering is disabled by the NVIDIA-only profile.",
+        hint="Use the NVIDIA CUDA runtime profile.",
+        code="NVIDIA_ONLY_PROFILE",
+        status_code=400,
+    )
 
 
 def _try_load_pipelines(model_dir: Path, device: str, *, role: str = "video") -> _Pipes:
@@ -569,6 +521,13 @@ def _try_load_pipelines(model_dir: Path, device: str, *, role: str = "video") ->
 
 def _device_auto(preference: str = "auto") -> str:
     pref = str(preference or "auto").strip().lower()
+    if pref not in {"auto", "cuda"}:
+        raise UserFacingError(
+            "Only NVIDIA CUDA device execution is supported by this profile.",
+            hint="Use device_preference='auto' or 'cuda'. CPU, MPS, and DirectML execution are disabled.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     try:
         import torch  # type: ignore
     except Exception:
@@ -580,39 +539,16 @@ def _device_auto(preference: str = "auto") -> str:
         except Exception:
             return False
 
-    def _mps_ok() -> bool:
-        try:
-            backends = getattr(torch, "backends", None)
-            mps = getattr(backends, "mps", None)
-            return bool(mps is not None and mps.is_available())
-        except Exception:
-            return False
-
-    def _directml_ok() -> bool:
-        if pref != "directml" and pref != "auto" and pref not in {"cuda", "mps", "cpu"}:
-            return False
-        try:
-            import onnxruntime as ort  # type: ignore
-
-            return "DmlExecutionProvider" in list(ort.get_available_providers() or [])
-        except Exception:
-            return False
-
     if pref == "cuda" and _cuda_ok():
         return "cuda"
-    if pref == "mps" and _mps_ok():
-        return "mps"
-    if pref == "directml" and _directml_ok():
-        return "directml"
-    if pref == "cpu":
-        return "cpu"
     if _cuda_ok():
         return "cuda"
-    if _mps_ok():
-        return "mps"
-    if _directml_ok():
-        return "directml"
-    return "cpu"
+    raise UserFacingError(
+        "NVIDIA CUDA runtime is required for internal rendering.",
+        hint="Launch the NVIDIA profile and confirm torch.cuda.is_available() is true.",
+        code="NVIDIA_CUDA_REQUIRED",
+        status_code=400,
+    )
 
 
 def _encode_prompt(pipes: _Pipes, prompt: str) -> Any:
@@ -1125,13 +1061,8 @@ def render_internal_still_image(
     denoise_strength: float = 0.75,
     log_fn=None,
 ) -> dict[str, Any]:
-    family = _model_family_from_dir(model_dir)
     requested_device = _device_auto(settings.device_preference)
     device = requested_device
-    if requested_device == "directml" and (
-        workflow_family in {"inpaint", "outpaint", "controlnet"} or bool(settings.loras) or family == "sd3"
-    ):
-        device = "cpu"
     pipes = _try_load_pipelines(model_dir, device=device, role="still")
     width = int(settings.width)
     height = int(settings.height)
@@ -2128,7 +2059,7 @@ def render_internal_video_variant(
     return final_mp4
 
 
-def render_stability_hosted_video_variant(
+def _disabled_hosted_video_variant(
     *,
     ffmpeg_path: str,
     project_dir: Path,
@@ -2136,7 +2067,7 @@ def render_stability_hosted_video_variant(
     scenes: list[dict[str, Any]],
     audio_path: Path | None,
     settings: InternalVideoSettings,
-    stability_api_key: str,
+    _api_key: str,
     hosted_settings: dict[str, Any],
     timeline: dict[str, Any] | None = None,
     log_fn=None,
@@ -2146,8 +2077,7 @@ def render_stability_hosted_video_variant(
     checkpoint_fn=None,
 ) -> Path:
     _require_pillow()
-
-    from .stability_platform import StabilityPlatformClient
+    raise RuntimeError("Hosted rendering is disabled by the NVIDIA-only profile.")
 
     service = str(hosted_settings.get("service") or "sd3").strip().lower()
     model = str(hosted_settings.get("model") or "sd3.5-large-turbo").strip().lower()
@@ -2155,7 +2085,6 @@ def render_stability_hosted_video_variant(
     output_format = str(hosted_settings.get("output_format") or "png").strip().lower()
     hosted_strength = float(hosted_settings.get("strength") or settings.temporal_strength or 0.55)
     hosted_cfg_scale = float(hosted_settings.get("cfg_scale") or settings.cfg or 6.5)
-    client = StabilityPlatformClient(stability_api_key)
 
     out_w, out_h = settings.width, settings.height
     fps_r = max(1, int(settings.fps_render))

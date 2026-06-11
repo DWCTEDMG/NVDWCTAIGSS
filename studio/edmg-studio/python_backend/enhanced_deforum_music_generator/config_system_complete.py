@@ -31,7 +31,7 @@ class LyricsConfig:
     provider: str = "whisper"  # whisper, azure, google
     model: str = "base"  # tiny, base, small, medium, large
     language: Optional[str] = None  # auto-detect if None
-    device: str = "auto"  # auto, cpu, cuda
+    device: str = "cuda"
     compute_type: str = "float16"  # float16, float32
     beam_size: int = 5
     best_of: int = 5
@@ -42,10 +42,10 @@ class LyricsConfig:
 class AIConfig:
     """AI provider configuration for prompt generation."""
     enabled: bool = False
-    provider: str = "ollama"  # openai, ollama, llamacpp, transformers
-    model: str = "llama3.1:8b"
-    base_url: str = "http://localhost:11434"
-    api_key_env: str = "OPENAI_API_KEY"
+    provider: str = "openai"  # NVIDIA NIM / OpenAI-compatible
+    model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    base_url: str = "http://127.0.0.1:8001"
+    api_key_env: str = "EDMG_AI_OPENAI_COMPAT_API_KEY"
     timeout: int = 60
     temperature: float = 0.4
     max_tokens: int = 800

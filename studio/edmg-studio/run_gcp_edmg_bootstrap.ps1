@@ -7,8 +7,6 @@ param(
   [string]$RemoteScriptLocalPath = "",
   [string]$BackendPort = "7863",
   [string]$UiPort = "5173",
-  [string]$OllamaPort = "11434",
-  [switch]$InstallOllama,
   [switch]$QueueDefaultModels,
   [switch]$SkipUi
 )
@@ -77,7 +75,6 @@ if (-not $CurrentProject -or $CurrentProject -eq "(unset)") {
 }
 
 $startUiFlag = if ($SkipUi) { "0" } else { "1" }
-$installOllamaFlag = if ($InstallOllama) { "1" } else { "0" }
 $queueModelsFlag = if ($QueueDefaultModels) { "1" } else { "0" }
 
 Write-Step "Uploading bootstrap script to $InstanceName in $Zone"
@@ -94,8 +91,6 @@ $remoteEnv = @(
   "REPO_URL=$(Quote-Posix $RepoUrl)",
   "BACKEND_PORT=$(Quote-Posix $BackendPort)",
   "UI_PORT=$(Quote-Posix $UiPort)",
-  "OLLAMA_PORT=$(Quote-Posix $OllamaPort)",
-  "INSTALL_OLLAMA=$(Quote-Posix $installOllamaFlag)",
   "QUEUE_DEFAULT_MODELS=$(Quote-Posix $queueModelsFlag)",
   "START_UI=$(Quote-Posix $startUiFlag)"
 ) -join " "

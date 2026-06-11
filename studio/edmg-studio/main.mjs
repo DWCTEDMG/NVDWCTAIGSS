@@ -143,8 +143,6 @@ const AI_SETTINGS_DEFAULTS = Object.freeze({
   mode: "local",
   provider: "openai_compat",
   aiBaseUrl: "http://127.0.0.1:7862",
-  ollamaUrl: "http://127.0.0.1:11434",
-  ollamaModel: "qwen3:8b",
   openaiCompatBaseUrl: "http://127.0.0.1:8001/v1",
   openaiCompatModel: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
 });
@@ -153,20 +151,21 @@ const AI_SETTINGS_ENV_KEYS = Object.freeze({
   mode: "EDMG_AI_MODE",
   provider: "EDMG_AI_PROVIDER",
   aiBaseUrl: "EDMG_AI_BASE_URL",
-  ollamaUrl: "EDMG_AI_OLLAMA_URL",
-  ollamaModel: "EDMG_AI_OLLAMA_MODEL",
   openaiCompatBaseUrl: "EDMG_AI_OPENAI_COMPAT_BASE_URL",
   openaiCompatModel: "EDMG_AI_OPENAI_COMPAT_MODEL",
 });
 
 const AI_LOCAL_PROVIDER_ALIASES = Object.freeze({
-  ollama: "ollama",
   openai: "openai_compat",
   "openai-compatible": "openai_compat",
   openai_compat: "openai_compat",
-  rule_based: "rule_based",
-  none: "rule_based",
 });
+
+const NVIDIA_ONLY_REMOVED_ENV_KEYS = Object.freeze([
+  "EDMG_AI_OLLAMA_URL",
+  "EDMG_AI_OLLAMA_MODEL",
+  "OLLAMA_MODELS",
+]);
 
 const STORAGE_SETTINGS_DEFAULT_DIRS = Object.freeze({
   dataDir: "data",
@@ -421,8 +420,6 @@ function getRawAiSettingsFromEnv(envLike) {
     mode: env[AI_SETTINGS_ENV_KEYS.mode],
     provider: env[AI_SETTINGS_ENV_KEYS.provider],
     aiBaseUrl: env[AI_SETTINGS_ENV_KEYS.aiBaseUrl],
-    ollamaUrl: env[AI_SETTINGS_ENV_KEYS.ollamaUrl],
-    ollamaModel: env[AI_SETTINGS_ENV_KEYS.ollamaModel],
     openaiCompatBaseUrl: env[AI_SETTINGS_ENV_KEYS.openaiCompatBaseUrl],
     openaiCompatModel: env[AI_SETTINGS_ENV_KEYS.openaiCompatModel],
   };
@@ -493,6 +490,14 @@ function normalizeAiProvider(rawValue) {
   return AI_LOCAL_PROVIDER_ALIASES[provider] ?? AI_SETTINGS_DEFAULTS.provider;
 }
 
+function stripNvidiaOnlyRemovedEnv(rawEnv = {}) {
+  const next = { ...(rawEnv && typeof rawEnv === "object" ? rawEnv : {}) };
+  for (const key of NVIDIA_ONLY_REMOVED_ENV_KEYS) {
+    delete next[key];
+  }
+  return next;
+}
+
 function normalizeBackendPort(rawValue) {
   const raw = String(rawValue ?? "").trim();
   const value = Number(raw);
@@ -530,8 +535,6 @@ function normalizeAiSettings(rawSettings = {}) {
     mode: normalizeAiMode(current.mode),
     provider: normalizeAiProvider(current.provider),
     aiBaseUrl: pickConfiguredString(current.aiBaseUrl, AI_SETTINGS_DEFAULTS.aiBaseUrl),
-    ollamaUrl: pickConfiguredString(current.ollamaUrl, AI_SETTINGS_DEFAULTS.ollamaUrl),
-    ollamaModel: pickConfiguredString(current.ollamaModel, AI_SETTINGS_DEFAULTS.ollamaModel),
     openaiCompatBaseUrl: pickConfiguredString(
       current.openaiCompatBaseUrl,
       AI_SETTINGS_DEFAULTS.openaiCompatBaseUrl
@@ -639,8 +642,8 @@ function syncAiSettingsToProcessEnv(rawSettings) {
   process.env.EDMG_AI_MODE = aiSettings.mode;
   process.env.EDMG_AI_PROVIDER = aiSettings.provider;
   process.env.EDMG_AI_BASE_URL = aiSettings.aiBaseUrl;
-  process.env.EDMG_AI_OLLAMA_URL = aiSettings.ollamaUrl;
-  process.env.EDMG_AI_OLLAMA_MODEL = aiSettings.ollamaModel;
+  delete process.env.EDMG_AI_OLLAMA_URL;
+  delete process.env.EDMG_AI_OLLAMA_MODEL;
   process.env.EDMG_AI_OPENAI_COMPAT_BASE_URL = aiSettings.openaiCompatBaseUrl;
   process.env.EDMG_AI_OPENAI_COMPAT_MODEL = aiSettings.openaiCompatModel;
   if (!String(process.env.EDMG_NVIDIA_MODE ?? "").trim()) {
@@ -788,7 +791,6 @@ function buildManagedStudioEnv(studioHomeOverride = "", storageOverrideValues = 
     EDMG_STUDIO_CACHE_DIR: paths.cacheRoot,
     EDMG_STUDIO_LOGS_DIR: paths.logsDir,
     EDMG_STUDIO_EXTERNAL_DIR: paths.externalDir,
-    OLLAMA_MODELS: path.join(paths.modelsDir, "ollama"),
     PIP_CACHE_DIR: path.join(paths.cacheRoot, "pip"),
     XDG_CACHE_HOME: path.join(paths.cacheRoot, "xdg"),
     HF_HOME: path.join(paths.cacheRoot, "huggingface"),
@@ -807,6 +809,7 @@ function buildManagedStudioEnv(studioHomeOverride = "", storageOverrideValues = 
       ensureDirSync(targetPath);
     }
   }
+  delete process.env.OLLAMA_MODELS;
 
   return managed;
 }
@@ -823,7 +826,6 @@ function syncStorageSettingsToProcessEnv(studioHome = "", storageOverrides = nul
     EDMG_STUDIO_CACHE_DIR: paths.cacheRoot,
     EDMG_STUDIO_LOGS_DIR: paths.logsDir,
     EDMG_STUDIO_EXTERNAL_DIR: paths.externalDir,
-    OLLAMA_MODELS: path.join(paths.modelsDir, "ollama"),
     PIP_CACHE_DIR: path.join(paths.cacheRoot, "pip"),
     XDG_CACHE_HOME: path.join(paths.cacheRoot, "xdg"),
     HF_HOME: path.join(paths.cacheRoot, "huggingface"),
@@ -840,6 +842,7 @@ function syncStorageSettingsToProcessEnv(studioHome = "", storageOverrides = nul
     ensureDirSync(value);
     process.env[key] = value;
   }
+  delete process.env.OLLAMA_MODELS;
   return {
     ...paths,
     storageOverrides: trimStorageOverrides(storageOverrides || {}, paths.studioHome),
@@ -853,12 +856,12 @@ function syncStorageSettingsToProcessEnv(studioHome = "", storageOverrides = nul
 
 function buildManagedAiEnv() {
   const aiSettings = getConfiguredAiSettings();
+  delete process.env.EDMG_AI_OLLAMA_URL;
+  delete process.env.EDMG_AI_OLLAMA_MODEL;
   return {
     EDMG_AI_MODE: aiSettings.mode,
     EDMG_AI_PROVIDER: aiSettings.provider,
     EDMG_AI_BASE_URL: aiSettings.aiBaseUrl,
-    EDMG_AI_OLLAMA_URL: aiSettings.ollamaUrl,
-    EDMG_AI_OLLAMA_MODEL: aiSettings.ollamaModel,
     EDMG_AI_OPENAI_COMPAT_BASE_URL: aiSettings.openaiCompatBaseUrl,
     EDMG_AI_OPENAI_COMPAT_MODEL: aiSettings.openaiCompatModel,
     EDMG_NVIDIA_MODE: String(process.env.EDMG_NVIDIA_MODE ?? "1").trim() || "1",
@@ -871,7 +874,7 @@ function buildManagedAiEnv() {
     EDMG_NVIDIA_RIVA_LANGUAGE_CODE:
       String(process.env.EDMG_NVIDIA_RIVA_LANGUAGE_CODE ?? "en-US").trim() || "en-US",
     EDMG_NVIDIA_RIVA_ASR_FALLBACK:
-      String(process.env.EDMG_NVIDIA_RIVA_ASR_FALLBACK ?? "1").trim() || "1",
+      String(process.env.EDMG_NVIDIA_RIVA_ASR_FALLBACK ?? "0").trim() || "0",
   };
 }
 
@@ -1292,14 +1295,13 @@ function registerIpcHandlers() {
     }
     writeBootstrapConfig(nextConfig);
     writeLauncherEnv({
-      ...readLauncherEnv(),
+      ...stripNvidiaOnlyRemovedEnv(readLauncherEnv()),
       EDMG_STUDIO_HOME: studioHome,
       EDMG_STUDIO_DATA_DIR: targetPaths.dataDir,
       EDMG_STUDIO_MODELS_DIR: targetPaths.modelsDir,
       EDMG_STUDIO_CACHE_DIR: targetPaths.cacheRoot,
       EDMG_STUDIO_LOGS_DIR: targetPaths.logsDir,
       EDMG_STUDIO_EXTERNAL_DIR: targetPaths.externalDir,
-      OLLAMA_MODELS: path.join(targetPaths.modelsDir, "ollama"),
     });
 
     return {
@@ -1328,12 +1330,10 @@ function registerIpcHandlers() {
     };
     writeBootstrapConfig(nextConfig);
     writeLauncherEnv({
-      ...readLauncherEnv(),
+      ...stripNvidiaOnlyRemovedEnv(readLauncherEnv()),
       EDMG_AI_MODE: aiSettings.mode,
       EDMG_AI_PROVIDER: aiSettings.provider,
       EDMG_AI_BASE_URL: aiSettings.aiBaseUrl,
-      EDMG_AI_OLLAMA_URL: aiSettings.ollamaUrl,
-      EDMG_AI_OLLAMA_MODEL: aiSettings.ollamaModel,
       EDMG_AI_OPENAI_COMPAT_BASE_URL: aiSettings.openaiCompatBaseUrl,
       EDMG_AI_OPENAI_COMPAT_MODEL: aiSettings.openaiCompatModel,
     });

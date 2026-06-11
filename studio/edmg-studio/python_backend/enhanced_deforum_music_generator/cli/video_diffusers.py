@@ -62,7 +62,7 @@ def _seeded_generator(seed: Optional[int], device: str):
 
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
-    g = torch.Generator(device=device if device != "mps" else "cpu")
+    g = torch.Generator(device=device)
     g.manual_seed(int(seed))
     return g, int(seed)
 
@@ -90,6 +90,10 @@ def run_cli(argv: Optional[list[str]] = None) -> int:
 def _run(args: argparse.Namespace) -> int:
     dtype = _parse_dtype(args.dtype)
     device = args.device
+    if device != "cuda":
+        raise RuntimeError("The NVIDIA-only profile requires --device cuda.")
+    if args.cpu_offload:
+        raise RuntimeError("CPU offload is disabled by the NVIDIA-only profile.")
 
     family = args.family if args.family != "auto" else _infer_family(args.model_id)
     prompt = args.prompt
@@ -294,8 +298,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--guidance-scale", type=float, default=5.0)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--dtype", default="bfloat16", help="float16|bfloat16|float32")
-    p.add_argument("--device", default="cuda", help="cuda|cpu|mps")
-    p.add_argument("--cpu-offload", action="store_true", help="Enable CPU offload (lower VRAM, slower).")
+    p.add_argument("--device", default="cuda", choices=["cuda"], help="CUDA device for the NVIDIA-only profile.")
+    p.add_argument("--cpu-offload", action="store_true", help="Disabled by the NVIDIA-only profile.")
     p.add_argument(
         "--vae-dtype",
         default="float32",

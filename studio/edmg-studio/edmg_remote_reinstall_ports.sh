@@ -18,7 +18,10 @@ DATA_DIR="$STUDIO_HOME/data"
 HF_TOKEN_VALUE="${HF_TOKEN:-}"
 BACKEND_PORT="${BACKEND_PORT:-8080}"
 UI_PORT="${UI_PORT:-1111}"
-OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+NVIDIA_NIM_URL="${EDMG_NVIDIA_NIM_URL:-${NVIDIA_NIM_URL:-http://127.0.0.1:8001}}"
+NVIDIA_NIM_BASE_URL="${EDMG_AI_OPENAI_COMPAT_BASE_URL:-${NVIDIA_NIM_URL%/}/v1}"
+NVIDIA_NIM_MODEL="${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
+NVIDIA_RIVA_URL="${EDMG_NVIDIA_RIVA_URL:-${NVIDIA_RIVA_URL:-127.0.0.1:50051}}"
 
 export DEBIAN_FRONTEND=noninteractive
 export EDMG_STUDIO_HOME="$STUDIO_HOME"
@@ -29,14 +32,13 @@ export EDMG_STUDIO_LOGS_DIR="$LOG_DIR"
 export EDMG_STUDIO_EXTERNAL_DIR="$EXTERNAL_DIR"
 export HF_HOME="$CACHE_DIR/huggingface"
 export TORCH_HOME="$CACHE_DIR/torch"
-export OLLAMA_MODELS="$MODELS_DIR/ollama"
 export PATH="$PATH:/workspace/bin"
 if [[ -n "$HF_TOKEN_VALUE" ]]; then
   export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN_VALUE"
   export HF_TOKEN="$HF_TOKEN_VALUE"
 fi
 
-mkdir -p /workspace/src /workspace/bin "$DATA_DIR" "$MODELS_DIR" "$CACHE_DIR" "$LOG_DIR" "$EXTERNAL_DIR" "$HF_HOME" "$TORCH_HOME" "$OLLAMA_MODELS"
+mkdir -p /workspace/src /workspace/bin "$DATA_DIR" "$MODELS_DIR" "$CACHE_DIR" "$LOG_DIR" "$EXTERNAL_DIR" "$HF_HOME" "$TORCH_HOME"
 
 cat > /etc/profile.d/dwct-edmg.sh <<DWCTPROFILEEOF
 export EDMG_STUDIO_HOME=$STUDIO_HOME
@@ -47,11 +49,16 @@ export EDMG_STUDIO_LOGS_DIR=$LOG_DIR
 export EDMG_STUDIO_EXTERNAL_DIR=$EXTERNAL_DIR
 export HF_HOME=$HF_HOME
 export TORCH_HOME=$TORCH_HOME
-export OLLAMA_MODELS=$OLLAMA_MODELS
+export EDMG_NVIDIA_MODE=1
+export EDMG_NVIDIA_PROFILE=omniverse
+export EDMG_NVIDIA_NIM_URL=$NVIDIA_NIM_URL
+export EDMG_NVIDIA_RIVA_URL=$NVIDIA_RIVA_URL
+export EDMG_NVIDIA_RIVA_ASR=1
+export EDMG_NVIDIA_RIVA_ASR_FALLBACK=0
 export EDMG_AI_MODE=local
-export EDMG_AI_PROVIDER=ollama
-export EDMG_AI_OLLAMA_URL=http://127.0.0.1:$OLLAMA_PORT
-export EDMG_AI_OLLAMA_MODEL=qwen3:8b
+export EDMG_AI_PROVIDER=openai_compat
+export EDMG_AI_OPENAI_COMPAT_BASE_URL=$NVIDIA_NIM_BASE_URL
+export EDMG_AI_OPENAI_COMPAT_MODEL=$NVIDIA_NIM_MODEL
 export PATH=\$PATH:/workspace/bin
 DWCTPROFILEEOF
 
@@ -107,17 +114,9 @@ printf '\n[5/8] Installing frontend deps...\n'
 cd "$STUDIO_DIR"
 pnpm install --frozen-lockfile || pnpm install
 
-printf '\n[6/8] Installing and starting Ollama planner runtime...\n'
-if ! command -v ollama >/dev/null 2>&1; then
-  curl -fsSL https://ollama.com/install.sh | sh
-fi
-pkill -f 'ollama serve' || true
-nohup env OLLAMA_HOST="0.0.0.0:$OLLAMA_PORT" OLLAMA_MODELS="$OLLAMA_MODELS" ollama serve > "$LOG_DIR/ollama.log" 2>&1 &
-for i in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:$OLLAMA_PORT/api/version" >/dev/null 2>&1; then break; fi
-  sleep 2
-done
-nohup bash -lc 'OLLAMA_MODELS="'$OLLAMA_MODELS'" ollama pull qwen3:8b' > "$LOG_DIR/ollama-pull-qwen3-8b.log" 2>&1 &
+printf '\n[6/8] Configuring NVIDIA planner runtime...\n'
+printf 'NVIDIA NIM endpoint: %s\n' "$NVIDIA_NIM_BASE_URL"
+printf 'NVIDIA Riva endpoint: %s\n' "$NVIDIA_RIVA_URL"
 
 printf '\n[7/8] Writing service helper scripts...\n'
 cat > /workspace/bin/dwct-start-backend <<DWCTBACKENDEOF
@@ -125,9 +124,9 @@ cat > /workspace/bin/dwct-start-backend <<DWCTBACKENDEOF
 set -euo pipefail
 source /etc/profile.d/dwct-edmg.sh
 export EDMG_AI_MODE=local
-export EDMG_AI_PROVIDER=ollama
-export EDMG_AI_OLLAMA_URL=http://127.0.0.1:$OLLAMA_PORT
-export EDMG_AI_OLLAMA_MODEL=qwen3:8b
+export EDMG_AI_PROVIDER=openai_compat
+export EDMG_AI_OPENAI_COMPAT_BASE_URL=$NVIDIA_NIM_BASE_URL
+export EDMG_AI_OPENAI_COMPAT_MODEL=$NVIDIA_NIM_MODEL
 cd /workspace/src/DWCTGenerativeSoundStudio/studio/edmg-studio/python_backend
 . .venv/bin/activate
 exec edmg-studio-backend serve --host 0.0.0.0 --port $BACKEND_PORT
@@ -164,8 +163,8 @@ printf '\n=== Backend ===\n'
 curl -fsS http://127.0.0.1:$BACKEND_PORT/health || true
 printf '\n\n=== UI ===\n'
 curl -fsSI http://127.0.0.1:$UI_PORT | head || true
-printf '\n=== Ollama ===\n'
-curl -fsS http://127.0.0.1:$OLLAMA_PORT/api/tags || true
+printf '\n=== NVIDIA NIM ===\n'
+curl -fsS "$NVIDIA_NIM_BASE_URL/models" || true
 printf '\n'
 DWCTCHECKEOF
 
@@ -176,7 +175,6 @@ source /etc/profile.d/dwct-edmg.sh
 LOG_DIR="\$EDMG_STUDIO_LOGS_DIR"
 mkdir -p "\$LOG_DIR"
 models=(
-  ollama_qwen3_8b
   hf_sd15_internal
   hf_sdxl_internal
   hf_sdxl_base_1_0
@@ -226,4 +224,4 @@ nohup /workspace/bin/dwct-install-models > "$LOG_DIR/install-models.log" 2>&1 &
 
 printf '\n=== CHECK ===\n'
 /workspace/bin/dwct-check || true
-printf '\n=== LOGS ===\nbackend: %s\nui: %s\nollama: %s\nmodels: %s\n' "$LOG_DIR/backend.log" "$LOG_DIR/ui.log" "$LOG_DIR/ollama.log" "$LOG_DIR/install-models.log"
+printf '\n=== LOGS ===\nbackend: %s\nui: %s\nmodels: %s\n' "$LOG_DIR/backend.log" "$LOG_DIR/ui.log" "$LOG_DIR/install-models.log"

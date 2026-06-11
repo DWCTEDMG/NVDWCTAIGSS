@@ -43,13 +43,13 @@ def test_hardware_profile_surfaces_host_nvidia_gpu_when_cuda_runtime_missing(mon
 
     hw = backend_app._hardware_profile()
 
-    assert hw["backend"] == "cpu"
-    assert hw["runtime_device_name"] == "CPU"
+    assert hw["backend"] == "nvidia_cuda_required"
+    assert hw["runtime_device_name"] == "NVIDIA CUDA required"
     assert hw["device_name"] == "Test RTX"
     assert hw["host_gpu_visible"] is True
     assert hw["host_gpu_name"] == "Test RTX"
     assert hw["cuda_runtime_ready"] is False
-    assert hw["available_backends"] == ["cpu"]
+    assert hw["available_backends"] == []
     assert hw["vram_gb"] == pytest.approx(6.0, abs=0.01)
 
 
@@ -330,7 +330,7 @@ def test_setup_ai_config_defaults_to_nvidia_openai_compat(monkeypatch):
     assert payload["label"] == "NVIDIA NIM / OpenAI-compatible provider"
     assert payload["base_url"] == "http://127.0.0.1:8001/v1"
     assert payload["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    assert payload["ollama_required"] is False
+    assert "ollama_required" not in payload
     assert payload["nvidia_profile"]["enabled"] is True
 
 

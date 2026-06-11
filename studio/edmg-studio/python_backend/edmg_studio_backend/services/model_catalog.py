@@ -42,59 +42,24 @@ def built_in_catalog() -> list[dict[str, Any]]:
     # - id: stable ID
     # - name: display name
     # - kind: llm | checkpoint | diffusers | controlnet | motion_module | runtime_bundle
-    # - source: ollama | hf | civitai | local | s3
+    # - source: nvidia_nim | hf | civitai | local | s3
     # - installable: whether Studio can install this entry directly
     # - target: installation instructions (where it goes)
     # - render: optional UI/runtime metadata for Render page presets
     # - collections / tags / hardware_targets: discovery metadata for the richer Hub browser
     return [
         _entry(
-            model_id="ollama_qwen3_4b",
-            name="Qwen3 4B (Ollama)",
+            model_id="nvidia_nim_nemotron_super",
+            name="NVIDIA NIM Nemotron Super",
             kind="llm",
-            source="ollama",
-            ollama_model="qwen3:4b",
-            license_id="Apache-2.0",
-            license_url="https://huggingface.co/Qwen/Qwen3-4B",
-            recommended="advanced",
-            notes="Low-resource local planner fallback for CPU-only or low-memory systems.",
-            tags=["planning", "local", "fallback", "lightweight"],
-        ),
-        _entry(
-            model_id="ollama_qwen3_8b",
-            name="Qwen3 8B (Ollama)",
-            kind="llm",
-            source="ollama",
-            ollama_model="qwen3:8b",
-            license_id="Apache-2.0",
-            license_url="https://huggingface.co/Qwen/Qwen3-8B",
+            source="nvidia_nim",
+            openai_compat_model="nvidia/llama-3.3-nemotron-super-49b-v1.5",
+            license_id="nvidia-ai-foundation",
+            license_url="https://build.nvidia.com/",
             recommended="default",
-            notes="Recommended local planner default for offline Studio workflows on capable systems.",
-            tags=["planning", "local", "default", "quality"],
-        ),
-        _entry(
-            model_id="ollama_qwen2p5_3b_instruct",
-            name="Qwen2.5 3B Instruct (Ollama)",
-            kind="llm",
-            source="ollama",
-            ollama_model="qwen2.5:3b-instruct",
-            license_id="Apache-2.0",
-            license_url="https://huggingface.co/Qwen/Qwen2.5-3B-Instruct",
-            recommended="advanced",
-            notes="Legacy light planner retained for existing installs that still depend on the Qwen2.5 tag.",
-            tags=["planning", "local", "legacy", "lightweight"],
-        ),
-        _entry(
-            model_id="ollama_qwen2p5_7b_instruct",
-            name="Qwen2.5 7B Instruct (Ollama)",
-            kind="llm",
-            source="ollama",
-            ollama_model="qwen2.5:7b-instruct",
-            license_id="Apache-2.0",
-            license_url="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct",
-            recommended="advanced",
-            notes="Legacy higher-quality planner retained for compatibility with existing Qwen2.5 setups.",
-            tags=["planning", "local", "legacy", "quality"],
+            installable=False,
+            notes="Default NVIDIA planner service. Configure EDMG_NVIDIA_NIM_URL and the NVIDIA API key; no local LLM is installed.",
+            tags=["planning", "nvidia", "nim", "default"],
         ),
         _entry(
             model_id="hf_sd15_internal",
@@ -106,16 +71,16 @@ def built_in_catalog() -> list[dict[str, Any]]:
             license_id="openrail-m",
             license_url="https://huggingface.co/runwayml/stable-diffusion-v1-5",
             recommended="default",
-            notes="CPU-friendlier internal fallback for proxy-safe video rendering and previews.",
+            notes="CUDA internal draft asset for proxy-safe video rendering and previews.",
             family="sd15",
             author="runwayml",
-            tags=["internal", "video", "fallback"],
-            hardware_targets=["cpu", "integrated_gpu", "discrete_gpu"],
+            tags=["internal", "video", "cuda"],
+            hardware_targets=["discrete_gpu"],
             render={
                 "engine": "internal",
                 "workflow_family": "diffusers",
                 "render_modes": ["internal_video"],
-                "preferred_for": ["fallback", "draft", "laptop"],
+                "preferred_for": ["draft", "laptop"],
             },
         ),
         _entry(
@@ -178,7 +143,7 @@ def built_in_catalog() -> list[dict[str, Any]]:
             family="sd15",
             author="lllyasviel",
             tags=["internal", "controlnet", "sd15", "canny"],
-            hardware_targets=["cpu", "integrated_gpu", "discrete_gpu"],
+            hardware_targets=["discrete_gpu"],
             render={
                 "engine": "internal",
                 "workflow_family": "controlnet",
@@ -200,7 +165,7 @@ def built_in_catalog() -> list[dict[str, Any]]:
             family="sd15",
             author="lllyasviel",
             tags=["internal", "controlnet", "sd15", "depth"],
-            hardware_targets=["cpu", "integrated_gpu", "discrete_gpu"],
+            hardware_targets=["discrete_gpu"],
             render={
                 "engine": "internal",
                 "workflow_family": "controlnet",
@@ -268,7 +233,7 @@ def built_in_catalog() -> list[dict[str, Any]]:
             author="stabilityai",
             collections=["image", "stabilityais-sdxl-models"],
             tags=["comfyui", "stills", "baseline"],
-            hardware_targets=["integrated_gpu", "discrete_gpu"],
+            hardware_targets=["discrete_gpu"],
             render={
                 "engine": "comfyui",
                 "workflow_family": "txt2img",
@@ -529,24 +494,6 @@ def built_in_catalog() -> list[dict[str, Any]]:
             tags=["browser_only", "nvidia", "tensorrt", "video"],
             hardware_targets=["nvidia"],
         ),
-        _entry(
-            model_id="hf_sd35_large_amdgpu_bundle",
-            name="Stable Diffusion 3.5 Large AMDGPU Bundle",
-            kind="runtime_bundle",
-            source="hf",
-            hf_repo_id="stabilityai/stable-diffusion-3.5-large_amdgpu",
-            target={"engine": "runtime_bundle", "folder": "amd"},
-            license_id="stability-ai-community",
-            license_url="https://huggingface.co/stabilityai/stable-diffusion-3.5-large_amdgpu/blob/main/LICENSE.md",
-            recommended="advanced",
-            installable=False,
-            notes="AMD-optimized package. Studio surfaces it in the Hub browser while the DirectML execution path is still separate from the main renderer.",
-            family="sd35",
-            author="stabilityai",
-            collections=["amd-optimized", "stable-diffusion-35"],
-            tags=["browser_only", "amd", "directml"],
-            hardware_targets=["amd", "windows"],
-        ),
     ]
 
 
@@ -555,22 +502,21 @@ def built_in_packs() -> list[dict[str, Any]]:
     return [
         {
             "id": "basic",
-            "name": "Basic (Planning + Preflight)",
-            "description": "Installs the default Qwen3 8B Ollama planner. Use this if you only want planning, ingest, and preflight right now.",
-            "models": ["ollama_qwen3_8b"],
+            "name": "NVIDIA Runtime (Planning + Preflight)",
+            "description": "Uses the configured NVIDIA NIM planner service. No local LLM is installed.",
+            "models": [],
         },
         {
             "id": "creator",
-            "name": "Creator (Recommended)",
-            "description": "Installs the default Qwen3 8B Ollama planner plus SDXL Base for broadly compatible ComfyUI still rendering.",
-            "models": ["ollama_qwen3_8b", "hf_sdxl_base_1_0"],
+            "name": "NVIDIA Creator (Recommended)",
+            "description": "Uses NVIDIA NIM planning plus the NVIDIA Kit/OpenUSD render-job path. No local LLM fallback is installed.",
+            "models": [],
         },
         {
-            "id": "stability_sd35",
-            "name": "Stability SD3.5 Image Lab",
-            "description": "Adds Studio's curated SD3.5 still stack: Large Turbo plus Blur/Canny/Depth ControlNets for reference-driven renders.",
+            "id": "nvidia_sd35",
+            "name": "NVIDIA SD3.5 Image Lab",
+            "description": "Adds Studio's curated CUDA still stack: SD3.5 Large Turbo plus Blur/Canny/Depth ControlNets for reference-driven renders.",
             "models": [
-                "ollama_qwen3_8b",
                 "hf_sd35_large_turbo_ckpt",
                 "hf_sd35_controlnet_blur",
                 "hf_sd35_controlnet_canny",
@@ -578,11 +524,10 @@ def built_in_packs() -> list[dict[str, Any]]:
             ],
         },
         {
-            "id": "stability_motion",
-            "name": "Stability Motion Lab",
-            "description": "Adds the curated SVD XT image-to-video fallback on top of the SD3.5 turbo still path.",
+            "id": "nvidia_motion",
+            "name": "NVIDIA Motion Lab",
+            "description": "Adds the curated CUDA SVD XT image-to-video path on top of the SD3.5 turbo still path.",
             "models": [
-                "ollama_qwen3_8b",
                 "hf_sd35_large_turbo_ckpt",
                 "hf_svd_xt_1_1",
             ],
@@ -592,7 +537,6 @@ def built_in_packs() -> list[dict[str, Any]]:
             "name": "Pro (Advanced)",
             "description": "Adds higher-quality internal and ComfyUI renderers: SDXL internal, SD3.5 medium internal, SD3.5 large, and the SDXL refiner.",
             "models": [
-                "ollama_qwen3_8b",
                 "hf_sdxl_base_1_0",
                 "hf_sdxl_internal",
                 "hf_sd35_medium_internal",

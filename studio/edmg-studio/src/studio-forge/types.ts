@@ -1,6 +1,5 @@
 export type StudioForgeCapability =
   | "backend"
-  | "ollama"
   | "openaiCompatible"
   | "nvidiaKit"
   | "nvidiaNim"

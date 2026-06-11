@@ -31,7 +31,7 @@ STABILITY_STYLE_PRESETS = (
 DEFAULT_RENDER_PROVIDER_SETTINGS: dict[str, Any] = {
     "stability": {
         "enabled": False,
-        "allow_auto_fallback": True,
+        "allow_auto_fallback": False,
         "service": "sd3",
         "model": "sd3.5-large-turbo",
         "style_preset": "none",
@@ -40,8 +40,8 @@ DEFAULT_RENDER_PROVIDER_SETTINGS: dict[str, Any] = {
         "cfg_scale": 6.5,
     },
     "directml": {
-        "enabled": True,
-        "allow_auto_selection": True,
+        "enabled": False,
+        "allow_auto_selection": False,
         "preferred_model": "auto",
     },
 }
@@ -126,10 +126,8 @@ class RenderSettingsStore:
             preferred_model = out["directml"]["preferred_model"]
 
         out["stability"] = {
-            "enabled": bool(stability.get("enabled", out["stability"]["enabled"])),
-            "allow_auto_fallback": bool(
-                stability.get("allow_auto_fallback", out["stability"]["allow_auto_fallback"])
-            ),
+            "enabled": False,
+            "allow_auto_fallback": False,
             "service": service,
             "model": model,
             "style_preset": style_preset,
@@ -138,10 +136,8 @@ class RenderSettingsStore:
             "cfg_scale": max(1.0, min(10.0, float(stability.get("cfg_scale", out["stability"]["cfg_scale"])))),
         }
         out["directml"] = {
-            "enabled": bool(directml.get("enabled", out["directml"]["enabled"])),
-            "allow_auto_selection": bool(
-                directml.get("allow_auto_selection", out["directml"]["allow_auto_selection"])
-            ),
+            "enabled": False,
+            "allow_auto_selection": False,
             "preferred_model": preferred_model,
         }
         return out

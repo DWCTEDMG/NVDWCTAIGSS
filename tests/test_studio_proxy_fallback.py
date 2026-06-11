@@ -5,9 +5,11 @@ import json
 from contextlib import ExitStack
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from edmg_studio_backend import app as studio_app
+from edmg_studio_backend.errors import UserFacingError
 from edmg_studio_backend.services import internal_video as internal_video_service
 from edmg_studio_backend.store.projects import ProjectStore
 from edmg_studio_backend.store.jobs import JobStore
@@ -37,26 +39,20 @@ def _make_project(tmp_path: Path):
     return store, jobs, proj
 
 
-def test_internal_preflight_falls_back_to_proxy(tmp_path, monkeypatch):
+def test_internal_preflight_rejects_proxy_fallback(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
     monkeypatch.setattr(studio_app.models, "installed_path", lambda _mid: None)
 
-    preflight = studio_app._internal_render_preflight_data(
-        proj.id,
-        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": True},
-    )
-
-    assert preflight["ok"] is True
-    assert preflight["mode"] == "proxy"
-    assert preflight["model_id"] == "proxy_draft"
-    assert preflight["estimated_frames"] == 12
-    assert preflight["cache"]["frames_expected"] == 12
-    assert any("proxy" in w.lower() for w in preflight["warnings"])
+    with pytest.raises(UserFacingError):
+        studio_app._internal_render_preflight_data(
+            proj.id,
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+        )
 
 
-def test_internal_preflight_falls_back_to_proxy_for_incomplete_internal_model(tmp_path, monkeypatch):
+def test_internal_preflight_rejects_proxy_for_incomplete_internal_model(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
@@ -67,46 +63,28 @@ def test_internal_preflight_falls_back_to_proxy_for_incomplete_internal_model(tm
         lambda model_id: "incomplete" if model_id == "hf_sd35_medium_internal" else None,
     )
 
-    preflight = studio_app._internal_render_preflight_data(
-        proj.id,
-        {
-            "variant_index": 0,
-            "fps_render": 2,
-            "fps_output": 24,
-            "model_id": "hf_sd35_medium_internal",
-            "allow_proxy_fallback": True,
-        },
-    )
-
-    assert preflight["ok"] is True
-    assert preflight["mode"] == "proxy"
-    assert any("incomplete" in w.lower() for w in preflight["warnings"])
+    with pytest.raises(UserFacingError):
+        studio_app._internal_render_preflight_data(
+            proj.id,
+            {
+                "variant_index": 0,
+                "fps_render": 2,
+                "fps_output": 24,
+                "model_id": "hf_sd35_medium_internal",
+                "allow_proxy_fallback": False,
+            },
+        )
 
 
-def test_run_pipeline_auto_uses_proxy_when_comfy_and_models_missing(tmp_path, monkeypatch):
+def test_run_pipeline_auto_rejects_proxy_when_comfy_and_models_missing(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
     monkeypatch.setattr(studio_app.models, "installed_path", lambda _mid: None)
     monkeypatch.setattr(studio_app.comfy_pool, "diagnose", lambda _req: {"compatible": [], "busy_compatible": []})
 
-    captured = {}
-
-    def fake_render_internal_video(project_id, req):
-        captured["project_id"] = project_id
-        captured["req"] = req
-        return {"ok": True, "job": {"id": "job-proxy"}, "preflight": {"mode": "proxy"}}
-
-    monkeypatch.setattr(studio_app, "render_internal_video", fake_render_internal_video)
-
-    result = studio_app.run_pipeline(proj.id, variant_index=0, preset="balanced", mode="auto", engine="auto")
-
-    assert result["ok"] is True
-    assert result["render_mode"] == "proxy"
-    assert result["selected"]["mode"] == "proxy"
-    assert captured["project_id"] == proj.id
-    assert captured["req"].render_mode == "proxy"
-    assert captured["req"].allow_proxy_fallback is True
+    with pytest.raises(UserFacingError):
+        studio_app.run_pipeline(proj.id, variant_index=0, preset="balanced", mode="auto", engine="auto")
 
 
 def test_proxy_renderer_creates_video_and_metadata_without_ffmpeg(tmp_path, monkeypatch):
@@ -165,7 +143,21 @@ def test_resume_and_restart_routes_clone_internal_job_with_checkpoint(tmp_path, 
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
-    monkeypatch.setattr(studio_app.models, "installed_path", lambda _mid: None)
+    fake_model_dir = tmp_path / "models" / "hf_sd15_internal"
+    fake_model_dir.mkdir(parents=True)
+    monkeypatch.setattr(studio_app.models, "installed_path", lambda _mid: fake_model_dir)
+    monkeypatch.setattr(
+        studio_app,
+        "_hardware_profile",
+        lambda: {
+            "backend": "cuda",
+            "backend_family": "discrete_gpu",
+            "vram_gb": 12.0,
+            "ram_gb": 32.0,
+            "cpu_threads": 16,
+            "preferred_internal_model": "hf_sd15_internal",
+        },
+    )
 
     source = jobs.create(
         proj.id,
@@ -174,9 +166,9 @@ def test_resume_and_restart_routes_clone_internal_job_with_checkpoint(tmp_path, 
             "variant_index": 0,
             "fps_render": 2,
             "fps_output": 24,
-            "render_mode": "proxy",
+            "render_mode": "auto",
             "model_id": "auto",
-            "allow_proxy_fallback": True,
+            "allow_proxy_fallback": False,
             "resume_existing_frames": True,
         },
     )
@@ -231,7 +223,7 @@ def test_resume_route_rejects_running_internal_job(tmp_path, monkeypatch):
             "fps_render": 2,
             "fps_output": 24,
             "render_mode": "proxy",
-            "allow_proxy_fallback": True,
+            "allow_proxy_fallback": False,
         },
     )
     source.status = "running"

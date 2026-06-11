@@ -18,7 +18,6 @@ except Exception:  # pragma: no cover
     snapshot_download = None  # type: ignore
 
 from ..errors import UserFacingError
-from .setup_wizard import _ollama_base  # reuse
 from .model_catalog import built_in_catalog, built_in_packs
 from ..services.setup_wizard import comfy_portable_installed, comfy_portable_root
 from .secrets import SecretStore
@@ -252,14 +251,13 @@ class ModelManager:
         models_dir: Path,
         external_dir: Path,
         comfyui_url: str,
-        ollama_url: str,
+        _legacy_planner_url: str,
         secrets: SecretStore | None = None,
     ):
         self.data_dir = data_dir
         self.models_dir = models_dir
         self.external_dir = external_dir
         self.comfyui_url = comfyui_url.rstrip("/")
-        self.ollama_url = _ollama_base(ollama_url)
         self.secrets = secrets
         self.tasks = ModelTaskManager()
         self.model_cache = self._build_model_cache()
@@ -450,9 +448,13 @@ class ModelManager:
             )
 
         source = (entry.get("source") or "").lower()
-        if source == "ollama":
-            name = f"Install (Ollama): {entry.get('name')}"
-            return self.tasks.start(name, self._install_ollama, entry)
+        if source in {"ollama", "legacy_ollama"}:
+            raise UserFacingError(
+                "Legacy local planner installs are disabled in the NVIDIA-only profile.",
+                hint="Use the configured NVIDIA NIM planner service instead.",
+                code="NVIDIA_ONLY_PROFILE",
+                status_code=400,
+            )
         if source in ("hf", "civitai", "local", "s3"):
             name = f"Install: {entry.get('name')}"
             return self.tasks.start(name, self._install_file_model, entry)
@@ -520,25 +522,13 @@ class ModelManager:
 
     def _installed_map(self, entries: list[dict[str, Any]]) -> dict[str, bool]:
         out: dict[str, bool] = {}
-        # for ollama, fetch tags once
-        ollama_models: set[str] = set()
-        try:
-            r = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
-            if r.ok:
-                data = r.json() or {}
-                for m in (data.get("models") or []):
-                    if isinstance(m, dict) and m.get("name"):
-                        ollama_models.add(str(m["name"]))
-        except Exception:
-            pass
-
         for e in entries:
             mid = str(e.get("id") or "")
             if not mid:
                 continue
             src = (e.get("source") or "").lower()
-            if src == "ollama":
-                out[mid] = str(e.get("ollama_model") or "") in ollama_models
+            if src in {"ollama", "legacy_ollama"}:
+                out[mid] = False
                 continue
 
             target = e.get("target") or {}
@@ -931,41 +921,6 @@ class ModelManager:
         return resolved
 
     # ---- installers ----
-    def _install_ollama(self, task: ModelTask, entry: dict[str, Any]) -> None:
-        model = str(entry.get("ollama_model") or "")
-        if not model:
-            raise RuntimeError("Missing ollama_model")
-        ModelTaskManager.log(task, f"Pulling {model} via Ollama…")
-        with requests.post(
-            f"{self.ollama_url}/api/pull",
-            json={"model": model, "stream": True},
-            stream=True,
-            timeout=60 * 60,
-        ) as r:
-            r.raise_for_status()
-            last = ""
-            for line in r.iter_lines(decode_unicode=True):
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                status = obj.get("status") or ""
-                total = obj.get("total")
-                completed = obj.get("completed")
-                if total and completed:
-                    try:
-                        p = float(completed) / float(total)
-                        ModelTaskManager.set_progress(task, max(0.0, min(0.99, p)))
-                    except Exception:
-                        pass
-                if status and status != last:
-                    ModelTaskManager.log(task, status)
-                    last = status
-        ModelTaskManager.set_progress(task, 1.0)
-        ModelTaskManager.log(task, "Done.")
-
     def _download_stream(self, task: ModelTask, url: str, dest: Path, headers: Optional[dict[str, str]] = None) -> None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         headers = headers or {}

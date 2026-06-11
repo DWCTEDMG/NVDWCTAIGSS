@@ -55,7 +55,7 @@ def test_internal_video_request_deforum_overrides_take_precedence():
         studio_app._request_payload(req),
         model_id="hf_sd15_internal",
         render_tier="draft",
-        device_preference="cpu",
+        device_preference="cuda",
     )
     ctx = build_deforum_render_context(
         scenes=[{"start_s": 0.0, "end_s": 2.0, "prompt": "scene prompt", "negative_prompt": "scene neg"}],

@@ -35,7 +35,6 @@ type RuntimeCard = {
 
 const CAPABILITY_LABELS: Record<StudioForgeCapability, string> = {
   backend: "Backend",
-  ollama: "Legacy Ollama",
   openaiCompatible: "OpenAI-compatible",
   nvidiaKit: "NVIDIA Kit",
   nvidiaNim: "NVIDIA NIM",
@@ -367,13 +366,8 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
 
   const aiConfig = setupStatus?.ai_config ?? {};
   const activeConfig = backendConfig ?? config ?? {};
-  const ollamaRequired = !!aiConfig?.ollama_required;
-  const modelRequired = !!aiConfig?.model_required;
   const backendBundleOk = !!setupStatus?.backend_bundle?.ok;
   const ffmpegOk = !!setupStatus?.ffmpeg?.ok;
-  const ollamaOk = !!setupStatus?.ollama?.ok;
-  const modelOk = !modelRequired || !!setupStatus?.ollama?.model_present;
-  const setupReady = backendBundleOk && ffmpegOk && (!ollamaRequired || (ollamaOk && modelOk));
   const nvidiaProfile = setupStatus?.nvidia_profile ?? nvidiaDiagnostics?.nvidia?.profile ?? {};
   const nvidiaEnabled = !!nvidiaProfile?.enabled || !!setupStatus?.nvidia_mode;
   const nvidiaServices = nvidiaDiagnostics?.nvidia?.services ?? {};
@@ -384,23 +378,14 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
   const tritonReady = !!nvidiaServices?.triton?.configured || !!nvidiaProfile?.services?.triton?.configured;
   const omniverseReady = !!nvidiaServices?.omniverse?.configured || !!nvidiaProfile?.services?.omniverse?.configured || nvidiaGpuOk;
   const kitReady = nvidiaEnabled && (nvidiaGpuOk || omniverseReady || !nvidiaDiagnosticsError);
+  const setupReady = backendBundleOk && ffmpegOk && nvidiaEnabled && nimReady;
   const missingSetupParts = [
     !backendBundleOk ? "backend bundle" : null,
     !ffmpegOk ? "FFmpeg" : null,
     !nvidiaEnabled ? "NVIDIA profile" : null,
     !nimReady ? "NVIDIA NIM" : null,
-    ollamaRequired && !ollamaOk ? "Ollama" : null,
-    modelRequired && !modelOk ? "default model" : null,
   ].filter(Boolean);
 
-  const ollamaUrl = String(setupStatus?.ollama?.url ?? "http://127.0.0.1:11434");
-  const ollamaModel = String(
-    setupStatus?.ollama?.model ??
-    activeConfig?.ai_model ??
-    activeConfig?.model ??
-    aiConfig?.model ??
-    "",
-  ).trim();
   const comfyUrl = String(setupStatus?.comfyui?.url ?? "http://127.0.0.1:8188");
   const comfyConfigured = !!setupStatus?.comfyui?.ok;
   const comfyAvailable = !comfyError && !!comfyCapabilities;
@@ -420,7 +405,6 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     if (health?.ok && !healthError) capabilities.push("backend");
     if (backendBundleOk && !setupError) capabilities.push("internalRenderer");
     if (ffmpegOk && !setupError) capabilities.push("ffmpeg");
-    if (ollamaOk && !setupError && (!ollamaRequired || modelOk)) capabilities.push("ollama");
     if (openaiCompatibleConfigured) capabilities.push("openaiCompatible");
     if (kitReady) capabilities.push("nvidiaKit");
     if (nimReady) capabilities.push("nvidiaNim");
@@ -437,13 +421,10 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     ffmpegOk,
     health?.ok,
     healthError,
-    modelOk,
     kitReady,
     nimReady,
     nvidiaEnabled,
     omniverseReady,
-    ollamaOk,
-    ollamaRequired,
     openaiCompatibleConfigured,
     rivaReady,
     setupError,
@@ -541,18 +522,12 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     {
       id: "models",
       label: "Models",
-      role: modelRequired ? "Fallback required" : "Optional fallback",
-      status: setupError
-        ? "unknown"
-        : modelRequired
-          ? (modelOk ? "available" : "missing")
-          : (modelOk ? "available" : "optional"),
-      detail: ollamaModel
-        ? `${ollamaModel}${modelOk ? " is ready." : " is configured but not present yet."}`
-        : "NVIDIA model configuration is available through Settings; fallback local models remain in Models and Setup.",
+      role: "NVIDIA assets",
+      status: setupError ? "unknown" : "optional",
+      detail: "NVIDIA model configuration is available through Settings; local model assets remain managed by Models and Setup.",
       impact: edmgAvailable
         ? "Installed models can stay aligned with EDMG Core and the NVIDIA/OpenUSD handoff."
-        : "Fallback model management remains owned by the current Models page and setup flow.",
+        : "Model management remains owned by the current Models page and setup flow.",
     },
   ];
 
@@ -561,7 +536,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       {
         id: "runtime" as const,
         label: "Runtime Status",
-        description: "Read-only health for backend, NVIDIA Kit, NIM, service stack, FFmpeg, and fallback models.",
+        description: "Read-only health for backend, NVIDIA Kit, NIM, service stack, FFmpeg, and model assets.",
       },
       {
         id: "recommendations" as const,

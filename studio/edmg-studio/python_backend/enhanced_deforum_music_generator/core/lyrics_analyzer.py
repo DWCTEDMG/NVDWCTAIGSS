@@ -4,16 +4,20 @@ Handles transcription and emotional analysis of song lyrics
 """
 
 import re
-from typing import Dict, List, Optional, Set
+import logging
+from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass
 from collections import Counter
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 try:
     import whisper
     WHISPER_AVAILABLE = True
 except ImportError:
     WHISPER_AVAILABLE = False
-    print("Whisper not available - lyric analysis disabled")
+    logger.info("Whisper not available - lyric analysis disabled")
 
 @dataclass
 class LyricAnalysis:
@@ -21,10 +25,10 @@ class LyricAnalysis:
     has_lyrics: bool
     raw_text: str
     emotions: List[str]
-    emotion_details: Dict[str, Dict]
+    emotion_details: Dict[str, Dict[str, Any]]
     themes: List[str]
     visual_elements: List[str]
-    narrative_structure: Dict[str, any]
+    narrative_structure: Dict[str, Any]
     emotional_intensity: float
     deforum_prompts: List[str]
     word_count: int
@@ -187,11 +191,11 @@ class NarrativeAnalyzer:
                   "next", "soon", "eventually"]
     }
     
-    def analyze_structure(self, text: str) -> Dict[str, any]:
+    def analyze_structure(self, text: str) -> Dict[str, Any]:
         """Analyze narrative structure"""
         if not text:
             return self._get_default_structure()
-        
+
         # Basic structure analysis
         sentences = self._split_sentences(text)
         
@@ -248,26 +252,26 @@ class NarrativeAnalyzer:
         
         return tense_mapping.get(dominant_tense, "abstract")
     
-    def _detect_verse_chorus(self, text: str) -> Dict[str, any]:
+    def _detect_verse_chorus(self, text: str) -> Dict[str, Any]:
         """Detect verse-chorus structure"""
         lines = [line.strip() for line in text.split('\n') if line.strip()]
-        
+
         if len(lines) < 8:
             return {"detected": False, "structure": "simple"}
-        
+
         # Look for repeated sections
         line_counts = Counter(lines)
         repeated_lines = [line for line, count in line_counts.items() if count > 1]
-        
+
         has_chorus = len(repeated_lines) > 0
-        
+
         return {
             "detected": has_chorus,
             "structure": "verse_chorus" if has_chorus else "narrative",
             "repeated_lines": len(repeated_lines)
         }
     
-    def _get_default_structure(self) -> Dict[str, any]:
+    def _get_default_structure(self) -> Dict[str, Any]:
         """Default structure for empty/failed analysis"""
         return {
             "sentence_count": 0,
@@ -294,9 +298,9 @@ class LyricAnalyzer:
         if WHISPER_AVAILABLE and enable_transcription:
             try:
                 self.whisper_model = whisper.load_model(model_name)
-                print(f"Whisper model '{model_name}' loaded")
+                logger.info(f"Whisper model '{model_name}' loaded")
             except Exception as e:
-                print(f"Whisper initialization failed: {e}")
+                logger.error(f"Whisper initialization failed: {e}")
     
     def analyze(self, audio_file: str) -> LyricAnalysis:
         """
@@ -310,12 +314,12 @@ class LyricAnalyzer:
         """
         # Transcribe if possible
         transcript = self._transcribe_audio(audio_file)
-        
+
         if not transcript or len(transcript.strip()) < 10:
             return self._get_default_analysis()
-        
-        print(f"Transcribed {len(transcript)} characters of lyrics")
-        
+
+        logger.debug(f"Transcribed {len(transcript)} characters of lyrics")
+
         # Analyze transcript
         emotions = self.emotion_classifier.classify_emotions(transcript)
         themes = self.theme_extractor.extract_themes(transcript)
@@ -369,9 +373,9 @@ class LyricAnalyzer:
                 return ""
             
             return transcript
-            
+
         except Exception as e:
-            print(f"Transcription failed: {e}")
+            logger.error(f"Transcription failed: {e}")
             return ""
     
     def _calculate_emotional_intensity(self, emotions: Dict) -> float:

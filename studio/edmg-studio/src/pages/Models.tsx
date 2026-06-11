@@ -62,45 +62,34 @@ type ModelsPanelId =
 
 const HUB_COLLECTIONS: HubCollection[] = [
   {
-    id: "stable-diffusion-35",
-    label: "SD3.5 Image",
-    search: "stable-diffusion-3.5",
-    note: "Curated Stability image models, including SD3.5 large, medium, turbo, and controlnets.",
-    url: "https://huggingface.co/collections/stabilityai/stable-diffusion-35",
+    id: "nvidia",
+    label: "NVIDIA models",
+    search: "diffusion",
+    note: "NVIDIA-published models and assets for CUDA, TensorRT, and NIM-backed workflows.",
+    url: "https://huggingface.co/nvidia",
   },
   {
-    id: "video",
-    label: "Video",
-    search: "stable-video-diffusion",
-    note: "Stable Video Diffusion image-to-video checkpoints and related motion models.",
-    url: "https://huggingface.co/collections/stabilityai/video",
+    id: "nvidia-tensorrt",
+    label: "TensorRT",
+    search: "tensorrt diffusion",
+    note: "TensorRT-oriented model assets for NVIDIA GPU acceleration.",
+    url: "https://huggingface.co/models?search=nvidia%20tensorrt%20diffusion",
   },
   {
-    id: "nvidia-optimized",
-    label: "NVIDIA",
-    search: "tensorrt stable-diffusion-3.5",
-    note: "TensorRT-oriented Stability bundles for NVIDIA-specific fast paths.",
-    url: "https://huggingface.co/collections/stabilityai/nvidia-optimized",
-  },
-  {
-    id: "amd-optimized",
-    label: "AMD",
-    search: "amdgpu stable-diffusion-3.5",
-    note: "AMDGPU / DirectML-oriented Stability bundles for Windows and AMD hardware paths.",
-    url: "https://huggingface.co/collections/stabilityai/amd-optimized",
+    id: "nvidia-nim",
+    label: "NIM",
+    search: "nvidia nim vision",
+    note: "NVIDIA service-backed discovery for NIM and GPU-first inference assets.",
+    url: "https://build.nvidia.com/explore/discover",
   },
 ];
 
-const STABILITY_LINKS = [
-  { label: "SD3.5 collection", url: "https://huggingface.co/collections/stabilityai/stable-diffusion-35" },
-  { label: "Video collection", url: "https://huggingface.co/collections/stabilityai/video" },
-  { label: "NVIDIA collection", url: "https://huggingface.co/collections/stabilityai/nvidia-optimized" },
-  { label: "AMD collection", url: "https://huggingface.co/collections/stabilityai/amd-optimized" },
-  { label: "Stability GitHub", url: "https://github.com/Stability-AI" },
-  { label: "generative-models", url: "https://github.com/Stability-AI/generative-models" },
-  { label: "sd3.5 repo", url: "https://github.com/Stability-AI/sd3.5" },
-  { label: "stable-audio-tools", url: "https://github.com/Stability-AI/stable-audio-tools" },
-  { label: "Stability Platform", url: "https://platform.stability.ai/" },
+const NVIDIA_LINKS = [
+  { label: "NVIDIA models", url: "https://huggingface.co/nvidia" },
+  { label: "NVIDIA NIM", url: "https://build.nvidia.com/explore/discover" },
+  { label: "NIM docs", url: "https://docs.nvidia.com/nim/" },
+  { label: "TensorRT", url: "https://github.com/NVIDIA/TensorRT" },
+  { label: "TensorRT Model Optimizer", url: "https://github.com/NVIDIA/TensorRT-Model-Optimizer" },
 ];
 
 function formatDate(value?: string) {
@@ -140,7 +129,7 @@ function ModelCard({
   onOpen: (u: string) => void;
 }) {
   const installable = m.installable !== false;
-  const needsAccept = installable && m.source !== "ollama" && !accepted;
+  const needsAccept = installable && !accepted;
   const canInstall = installable && !needsAccept;
   const cloudStored = !!cloudRecord;
   const cloudOnly = storageMode === "cloud_only";
@@ -268,7 +257,7 @@ function HubResultCard({
           ) : null}
           {matchedCatalog ? (
             <button
-              disabled={matchedCatalog.installable === false || installed || cloudStored || (matchedCatalog.source !== "ollama" && !accepted)}
+              disabled={matchedCatalog.installable === false || installed || cloudStored || !accepted}
               onClick={() => onInstall(matchedCatalog)}
             >
               {installed ? "Installed locally" : cloudStored ? "Stored in S3" : matchedCatalog.installable === false ? "Browser only" : "Install in Studio"}
@@ -284,7 +273,6 @@ export default function Models(props: PageProps) {
   const { mode } = useUiMode();
   const [data, setData] = useState<CatalogPayload | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
-  const [renderProviders, setRenderProviders] = useState<any>(null);
   const [err, setErr] = useState<string>("");
 
   const [civitaiUrl, setCivitaiUrl] = useState("");
@@ -304,8 +292,6 @@ export default function Models(props: PageProps) {
       setData(d as any);
       const t = await apiGet("/v1/models/tasks");
       setTasks((t as any)?.tasks ?? []);
-      const rp = await apiGet("/v1/settings/render_providers");
-      setRenderProviders(rp);
     } catch (e: any) {
       setErr(String(e?.message ?? e));
     }
@@ -348,7 +334,7 @@ export default function Models(props: PageProps) {
         const nextResults: HubResult[] = [];
         for await (const item of listModels({
           search: query,
-          author: "stabilityai",
+          author: "nvidia",
           limit: 8,
         } as any)) {
           nextResults.push({
@@ -458,8 +444,8 @@ export default function Models(props: PageProps) {
       },
       {
         id: "runtime" as const,
-        label: "Runtime bridges",
-        description: "Optional hosted Stability and DirectML-specific runtime surfaces.",
+        label: "NVIDIA runtime",
+        description: "CUDA, TensorRT, and NVIDIA service readiness for the only supported runtime path.",
       },
       {
         id: "discovery" as const,
@@ -530,7 +516,7 @@ export default function Models(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 900 }}>Internal render readiness</div>
         <div className="small" style={{ marginTop: 6 }}>
-          Internal video rendering is ready when at least one diffusers model is installed. SD3.5 Medium is preferred on stronger GPUs; SDXL is the balanced path; SD 1.5 remains the safest fallback.
+          Internal video rendering is ready when at least one diffusers model is installed. SD3.5 Medium is preferred on stronger GPUs; SDXL is the balanced path; SD 1.5 is the lowest-resource CUDA option.
         </div>
         <div className="small" style={{ marginTop: 8 }}>
           SD 1.5: <b>{internalSummary.installedInternal.sd15 ? "installed" : "missing"}</b>
@@ -553,60 +539,26 @@ export default function Models(props: PageProps) {
       </div>
     ),
     runtime: (
-      <>
-        {renderProviders?.stability?.visible ? (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900 }}>Hosted Stability fallback</div>
-            <div className="small" style={{ marginTop: 6 }}>
-              Hosted keyframe rendering is configured and will appear as an internal render option in Render. Studio keeps assembly, caching, history, retry, and resume local while using Stability&apos;s hosted image API for keyframes.
-            </div>
-            <div className="small" style={{ marginTop: 8 }}>
-              Service: <b>{renderProviders?.stability?.service}</b>
-              {renderProviders?.stability?.service === "sd3" ? <> • model <b>{renderProviders?.stability?.model}</b></> : null}
-              {" "}• style <b>{renderProviders?.stability?.style_preset || "none"}</b>
-            </div>
-            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="secondary" onClick={() => props.onNavigate?.("render")}>Open Render</button>
-              <button className="secondary" onClick={() => props.onNavigate?.("settings")}>Open Settings</button>
-            </div>
-          </div>
-        ) : null}
-
-        {renderProviders?.directml?.available ? (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900 }}>AMD / DirectML runtime</div>
-            <div className="small" style={{ marginTop: 6 }}>
-              DirectML is available on <b>{renderProviders?.directml?.device_name || "this Windows GPU"}</b>. Studio&apos;s internal renderer can now use SDXL and SD 1.5 through ONNX Runtime on supported AMD / Windows machines.
-            </div>
-            <div className="small" style={{ marginTop: 8 }}>
-              Preferred DirectML model: <b>{renderProviders?.directml?.preferred_model || "auto"}</b> • active backend <b>{renderProviders?.directml?.active ? "yes" : "no"}</b>
-            </div>
-            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="secondary" onClick={() => props.onNavigate?.("render")}>Open Render</button>
-              <button className="secondary" onClick={() => props.onNavigate?.("settings")}>Tune runtime</button>
-            </div>
-          </div>
-        ) : null}
-
-        {!renderProviders?.stability?.visible && !renderProviders?.directml?.available ? (
-          <div className="card" style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 900 }}>Secondary runtime bridges</div>
-            <div className="small" style={{ marginTop: 6 }}>
-              No secondary hosted or hardware-specific runtime bridge is active yet. The NVIDIA/OpenUSD handoff and model install flow remain the primary path.
-            </div>
-          </div>
-        ) : null}
-      </>
+      <div className="card" style={{ marginTop: 14 }}>
+        <div style={{ fontWeight: 900 }}>NVIDIA runtime only</div>
+        <div className="small" style={{ marginTop: 6 }}>
+          Model installs feed the CUDA internal renderer, NVIDIA NIM planning services, and the NVIDIA RTX/OpenUSD launch profile. Non-NVIDIA runtime bridges are not exposed by this profile.
+        </div>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="secondary" onClick={() => props.onNavigate?.("render")}>Open Render</button>
+          <button className="secondary" onClick={() => props.onNavigate?.("settings")}>Open Settings</button>
+        </div>
+      </div>
     ),
     discovery: (
       <>
         <div className="card" style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 900 }}>Stability quick links</div>
+          <div style={{ fontWeight: 900 }}>NVIDIA quick links</div>
           <div className="small" style={{ marginTop: 6 }}>
-            These are the source collections and repos Studio now uses for curated model discovery.
+            These are the NVIDIA source collections and runtime references Studio uses for curated model discovery.
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {STABILITY_LINKS.map((link) => (
+            {NVIDIA_LINKS.map((link) => (
               <button key={link.url} className="secondary" onClick={() => window.edmg?.openExternal?.(link.url)}>
                 {link.label}
               </button>
@@ -615,7 +567,7 @@ export default function Models(props: PageProps) {
         </div>
 
         <div className="card" style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 900 }}>Stability Hub browser</div>
+          <div style={{ fontWeight: 900 }}>NVIDIA Hub browser</div>
           <div className="small" style={{ marginTop: 6 }}>
             Powered by Hugging Face Hub search for a richer in-app browse flow. Studio only enables one-click install when a result maps cleanly to a supported local runtime path.
           </div>
@@ -741,7 +693,7 @@ export default function Models(props: PageProps) {
           <>
             <h3 style={{ marginTop: 18 }}>Discovery-only runtime bundles</h3>
             <div className="small" style={{ opacity: 0.82 }}>
-              These are still browser-only packages. Studio&apos;s real AMD path now runs through internal DirectML, while these vendor bundles remain surfaced for discovery and future runtime work.
+              These are discovery-only packages without a Studio-managed NVIDIA runtime mapping yet.
             </div>
             {browserOnlyModels.map((m) => (
               <ModelCard
@@ -817,7 +769,7 @@ export default function Models(props: PageProps) {
     <div>
       <h2>Model Manager</h2>
       <div className="small" style={{ marginTop: 6 }}>
-        EDMG ships with a curated model catalog, but does <b>not</b> bundle large weights in the installer. Use this page to install Studio-ready defaults, add community models, or browse curated Stability model families.
+        EDMG ships with a curated model catalog, but does <b>not</b> bundle large weights in the installer. Use this page to install Studio-ready defaults, add community models, or browse NVIDIA-oriented model families.
       </div>
       <div className="small" style={{ marginTop: 8, opacity: 0.86 }}>
         Storage mode: <b>{storageMode === "cloud_only" ? "S3-only" : "local + cache"}</b>

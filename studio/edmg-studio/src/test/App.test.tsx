@@ -10,12 +10,12 @@ describe("App boot", () => {
     installFetchMock({
       "/v1/config": {},
       "/v1/setup/status": {
-        ollama: { ok: false, model_present: false },
         comfyui: { ok: false },
         ffmpeg: { ok: false },
         backend_bundle: { ok: false },
         sevenzip: { ok: false },
-        ai_config: { label: "NVIDIA NIM / OpenAI-compatible provider", ollama_required: false, model_required: false },
+        ai_config: { label: "NVIDIA NIM / OpenAI-compatible provider", provider: "openai_compat" },
+        nvidia_profile: { enabled: true, profile: "omniverse" },
       },
       "/v1/models/catalog": { packs: [], catalog: [], user: [] },
     });

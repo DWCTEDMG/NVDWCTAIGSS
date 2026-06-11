@@ -33,19 +33,25 @@ def _openai_compat_api_key() -> str | None:
     return None
 
 
+def _openai_compat_base_url() -> str:
+    raw = (
+        os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL")
+        or os.getenv("EDMG_NVIDIA_NIM_URL")
+        or "http://127.0.0.1:8001"
+    ).strip()
+    raw = raw.rstrip("/")
+    if raw.endswith("/v1"):
+        return raw
+    return f"{raw}/v1"
+
+
 @dataclass(frozen=True)
 class Settings:
     # planning provider
     provider: str = field(default_factory=lambda: os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower())
 
-    # ollama
-    ollama_url: str = field(default_factory=lambda: os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434").strip())
-    ollama_model: str = field(default_factory=lambda: os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b").strip())
-
-    # openai-compatible
-    openai_compat_base_url: str = field(
-        default_factory=lambda: os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1").strip()
-    )
+    # NVIDIA NIM / OpenAI-compatible planner
+    openai_compat_base_url: str = field(default_factory=_openai_compat_base_url)
     openai_compat_api_key: str | None = field(default_factory=_openai_compat_api_key)
     openai_compat_model: str = field(
         default_factory=lambda: os.getenv(

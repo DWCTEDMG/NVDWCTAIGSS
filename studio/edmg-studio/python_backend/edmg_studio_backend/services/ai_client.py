@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -80,7 +81,6 @@ class LocalAiDirectorClient:
     """In-process AI: uses vendored `edmg_ai_service` directly.
 
     Default provider is NVIDIA NIM through the OpenAI-compatible planner path.
-    Ollama and the rule-based planner remain local fallback providers.
     """
 
     def __init__(self, timeout_s: float = 180.0):
@@ -122,6 +122,13 @@ class LocalAiDirectorClient:
 
     def transcribe(self, audio_path: str, model_size: str = "turbo") -> dict[str, Any]:
         riva_error: str | None = None
+        nvidia_mode = str(os.getenv("EDMG_NVIDIA_MODE", "0") or "").strip().lower() in {"1", "true", "yes", "on"}
+        if nvidia_mode and not riva_asr_enabled():
+            return {
+                "text": None,
+                "error": "NVIDIA mode requires NVIDIA Riva ASR. Set EDMG_NVIDIA_RIVA_ASR=1 and configure EDMG_NVIDIA_RIVA_URL.",
+                "source": "nvidia_riva",
+            }
         if riva_asr_enabled():
             try:
                 return transcribe_with_riva(audio_path)
@@ -171,9 +178,7 @@ class LocalAiDirectorClient:
                 "provider": provider_name,
                 "model": getattr(self._provider, "model", None),
             }
-            if provider_name == "ollama":
-                provider_status["base_url"] = getattr(self._provider_settings, "ollama_url", None)
-            elif provider_name == "openai_compat":
+            if provider_name == "openai_compat":
                 provider_status["base_url"] = getattr(self._provider_settings, "openai_compat_base_url", None)
                 provider_status["api_key_configured"] = bool(
                     getattr(self._provider_settings, "openai_compat_api_key", None)

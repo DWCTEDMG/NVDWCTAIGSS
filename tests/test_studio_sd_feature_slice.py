@@ -484,7 +484,7 @@ def test_model_manager_requires_complete_internal_snapshots(tmp_path, monkeypatc
         models_dir=tmp_path / "models",
         external_dir=tmp_path / "external",
         comfyui_url="http://127.0.0.1:8188",
-        ollama_url="http://127.0.0.1:11434",
+        _legacy_planner_url="",
     )
     entries = {
         "hf_sdxl_internal": {

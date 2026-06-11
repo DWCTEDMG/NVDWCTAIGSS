@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { getBackendUrl } from '../components/api';
 import { ProgressBar } from '../components/ProgressBar';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 type AnalysisFocus = 'balanced' | 'emotion' | 'visual';
 type PromptStyle = 'cinematic' | 'music-video' | 'experimental' | 'documentary';
@@ -1890,4 +1891,35 @@ const AIEnhancedMusicGenerator: React.FC<AiNlpWorkbenchProps> = ({
   );
 };
 
-export default AIEnhancedMusicGenerator;
+export default function AIEnhancedMusicGeneratorWithErrorBoundary(props: AiNlpWorkbenchProps) {
+  return (
+    <ErrorBoundary
+      fallback={(error, retry) => (
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <div style={{ color: '#d32f2f', marginBottom: '12px', fontWeight: 600 }}>
+            Music Analysis Tool Error
+          </div>
+          <div style={{ color: '#666', marginBottom: '16px', fontSize: '14px' }}>
+            {error.message}
+          </div>
+          <button
+            onClick={retry}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+    >
+      <AIEnhancedMusicGenerator {...props} />
+    </ErrorBoundary>
+  );
+}

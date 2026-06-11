@@ -60,6 +60,48 @@ function Use-HostLoopbackForLocalBackend {
   }
 }
 
+function Set-DefaultEnv {
+  param(
+    [string]$Name,
+    [string]$Value
+  )
+  $current = [Environment]::GetEnvironmentVariable($Name, "Process")
+  if ([string]::IsNullOrWhiteSpace($current)) {
+    [Environment]::SetEnvironmentVariable($Name, $Value, "Process")
+  }
+}
+
+function Normalize-NvidiaOpenAICompatBaseUrl {
+  param([string]$Value)
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return "http://127.0.0.1:8001/v1"
+  }
+  $trimmed = $Value.Trim().TrimEnd("/")
+  if ($trimmed -match "/v1$") {
+    return $trimmed
+  }
+  return "$trimmed/v1"
+}
+
+function Set-NvidiaRuntimeDefaults {
+  Set-DefaultEnv "EDMG_AI_MODE" "local"
+  [Environment]::SetEnvironmentVariable("EDMG_AI_PROVIDER", "openai_compat", "Process")
+  Set-DefaultEnv "EDMG_NVIDIA_MODE" "1"
+  Set-DefaultEnv "EDMG_NVIDIA_PROFILE" "omniverse"
+  Set-DefaultEnv "EDMG_NVIDIA_NIM_URL" "http://127.0.0.1:8001"
+
+  $compatBase = [Environment]::GetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_BASE_URL", "Process")
+  if ([string]::IsNullOrWhiteSpace($compatBase)) {
+    $compatBase = [Environment]::GetEnvironmentVariable("EDMG_NVIDIA_NIM_URL", "Process")
+  }
+  [Environment]::SetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_BASE_URL", (Normalize-NvidiaOpenAICompatBaseUrl $compatBase), "Process")
+  Set-DefaultEnv "EDMG_AI_OPENAI_COMPAT_MODEL" "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+
+  Set-DefaultEnv "EDMG_NVIDIA_RIVA_URL" "127.0.0.1:50051"
+  Set-DefaultEnv "EDMG_NVIDIA_RIVA_ASR" "1"
+  [Environment]::SetEnvironmentVariable("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "0", "Process")
+}
+
 function Use-NvidiaPlannerApiKeyAliases {
   $current = [Environment]::GetEnvironmentVariable("EDMG_AI_OPENAI_COMPAT_API_KEY", "Process")
   if (-not [string]::IsNullOrWhiteSpace($current)) {
@@ -223,6 +265,7 @@ if ([string]::IsNullOrWhiteSpace($PythonExe)) {
 }
 
 Import-EnvFile -Path $EnvFile
+Set-NvidiaRuntimeDefaults
 Use-HostLoopbackForLocalBackend
 Use-NvidiaPlannerApiKeyAliases
 $mode = if ([string]::IsNullOrWhiteSpace($env:EDMG_NVIDIA_MODE)) { "1" } else { $env:EDMG_NVIDIA_MODE }

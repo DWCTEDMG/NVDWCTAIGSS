@@ -32,7 +32,7 @@ def _manager(tmp_path: Path) -> ModelManager:
         models_dir=tmp_path / "models",
         external_dir=tmp_path / "external",
         comfyui_url="http://127.0.0.1:8188",
-        ollama_url="http://127.0.0.1:11434",
+        _legacy_planner_url="",
     )
 
 
@@ -52,6 +52,7 @@ def test_file_model_install_restores_from_azure_cache_before_source_download(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("EDMG_MODEL_STORAGE_MODE", "local_cache")
     manager = _manager(tmp_path)
     cache = FakeModelCache(hit=True)
     manager.model_cache = cache
@@ -76,6 +77,7 @@ def test_file_model_install_uploads_source_download_to_azure_cache(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    monkeypatch.setenv("EDMG_MODEL_STORAGE_MODE", "local_cache")
     manager = _manager(tmp_path)
     cache = FakeModelCache(hit=False)
     manager.model_cache = cache

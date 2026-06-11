@@ -130,10 +130,29 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   }
 
   useEffect(() => {
-    refresh();
-    refreshNvidiaDiagnostics();
-    const t = setInterval(refresh, 2000);
-    return () => clearInterval(t);
+    let mounted = true;
+    let pollTimer: number | null = null;
+
+    const initializeSetup = async () => {
+      try {
+        await refresh();
+        await refreshNvidiaDiagnostics();
+        if (mounted) {
+          pollTimer = window.setInterval(() => {
+            if (mounted) refresh();
+          }, 2000);
+        }
+      } catch (e: any) {
+        if (mounted) setErr(String(e?.message ?? e));
+      }
+    };
+
+    initializeSetup();
+
+    return () => {
+      mounted = false;
+      if (pollTimer !== null) clearInterval(pollTimer);
+    };
   }, []);
 
   async function run(action: string, path: string, body: any = {}) {
@@ -162,32 +181,23 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     }
   }
 
-  const ollamaOk = !!status?.ollama?.ok;
-  const modelOk = !!status?.ollama?.model_present;
   const comfyOk = !!status?.comfyui?.ok;
   const ffOk = !!status?.ffmpeg?.ok;
   const backendBundleOk = !!status?.backend_bundle?.ok;
-  const backendBundleDirectmlOk = !!status?.backend_bundle_directml?.ok;
   const edmgOk = !!status?.edmg?.available;
   const sevenOk = !!status?.sevenzip?.ok;
   const aiConfig = status?.ai_config ?? null;
   const nvidiaProfile = status?.nvidia_profile ?? aiConfig?.nvidia_profile ?? null;
-  const directmlAvailable = !!status?.hardware?.supports_directml;
   const aiLabel = String(aiConfig?.label ?? "NVIDIA NIM / OpenAI-compatible provider");
-  const ollamaRequired = !!aiConfig?.ollama_required;
-  const modelRequired = !!aiConfig?.model_required;
+  const nvidiaEnabled = !!nvidiaProfile?.enabled || !!status?.nvidia_mode;
+  const nvidiaPlannerOk = !!status?.nvidia_planner?.ok || aiConfig?.provider === "openai_compat";
   const platformKind = normalizePlatformKind(studioPaths?.platform);
   const isWindows = platformKind === "windows";
-  const ollamaDownloadUrl = isWindows
-    ? "https://ollama.com/download/windows"
-    : platformKind === "linux"
-      ? "https://ollama.com/download/linux"
-      : "https://ollama.com/download";
   const comfyDocsUrl = isWindows
     ? "https://docs.comfy.org/installation/comfyui_portable_windows"
     : "https://docs.comfy.org/";
   const storageFieldConfigs = getStorageFieldConfigs(platformKind);
-  const setupReady = backendBundleOk && ffOk && (!ollamaRequired || (ollamaOk && modelOk));
+  const setupReady = backendBundleOk && ffOk && nvidiaEnabled && nvidiaPlannerOk;
   const fullSetupReady = isWindows && setupReady && sevenOk;
 
   function deriveStorageLayout(studioHome: string): StorageDraft {
@@ -325,14 +335,13 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     setBusy(`pack_${packId}`);
     setErr("");
     try {
-      // Accept licenses for all non-ollama models in the pack before install.
+      // Accept licenses for all catalog-backed models in the pack before install.
       const pack = (modelsCatalog?.packs ?? []).find((p: any) => p.id === packId);
       const all = [...(modelsCatalog?.catalog ?? []), ...(modelsCatalog?.user ?? [])];
       const accepted = modelsCatalog?.accepted ?? {};
       for (const mid of (pack?.models ?? [])) {
         const m = all.find((x: any) => x.id === mid);
         if (!m) continue;
-        if (m.source === "ollama") continue;
         if (accepted[mid]) continue;
         await apiPost("/v1/models/accept", { model_id: mid, license_id: m.license_id ?? "unknown" });
       }
@@ -349,7 +358,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     <div>
       <h2>NVIDIA Runtime Setup</h2>
       <div className="small" style={{ marginTop: 6 }}>
-        NVIDIA Kit is the primary Studio shell. This page checks NIM planning, OpenUSD/RTX handoff readiness, backend dependencies, and legacy fallback engines while the remaining React client is phased out.
+        NVIDIA Kit is the primary Studio shell. This page checks NIM planning, OpenUSD/RTX handoff readiness, and backend dependencies while the remaining React client is phased out.
       </div>
 
       {err && (
@@ -439,15 +448,9 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     <Badge ok={isWindows ? fullSetupReady : setupReady} label={isWindows ? (fullSetupReady ? "Ready" : "Setup") : (setupReady ? "Ready" : "Manual")} />
   </div>
   <div className="small" style={{ marginTop: 6 }}>
-    {isWindows ? (
-      ollamaRequired
-      ? "Runs the NVIDIA-first installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> managed Ollama fallback install -> pull fallback model -> ComfyUI secondary workflow install."
-      : `Runs the NVIDIA-first installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> secondary ComfyUI workflow install. Ollama is skipped because Studio AI is currently set to ${aiLabel}.`
-    ) : (
-      ollamaRequired
-        ? "Linux and macOS use the manual NVIDIA path: run the backend, configure the NIM endpoint, install Ollama only as a fallback, and run ComfyUI only for secondary workflows."
-        : `Linux and macOS use the manual NVIDIA path: run the backend, configure the NIM endpoint, and add ComfyUI only for secondary workflows. Ollama is a fallback because Studio AI is currently set to ${aiLabel}.`
-    )}
+    {isWindows
+      ? "Runs the NVIDIA installer pipeline: backend runtime bundle -> NVIDIA profile checks -> 7-Zip (if needed) -> NVIDIA ComfyUI secondary workflow install."
+      : `Linux and macOS use the manual NVIDIA path: run the backend, configure the NIM endpoint, and add ComfyUI only for secondary workflows. Planner path: ${aiLabel}.`}
   </div>
   <div data-testid="setup-active-ai-path" className="small" style={{ marginTop: 8, opacity: 0.9 }}>
     Active AI path: <b>{aiLabel}</b>
@@ -464,20 +467,6 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           onClick={() => run("full_nvidia", "/v1/setup/full/install", { flavor: "nvidia" })}
         >
           {busy === "full_nvidia" ? "Running…" : "Prepare NVIDIA Runtime"}
-        </button>
-        <button
-          className="secondary"
-          disabled={busy === "full_cpu"}
-          onClick={() => run("full_cpu", "/v1/setup/full/install", { flavor: "cpu" })}
-        >
-          {busy === "full_cpu" ? "Running…" : "Fallback Setup (CPU)"}
-        </button>
-        <button
-          className="secondary"
-          disabled={busy === "full_amd"}
-          onClick={() => run("full_amd", "/v1/setup/full/install", { flavor: "amd", bundle: "studio_bundle_directml" })}
-        >
-          {busy === "full_amd" ? "Running…" : "Fallback Setup (AMD / DirectML)"}
         </button>
       </>
     ) : (
@@ -514,16 +503,6 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   <div className="small" style={{ marginTop: 6 }}>
     Installs the backend audio, ASR, and internal-render Python dependencies into the Studio backend environment.
   </div>
-  {isWindows ? (
-    <div className="small" style={{ marginTop: 8, opacity: 0.88 }}>
-      DirectML available on this machine: <b>{directmlAvailable ? "yes" : "no"}</b>
-      {status?.hardware?.directml_device_name ? <> • device <code>{status.hardware.directml_device_name}</code></> : null}
-    </div>
-  ) : (
-    <div className="small" style={{ marginTop: 8, opacity: 0.88 }}>
-      Linux uses the standard backend runtime bundle. The DirectML runtime remains Windows-only.
-    </div>
-  )}
   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
     <button
       disabled={busy === "backend_bundle"}
@@ -531,14 +510,6 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     >
       {busy === "backend_bundle" ? "Installing…" : "Install Backend Runtime"}
     </button>
-    {isWindows ? (
-      <button
-        disabled={busy === "backend_bundle_directml"}
-        onClick={() => run("backend_bundle_directml", "/v1/setup/backend/install", { bundle: "studio_bundle_directml" })}
-      >
-        {busy === "backend_bundle_directml" ? "Installing…" : "Install AMD / DirectML Runtime"}
-      </button>
-    ) : null}
   </div>
   {!backendBundleOk && status?.backend_bundle?.hint && (
     <div className="small" style={{ marginTop: 10 }}>
@@ -550,16 +521,6 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
       Missing modules: <code>{status.backend_bundle.missing.join(", ")}</code>
     </div>
   )}
-  {isWindows && !backendBundleDirectmlOk && status?.backend_bundle_directml?.hint ? (
-    <div className="small" style={{ marginTop: 10 }}>
-      DirectML fix: {status.backend_bundle_directml.hint}
-    </div>
-  ) : null}
-  {isWindows && !!status?.backend_bundle_directml?.missing?.length ? (
-    <div className="small" style={{ marginTop: 10, opacity: 0.9 }}>
-      DirectML modules: <code>{status.backend_bundle_directml.missing.join(", ")}</code>
-    </div>
-  ) : null}
 </div>
 
 <div className="card">
@@ -589,90 +550,25 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   )}
 </div>
 
-
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 800 }}>1) Ollama (Fallback AI)</div>
-            <Badge ok={ollamaRequired ? ollamaOk : true} label={ollamaRequired ? (ollamaOk ? "OK" : "Missing") : (ollamaOk ? "Installed" : "Optional")} />
+            <div style={{ fontWeight: 800 }}>1) NVIDIA Planner</div>
+            <Badge ok={nvidiaPlannerOk} label={nvidiaPlannerOk ? "Ready" : "Check"} />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
-            {ollamaRequired
-              ? <>Studio planning is configured to use Ollama locally at <code>{status?.ollama?.url ?? "http://127.0.0.1:11434"}</code>.</>
-              : <>Current AI path is <b>{aiLabel}</b>, so Ollama is only needed as a local fallback.</>}
+            Planner path: <b>{aiLabel}</b>
+            {aiConfig?.base_url ? <> • endpoint <code>{aiConfig.base_url}</code></> : null}
+            {aiConfig?.model ? <> • model <code>{aiConfig.model}</code></> : null}
           </div>
           <div className="small" style={{ marginTop: 6, opacity: 0.9 }}>
-            Studio-managed Ollama models live under <code>{status?.ollama?.managed_models_dir ?? "(set your Models path first)"}</code>.
-          </div>
-          {!isWindows ? (
-            <div className="small" style={{ marginTop: 8, opacity: 0.88 }}>
-              Linux support expects a system-installed <code>ollama</code> binary or a custom <code>EDMG_OLLAMA_PATH</code>. The automatic Ollama installer remains Windows-only.
-            </div>
-          ) : null}
-          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              className="secondary"
-              onClick={() => window.edmg?.openExternal?.(ollamaDownloadUrl)}
-            >
-              Open Ollama Download Page
-            </button>
-            <button
-              disabled={!isWindows || busy === "ollama"}
-              onClick={() => run("ollama", "/v1/setup/ollama/install_managed", {})}
-            >
-              {busy === "ollama" ? "Installing…" : (isWindows ? "Install Ollama Into External Tools" : "Windows-only Managed Install")}
-            </button>
-            <button
-              className="secondary"
-              disabled={!status?.ollama?.launch_available || busy === "ollama_managed"}
-              onClick={() => run("ollama_managed", "/v1/setup/ollama/start_managed", {})}
-            >
-              {busy === "ollama_managed" ? "Starting…" : "Start Studio-managed Ollama"}
-            </button>
-          </div>
-          {!ollamaOk && ollamaRequired && status?.ollama?.hint && (
-            <div className="small" style={{ marginTop: 10 }}>
-              Fix: {status.ollama.hint}
-            </div>
-          )}
-          {!status?.ollama?.launch_available && status?.ollama?.launch_hint ? (
-            <div className="small" style={{ marginTop: 10, opacity: 0.88 }}>
-              Launch path: {status.ollama.launch_hint}
-            </div>
-          ) : null}
-          {status?.ollama?.managed_launch_script ? (
-            <div className="small" style={{ marginTop: 10, opacity: 0.88 }}>
-              Helper script: <code>{status.ollama.managed_launch_script}</code>
-            </div>
-          ) : null}
-          {!ollamaRequired && aiConfig?.hint ? (
-            <div className="small" style={{ marginTop: 10, opacity: 0.88 }}>
-              {aiConfig.hint}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ fontWeight: 800 }}>2) Fallback AI Model</div>
-            <Badge ok={modelRequired ? modelOk : true} label={modelRequired ? (modelOk ? "Ready" : "Not pulled") : (modelOk ? "Available" : "Optional")} />
-          </div>
-          <div className="small" style={{ marginTop: 6 }}>
-            {modelRequired
-              ? <>Default Ollama model: <code>{status?.ollama?.model ?? "(unknown)"}</code></>
-              : <>The active AI path is <b>{aiLabel}</b>, so pulling an Ollama model is only for fallback planning.</>}
-          </div>
-          <div className="small" style={{ marginTop: 6, opacity: 0.9 }}>
-            Pulled Ollama models are expected under <code>{status?.ollama?.managed_models_dir ?? "(unknown)"}</code> when Studio starts Ollama itself.
+            Planning must resolve through NVIDIA NIM or a NVIDIA-compatible OpenAI endpoint configured in Settings.
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              disabled={!ollamaOk || busy === "pull"}
-              onClick={() => run("pull", "/v1/setup/ollama/pull", { model: status?.ollama?.model })}
-            >
-              {busy === "pull" ? "Pulling…" : "Pull Model"}
-            </button>
             <button className="secondary" onClick={refresh}>
               Refresh
+            </button>
+            <button className="secondary" onClick={() => window.edmg?.openExternal?.("https://docs.nvidia.com/nim/")}>
+              Open NVIDIA NIM Docs
             </button>
           </div>
           {status?.tasks?.length ? (
@@ -743,12 +639,6 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
               {isWindows ? "Open ComfyUI Portable Guide" : "Open ComfyUI Docs"}
             </button>
             <button
-              disabled={!isWindows || busy === "comfyui"}
-              onClick={() => run("comfyui", "/v1/setup/comfyui/portable/install", { flavor: "cpu" })}
-            >
-              {busy === "comfyui" ? "Working…" : (isWindows ? "Install ComfyUI Portable (CPU)" : "Windows-only Portable Install")}
-            </button>
-            <button
               disabled={!isWindows || busy === "comfyui_n"}
               onClick={() => run("comfyui_n", "/v1/setup/comfyui/portable/install", { flavor: "nvidia" })}
             >
@@ -756,9 +646,9 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             </button>
             <button
               disabled={!isWindows || busy === "start_comfy"}
-              onClick={() => run("start_comfy", "/v1/setup/comfyui/portable/start", { flavor: "cpu" })}
+              onClick={() => run("start_comfy", "/v1/setup/comfyui/portable/start", { flavor: "nvidia" })}
             >
-              {busy === "start_comfy" ? "Starting…" : (isWindows ? "Start ComfyUI (CPU)" : "Windows-only Portable Start")}
+              {busy === "start_comfy" ? "Starting…" : (isWindows ? "Start ComfyUI (NVIDIA)" : "Windows-only Portable Start")}
             </button>
           </div>
 
@@ -799,7 +689,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               disabled={busy === "install_edmg"}
-              onClick={() => run("install_edmg", "/v1/setup/edmg/install", { mode: "standard", backend: "cpu" })}
+              onClick={() => run("install_edmg", "/v1/setup/edmg/install", { mode: "standard", backend: "nvidia" })}
             >
               {busy === "install_edmg" ? "Installing…" : (edmgOk ? "Repair EDMG Core" : "Install EDMG Core")}
             </button>
@@ -893,9 +783,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
         <div className="card">
           <div style={{ fontWeight: 800 }}>Ready check</div>
           <div className="small" style={{ marginTop: 6 }}>
-            {ollamaRequired
-              ? "When the backend runtime bundle + NVIDIA profile + Ollama fallback + FFmpeg are all OK, EDMG Studio is ready for the NVIDIA-first workflow. ComfyUI and EDMG Core remain secondary support lanes."
-              : "When the backend runtime bundle + NVIDIA/NIM AI path + FFmpeg are all OK, EDMG Studio is ready for the NVIDIA-first workflow. ComfyUI and EDMG Core remain secondary support lanes."}
+            When the backend runtime bundle, NVIDIA profile, NVIDIA/NIM AI path, and FFmpeg are all OK, EDMG Studio is ready for the NVIDIA workflow. ComfyUI and EDMG Core remain secondary support lanes.
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <button

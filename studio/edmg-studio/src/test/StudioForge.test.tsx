@@ -8,12 +8,6 @@ import { installEdmgBridge, installFetchMock, renderWithStudio } from "./testUti
 const ORIGINAL_STUDIO_FORGE_FLAG = import.meta.env.VITE_EDMG_ENABLE_STUDIO_FORGE;
 
 const READY_STATUS = {
-  ollama: {
-    ok: false,
-    model_present: false,
-    model: "qwen3:8b",
-    url: "http://127.0.0.1:11434",
-  },
   comfyui: {
     ok: false,
     url: "http://127.0.0.1:8188",
@@ -33,8 +27,6 @@ const READY_STATUS = {
     provider: "openai_compat",
     base_url: "http://127.0.0.1:8001/v1",
     model: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-    ollama_required: false,
-    model_required: false,
   },
   nvidia_profile: {
     enabled: true,
@@ -171,12 +163,6 @@ describe("Studio Forge", () => {
           enabled: false,
           profile: "omniverse",
           services: {},
-        },
-        ollama: {
-          ok: false,
-          model_present: false,
-          model: "",
-          url: "http://127.0.0.1:11434",
         },
         comfyui: {
           ok: false,

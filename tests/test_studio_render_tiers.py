@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from edmg_studio_backend import app as studio_app
+from edmg_studio_backend.errors import UserFacingError
 from edmg_studio_backend.store.jobs import JobStore
 from edmg_studio_backend.store.projects import ProjectStore
 
@@ -139,17 +141,14 @@ def test_auto_model_reports_sd35_vram_guard_when_no_lighter_model_installed(tmp_
     }
     monkeypatch.setattr(studio_app.models, "installed_path", lambda mid: installed.get(mid))
 
-    preflight = studio_app._internal_render_preflight_data(
-        proj.id,
-        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": True},
-    )
-
-    assert preflight["mode"] == "proxy"
-    assert preflight["requested_model_id"] == "auto"
-    assert any("14 GB" in warning for warning in preflight["warnings"])
+    with pytest.raises(UserFacingError):
+        studio_app._internal_render_preflight_data(
+            proj.id,
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+        )
 
 
-def test_explicit_sd35_on_midrange_cuda_uses_proxy_fallback(tmp_path, monkeypatch):
+def test_explicit_sd35_on_midrange_cuda_rejects_proxy_fallback(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
@@ -172,23 +171,20 @@ def test_explicit_sd35_on_midrange_cuda_uses_proxy_fallback(tmp_path, monkeypatc
     }
     monkeypatch.setattr(studio_app.models, "installed_path", lambda mid: installed.get(mid))
 
-    preflight = studio_app._internal_render_preflight_data(
-        proj.id,
-        {
-            "variant_index": 0,
-            "fps_render": 2,
-            "fps_output": 24,
-            "model_id": "hf_sd35_medium_internal",
-            "allow_proxy_fallback": True,
-        },
-    )
-
-    assert preflight["mode"] == "proxy"
-    assert preflight["requested_model_id"] == "hf_sd35_medium_internal"
-    assert any("14 GB" in warning for warning in preflight["warnings"])
+    with pytest.raises(UserFacingError):
+        studio_app._internal_render_preflight_data(
+            proj.id,
+            {
+                "variant_index": 0,
+                "fps_render": 2,
+                "fps_output": 24,
+                "model_id": "hf_sd35_medium_internal",
+                "allow_proxy_fallback": False,
+            },
+        )
 
 
-def test_internal_preflight_includes_tier_plan_for_cpu_proxy(tmp_path, monkeypatch):
+def test_internal_preflight_rejects_cpu_proxy(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
@@ -207,18 +203,14 @@ def test_internal_preflight_includes_tier_plan_for_cpu_proxy(tmp_path, monkeypat
     })
     monkeypatch.setattr(studio_app.models, "installed_path", lambda _mid: None)
 
-    preflight = studio_app._internal_render_preflight_data(
-        proj.id,
-        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": True, "render_tier": "quality"},
-    )
-
-    assert preflight["mode"] == "proxy"
-    assert preflight["tier_plan"]["applied_tier"] == "draft"
-    assert preflight["tier_plan"]["defaults"]["width"] == 640
-    assert any("draft" in w.lower() or "cpu" in w.lower() for w in preflight["warnings"])
+    with pytest.raises(UserFacingError):
+        studio_app._internal_render_preflight_data(
+            proj.id,
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False, "render_tier": "quality"},
+        )
 
 
-def test_run_pipeline_local_fallback_uses_tier_defaults_on_cpu(tmp_path, monkeypatch):
+def test_run_pipeline_rejects_cpu_local_fallback(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
@@ -238,32 +230,19 @@ def test_run_pipeline_local_fallback_uses_tier_defaults_on_cpu(tmp_path, monkeyp
     monkeypatch.setattr(studio_app.comfy_pool, "diagnose", lambda _req: {"compatible": [], "busy_compatible": []})
     monkeypatch.setattr(studio_app.models, "installed_path", lambda mid: Path("/tmp/fake-model") if mid == "hf_sd15_internal" else None)
 
-    captured = {}
-
-    def fake_render_internal_video(project_id, req):
-        captured["req"] = req
-        return {"ok": True, "job": {"id": "job-internal"}, "preflight": {"mode": "diffusion", "tier_plan": {"applied_tier": req.render_tier}}}
-
-    monkeypatch.setattr(studio_app, "render_internal_video", fake_render_internal_video)
-
-    result = studio_app.run_pipeline(proj.id, variant_index=0, preset="quality", mode="auto", engine="auto")
-
-    assert result["ok"] is True
-    assert result["selected"]["mode"] == "internal"
-    assert captured["req"].render_tier == "draft"
-    assert captured["req"].width == 640
-    assert captured["req"].device_preference == "cpu"
+    with pytest.raises(UserFacingError):
+        studio_app.run_pipeline(proj.id, variant_index=0, preset="quality", mode="auto", engine="auto")
 
 
-def test_cpu_chunk_plan_enabled_for_long_render():
-    hw = {"backend": "cpu", "backend_family": "cpu_only", "vram_gb": 0.0, "ram_gb": 8.0, "cpu_threads": 4}
+def test_cuda_required_plan_does_not_enable_cpu_chunks():
+    hw = {"backend": "nvidia_cuda_required", "backend_family": "nvidia_cuda_required", "vram_gb": 0.0, "ram_gb": 8.0, "cpu_threads": 4}
     plan = studio_app._build_internal_render_plan(hw, requested_tier="auto", duration_s=180.0)
 
     assert plan["applied_tier"] == "draft"
-    assert plan["chunk_plan"]["enabled"] is True
-    assert plan["chunk_plan"]["resume_recommended"] is True
-    assert plan["defaults"]["resume_existing_frames"] is True
-    assert plan["defaults"]["interpolation_engine"] == "fps"
+    assert plan["device_preference"] == "cuda"
+    assert plan["chunk_plan"]["enabled"] is False
+    assert plan["supports_proxy_render"] is False
+    assert any("CUDA runtime is required" in note for note in plan["notes"])
 
 
 def test_render_profiles_recommend_laptop_safe_for_cpu(monkeypatch):

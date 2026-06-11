@@ -154,8 +154,8 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
   const [internalKeyInterval, setInternalKeyInterval] = useState<number>(5);
   const [internalInterp, setInternalInterp] = useState<"auto"|"minterpolate"|"fps"|"rife">("auto");
   const [internalModelId, setInternalModelId] = useState<string>("auto");
-  const [internalRenderMode, setInternalRenderMode] = useState<"auto"|"diffusion"|"hosted"|"proxy">("auto");
-  const [internalDevicePreference, setInternalDevicePreference] = useState<"auto"|"cpu"|"cuda"|"mps"|"directml">("auto");
+  const [internalRenderMode, setInternalRenderMode] = useState<"auto"|"diffusion">("auto");
+  const [internalDevicePreference, setInternalDevicePreference] = useState<"auto"|"cuda">("auto");
   const [internalDevicePreferenceTouched, setInternalDevicePreferenceTouched] = useState<boolean>(false);
   const [internalRenderTier, setInternalRenderTier] = useState<"auto"|"draft"|"balanced"|"quality">((savedRenderDefaults.internalRenderTier as any) || "auto");
 
@@ -255,7 +255,6 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
 
   const [caps, setCaps] = useState<any>(null);
   const [hardware, setHardware] = useState<any>(null);
-  const [renderProviders, setRenderProviders] = useState<any>(null);
   const [modelCatalog, setModelCatalog] = useState<CatalogEntry[]>([]);
   const [installedModels, setInstalledModels] = useState<Record<string, boolean>>({});
   const [projectAssets, setProjectAssets] = useState<{ refs: { path: string }[] }>({ refs: [] });
@@ -365,10 +364,6 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
     }),
     [installedModels, selectedStillEngine, selectedStillFamily, selectedStillModel?.id, stillModels]
   );
-  const internalHostedVisible = !!renderProviders?.stability?.visible;
-  const internalDirectmlDetected = !!hardware?.hardware?.supports_directml;
-  const internalDirectmlAvailable = !!renderProviders?.directml?.enabled && internalDirectmlDetected;
-
   const buildInternalPayload = () => ({
     variant_index: selectedVariant,
     fps_output: internalFpsOut,
@@ -385,8 +380,8 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
     render_mode: internalRenderMode,
     render_tier: internalRenderTier,
     device_preference: internalDevicePreference,
-    allow_hosted_fallback: true,
-    allow_proxy_fallback: true,
+    allow_hosted_fallback: false,
+    allow_proxy_fallback: false,
     resume_existing_frames: internalResumeExisting,
   });
 
@@ -465,23 +460,10 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
   useEffect(() => {
     const preferred = String(hardware?.hardware?.device_preference || "auto");
     if (internalDevicePreferenceTouched || !preferred || preferred === "auto") return;
-    if (preferred === "directml" && !internalDirectmlAvailable) return;
-    if (preferred === "directml" || preferred === "cuda" || preferred === "mps" || preferred === "cpu") {
-      if (internalDevicePreference !== preferred) setInternalDevicePreference(preferred as any);
+    if (preferred === "cuda" && internalDevicePreference !== "cuda") {
+      setInternalDevicePreference("cuda");
     }
-  }, [hardware, internalDevicePreference, internalDevicePreferenceTouched, internalDirectmlAvailable]);
-
-  useEffect(() => {
-    if (!internalHostedVisible && internalRenderMode === "hosted") {
-      setInternalRenderMode("auto");
-    }
-  }, [internalHostedVisible, internalRenderMode]);
-
-  useEffect(() => {
-    if (!internalDirectmlAvailable && internalDevicePreference === "directml") {
-      setInternalDevicePreference("auto");
-    }
-  }, [internalDirectmlAvailable, internalDevicePreference]);
+  }, [hardware, internalDevicePreference, internalDevicePreferenceTouched]);
 
   const refreshReferenceAssets = async (id: string) => {
     if (!id) return;
@@ -581,7 +563,6 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
   useEffect(() => {
     apiGet("/v1/comfyui/capabilities").then(setCaps).catch(() => {});
     apiGet("/v1/hardware").then((d) => setHardware(d)).catch(() => {});
-    apiGet("/v1/settings/render_providers").then(setRenderProviders).catch(() => {});
     apiGet("/v1/models/catalog").then((d) => {
       const built = Array.isArray(d?.catalog) ? d.catalog : [];
       const user = Array.isArray(d?.user) ? d.user : [];
@@ -750,8 +731,8 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
         model_id: internalModelId,
         apply_storyboard: true,
         overwrite_timeline: true,
-        allow_hosted_fallback: true,
-        allow_proxy_fallback: true,
+        allow_hosted_fallback: false,
+        allow_proxy_fallback: false,
         fps_output: internalFpsOut,
         fps_render: internalFpsRender,
         keyframe_interval_s: internalKeyInterval,
@@ -1245,7 +1226,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
           <div className="row" style={{ marginTop: 10, gap: 10, flexWrap: "wrap" }}>
             <button onClick={runStoryboardMovie} disabled={!variantCount || !analysis}>AI Storyboard Movie</button>
             <button onClick={runPipeline} disabled={!variantCount}>Preset + Render (one click)</button>
-            <button className="secondary" onClick={runInternalVideo} disabled={!variantCount}>Internal / Hosted</button>
+            <button className="secondary" onClick={runInternalVideo} disabled={!variantCount}>Internal NVIDIA</button>
             <button className="secondary" onClick={assemble} disabled={!variantCount}>Assemble only</button>
           </div>
 
@@ -1262,9 +1243,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                     <div className="small">Render mode</div>
                     <select value={internalRenderMode} onChange={(e) => setInternalRenderMode(e.target.value as any)}>
                       <option value="auto">Auto</option>
-                      <option value="diffusion">Local diffusion</option>
-                      {internalHostedVisible ? <option value="hosted">Hosted Stability</option> : null}
-                      <option value="proxy">Proxy only</option>
+                      <option value="diffusion">NVIDIA CUDA diffusion</option>
                     </select>
                   </div>
                   <div style={{ minWidth: 140 }}>
@@ -1291,7 +1270,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
 <div style={{ minWidth: 240 }}>
   <div className="small">Internal model</div>
   <select value={internalModelId} onChange={(e) => setInternalModelId(e.target.value)}>
-    <option value="auto">Auto (SD3.5 on strong GPU, SDXL or SD1.5 fallback)</option>
+    <option value="auto">Auto (SD3.5 on strong CUDA GPU, then SDXL or SD1.5)</option>
     {internalModelOptions.map((m) => (
       <option key={m.id} value={m.id}>{m.name}</option>
     ))}
@@ -1304,10 +1283,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                       setInternalDevicePreference(e.target.value as any);
                     }}>
                       <option value="auto">Auto</option>
-                      <option value="cpu">CPU</option>
-                      {hardware?.hardware?.available_backends?.includes?.("cuda") ? <option value="cuda">CUDA</option> : null}
-                      {hardware?.hardware?.available_backends?.includes?.("mps") ? <option value="mps">MPS</option> : null}
-                      {internalDirectmlAvailable ? <option value="directml">DirectML</option> : null}
+                      <option value="cuda">CUDA</option>
                     </select>
                   </div>
                   <div style={{ minWidth: 190 }}>
@@ -1321,24 +1297,8 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                   </div>
                 </div>
                 <div className="small" style={{ marginTop: 8, opacity: 0.85 }}>
-                  Tip: install internal models in Models first. Auto tiering adapts the internal renderer for laptops, Apple Silicon, CPU-only systems, and higher-end GPUs.
+                  Tip: install internal models in Models first. Auto tiering targets CUDA GPUs and the NVIDIA runtime profile.
                 </div>
-                {internalHostedVisible ? (
-                  <div className="small" style={{ marginTop: 6, opacity: 0.82 }}>
-                    Hosted Stability fallback is configured: <b>{renderProviders?.stability?.service}</b>
-                    {renderProviders?.stability?.service === "sd3" ? <> / <b>{renderProviders?.stability?.model}</b></> : null}
-                  </div>
-                ) : null}
-                {internalDirectmlAvailable ? (
-                  <div className="small" style={{ marginTop: 6, opacity: 0.82 }}>
-                    DirectML runtime detected on <b>{hardware?.hardware?.directml_device_name || hardware?.hardware?.device_name}</b>.
-                  </div>
-                ) : null}
-                {internalDirectmlDetected && !internalDirectmlAvailable ? (
-                  <div className="small" style={{ marginTop: 6, opacity: 0.82 }}>
-                    DirectML runtime is available on this machine but currently disabled in Settings.
-                  </div>
-                ) : null}
                 {savedRenderDefaults.profileId ? (
                   <div className="small" style={{ marginTop: 6, opacity: 0.82 }}>
                     Saved defaults: <b>{String(savedRenderDefaults.profileId).replace(/_/g, " ")}</b>
@@ -1350,13 +1310,6 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                   {internalPreflight?.ok ? (
                     <div>
                       <div className="small">Mode: <b>{internalPreflight.mode || "diffusion"}</b> • Device: <b>{internalPreflight.device}</b> • Model: <b>{internalPreflight.model_id}</b></div>
-                      {internalPreflight?.hosted_provider ? (
-                        <div className="small" style={{ marginTop: 4 }}>
-                          Hosted provider: <b>{internalPreflight.hosted_provider.provider}</b> • service <b>{internalPreflight.hosted_provider.service}</b>
-                          {internalPreflight.hosted_provider.model ? <> • model <b>{internalPreflight.hosted_provider.model}</b></> : null}
-                          {internalPreflight.hosted_provider.style_preset ? <> • style <b>{internalPreflight.hosted_provider.style_preset}</b></> : null}
-                        </div>
-                      ) : null}
                       <div className="small" style={{ marginTop: 4 }}>
                         Tier: requested <b>{internalPreflight?.tier_plan?.requested_tier || internalRenderTier}</b> • applied <b>{internalPreflight?.tier_plan?.applied_tier || "auto"}</b> • recommended <b>{internalPreflight?.tier_plan?.recommended_tier || hardware?.hardware?.recommended_tier || "draft"}</b>
                       </div>
@@ -1372,7 +1325,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                         </div>
                       ) : null}
                       <div className="small" style={{ marginTop: 4 }}>
-                        Hardware: <b>{hardware?.hardware?.device_name || internalPreflight?.hardware?.device_name || internalPreflight.device}</b> • backend family <b>{hardware?.hardware?.backend_family || internalPreflight?.hardware?.backend_family || "cpu_only"}</b> • RAM <b>{Number(hardware?.hardware?.ram_gb || internalPreflight?.hardware?.ram_gb || 0).toFixed(1)} GB</b>
+                        Hardware: <b>{hardware?.hardware?.device_name || internalPreflight?.hardware?.device_name || internalPreflight.device}</b> • backend family <b>{hardware?.hardware?.backend_family || internalPreflight?.hardware?.backend_family || "nvidia_cuda_required"}</b> • RAM <b>{Number(hardware?.hardware?.ram_gb || internalPreflight?.hardware?.ram_gb || 0).toFixed(1)} GB</b>
                       </div>
                       <div className="small" style={{ marginTop: 4 }}>
                         Internal models: SD 1.5 <b>{internalPreflight?.installed_internal_models?.hf_sd15_internal ? "installed" : "missing"}</b> • SDXL <b>{internalPreflight?.installed_internal_models?.hf_sdxl_internal ? "installed" : "missing"}</b> • SD3.5 <b>{internalPreflight?.installed_internal_models?.hf_sd35_medium_internal ? "installed" : "missing"}</b>
@@ -1408,7 +1361,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
                           {" "}• final <b>{internalPreflight.cache.final_exists ? "yes" : "no"}</b>
                         </div>
                       ) : null}
-                      {!internalHostedVisible && !internalPreflight?.installed_internal_models?.hf_sd15_internal && !internalPreflight?.installed_internal_models?.hf_sdxl_internal && !internalPreflight?.installed_internal_models?.hf_sd35_medium_internal ? (
+                      {!internalPreflight?.installed_internal_models?.hf_sd15_internal && !internalPreflight?.installed_internal_models?.hf_sdxl_internal && !internalPreflight?.installed_internal_models?.hf_sd35_medium_internal ? (
                         <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                           <button className="secondary" onClick={() => onNavigate?.("models")}>Open Models to install internal renderer</button>
                         </div>
@@ -1885,7 +1838,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
               
               <div style={{ marginTop: 10, fontWeight: 800 }}>Camera track</div>
               <div className="small" style={{ opacity: 0.85 }}>
-                Keyframes drive internal camera motion (zoom/pan/rotation). If empty, a safe fallback motion is used.
+                Keyframes drive internal camera motion (zoom/pan/rotation). If empty, a deterministic motion track is used.
               </div>
 
               <div style={{ marginTop: 8 }}>
@@ -2514,7 +2467,7 @@ const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/
             Audio analysis: {analysis ? "✓" : "×"} • Plan variants: {variantCount ? "✓" : "×"}
           </div>
           <div className="small" style={{ marginTop: 8 }}>
-            AI Storyboard Movie applies the selected storyboard to prompt tracks, writes audio-reactive motion schedules, queues a full MP4, and falls back to proxy motion when diffusion is unavailable.
+            AI Storyboard Movie applies the selected storyboard to prompt tracks, writes audio-reactive motion schedules, and queues a CUDA internal MP4 through the NVIDIA profile.
           </div>
 
           <hr />

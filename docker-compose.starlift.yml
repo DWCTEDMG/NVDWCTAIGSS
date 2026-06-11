@@ -13,9 +13,15 @@ services:
       EDMG_STUDIO_BACKEND_HOST: 0.0.0.0
       EDMG_STUDIO_BACKEND_PORT: 7863
       EDMG_AI_MODE: ${EDMG_AI_MODE:-local}
-      EDMG_AI_PROVIDER: ${EDMG_AI_PROVIDER:-rule_based}
-      EDMG_AI_OLLAMA_URL: ${EDMG_AI_OLLAMA_URL:-http://host.docker.internal:11434}
-      EDMG_AI_OLLAMA_MODEL: ${EDMG_AI_OLLAMA_MODEL:-qwen3:8b}
+      EDMG_AI_PROVIDER: ${EDMG_AI_PROVIDER:-openai_compat}
+      EDMG_NVIDIA_MODE: ${EDMG_NVIDIA_MODE:-1}
+      EDMG_NVIDIA_PROFILE: ${EDMG_NVIDIA_PROFILE:-omniverse}
+      EDMG_NVIDIA_NIM_URL: ${EDMG_NVIDIA_NIM_URL:-http://host.docker.internal:8001}
+      EDMG_AI_OPENAI_COMPAT_BASE_URL: ${EDMG_AI_OPENAI_COMPAT_BASE_URL:-http://host.docker.internal:8001/v1}
+      EDMG_AI_OPENAI_COMPAT_MODEL: ${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}
+      EDMG_NVIDIA_RIVA_URL: ${EDMG_NVIDIA_RIVA_URL:-host.docker.internal:50051}
+      EDMG_NVIDIA_RIVA_ASR: ${EDMG_NVIDIA_RIVA_ASR:-1}
+      EDMG_NVIDIA_RIVA_ASR_FALLBACK: ${EDMG_NVIDIA_RIVA_ASR_FALLBACK:-0}
       EDMG_COMFYUI_URL: ${EDMG_COMFYUI_URL:-http://host.docker.internal:8188}
       EDMG_FFMPEG_PATH: ffmpeg
     volumes:

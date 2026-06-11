@@ -8,14 +8,12 @@ import { useUiMode } from "../components/uiMode";
 import { clearRenderDefaults, readRenderDefaults, writeRenderDefaults } from "../components/renderDefaults";
 import type { PageProps } from "../types/pageProps";
 
-type SecretName = "hf_token" | "civitai_api_key" | "openai_compat_api_key" | "stability_api_key";
+type SecretName = "hf_token" | "civitai_api_key" | "openai_compat_api_key";
 
 type StudioAiSettings = {
   mode: string;
   provider: string;
   aiBaseUrl: string;
-  ollamaUrl: string;
-  ollamaModel: string;
   openaiCompatBaseUrl: string;
   openaiCompatModel: string;
   source?: string;
@@ -46,8 +44,6 @@ const DEFAULT_AI_SETTINGS: StudioAiSettings = {
   mode: "local",
   provider: "openai_compat",
   aiBaseUrl: "http://127.0.0.1:7862",
-  ollamaUrl: "http://127.0.0.1:11434",
-  ollamaModel: "qwen3:8b",
   openaiCompatBaseUrl: "http://127.0.0.1:8001/v1",
   openaiCompatModel: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   source: "default",
@@ -66,16 +62,14 @@ function normalizeAiSettings(payload?: Partial<StudioAiSettings> | null): Studio
   const mode = String(current.mode ?? DEFAULT_AI_SETTINGS.mode).trim().toLowerCase();
   const providerRaw = String(current.provider ?? DEFAULT_AI_SETTINGS.provider).trim().toLowerCase();
   const provider =
-    providerRaw === "openai" || providerRaw === "openai-compatible"
+    providerRaw === "openai" || providerRaw === "openai-compatible" || providerRaw === "openai_compat"
       ? "openai_compat"
-      : providerRaw || DEFAULT_AI_SETTINGS.provider;
+      : DEFAULT_AI_SETTINGS.provider;
 
   return {
     mode: mode === "http" || mode === "remote" ? "http" : "local",
     provider: provider || DEFAULT_AI_SETTINGS.provider,
     aiBaseUrl: String(current.aiBaseUrl ?? DEFAULT_AI_SETTINGS.aiBaseUrl).trim() || DEFAULT_AI_SETTINGS.aiBaseUrl,
-    ollamaUrl: String(current.ollamaUrl ?? DEFAULT_AI_SETTINGS.ollamaUrl).trim() || DEFAULT_AI_SETTINGS.ollamaUrl,
-    ollamaModel: String(current.ollamaModel ?? DEFAULT_AI_SETTINGS.ollamaModel).trim() || DEFAULT_AI_SETTINGS.ollamaModel,
     openaiCompatBaseUrl:
       String(current.openaiCompatBaseUrl ?? DEFAULT_AI_SETTINGS.openaiCompatBaseUrl).trim() ||
       DEFAULT_AI_SETTINGS.openaiCompatBaseUrl,
@@ -92,8 +86,6 @@ function aiSettingsFingerprint(settings: Partial<StudioAiSettings> | null | unde
     mode: normalized.mode,
     provider: normalized.provider,
     aiBaseUrl: normalized.aiBaseUrl,
-    ollamaUrl: normalized.ollamaUrl,
-    ollamaModel: normalized.ollamaModel,
     openaiCompatBaseUrl: normalized.openaiCompatBaseUrl,
     openaiCompatModel: normalized.openaiCompatModel,
   });
@@ -188,7 +180,7 @@ export default function Settings(props: PageProps) {
   const [secrets, setSecrets] = useState<any>(null);
   const [hardware, setHardware] = useState<any>(null);
   const [renderProfiles, setRenderProfiles] = useState<any>(null);
-  const [renderProviders, setRenderProviders] = useState<any>(null);
+  const [_renderProviders, setRenderProviders] = useState<any>(null);
   const [renderProviderDraft, setRenderProviderDraft] = useState<any>(null);
   const [savedRenderDefaults, setSavedRenderDefaults] = useState<any>(() => readRenderDefaults());
   const [studioBackendSettings, setStudioBackendSettings] = useState<StudioBackendSettings>(DEFAULT_BACKEND_SETTINGS);
@@ -200,11 +192,10 @@ export default function Settings(props: PageProps) {
   const [hfToken, setHfToken] = useState<string>("");
   const [civitaiKey, setCivitaiKey] = useState<string>("");
   const [openaiCompatApiKey, setOpenaiCompatApiKey] = useState<string>("");
-  const [stabilityApiKey, setStabilityApiKey] = useState<string>("");
   const [saving, setSaving] = useState<boolean>(false);
   const [savingBackend, setSavingBackend] = useState<boolean>(false);
   const [savingAi, setSavingAi] = useState<boolean>(false);
-  const [savingProviders, setSavingProviders] = useState<boolean>(false);
+  const [_savingProviders, setSavingProviders] = useState<boolean>(false);
   const [backendRestartRequired, setBackendRestartRequired] = useState<boolean>(false);
   const [backendNotice, setBackendNotice] = useState<string | null>(null);
   const [aiRestartRequired, setAiRestartRequired] = useState<boolean>(false);
@@ -311,8 +302,6 @@ export default function Settings(props: PageProps) {
       mode: nextCfg?.ai_mode,
       provider: nextCfg?.ai_provider,
       aiBaseUrl: nextCfg?.ai_base_url,
-      ollamaUrl: nextCfg?.ai_ollama_url,
-      ollamaModel: nextCfg?.ai_ollama_model,
       openaiCompatBaseUrl: nextCfg?.ai_openai_compat_base_url,
       openaiCompatModel: nextCfg?.ai_openai_compat_model,
       source: nextCfg ? "backend" : "default",
@@ -422,7 +411,6 @@ export default function Settings(props: PageProps) {
       if (name === "hf_token") setHfToken("");
       if (name === "civitai_api_key") setCivitaiKey("");
       if (name === "openai_compat_api_key") setOpenaiCompatApiKey("");
-      if (name === "stability_api_key") setStabilityApiKey("");
       await refreshSecrets();
       await refreshBackendAiStatus();
       const nextProviders = await apiGet("/v1/settings/render_providers");
@@ -559,7 +547,7 @@ export default function Settings(props: PageProps) {
     }
   }
 
-  async function saveRenderProviders() {
+   async function _saveRenderProviders() {
     setSavingProviders(true);
     setErr(null);
     try {
@@ -613,12 +601,12 @@ export default function Settings(props: PageProps) {
       {
         id: "tokens" as const,
         label: "Tokens",
-        description: "Saved gated-download and hosted-provider credentials status.",
+        description: "Saved gated-download and NVIDIA provider credentials status.",
       },
       {
         id: "renderRuntime" as const,
-        label: "Hosted Render / AMD Runtime",
-        description: "Hosted Stability and DirectML runtime preferences.",
+        label: "NVIDIA Render Runtime",
+        description: "Read-only CUDA and NVIDIA service render routing status.",
       },
       {
         id: "comfyui" as const,
@@ -851,30 +839,12 @@ export default function Settings(props: PageProps) {
 
           {aiDraft.mode === "local" ? (
             <>
-              <div>
-                <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Runtime provider</div>
-                <select value={aiDraft.provider} onChange={(e) => updateAiDraft({ provider: e.target.value })}>
-                  <option value="openai_compat">NVIDIA NIM / OpenAI-compatible</option>
-                  <option value="ollama">Legacy Ollama fallback</option>
-                  <option value="rule_based">Legacy rule-based fallback</option>
-                </select>
-              </div>
-
-              {aiDraft.provider === "ollama" ? (
-                <>
-                  <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Ollama URL</div>
-                    <input value={aiDraft.ollamaUrl} onChange={(e) => updateAiDraft({ ollamaUrl: e.target.value })} placeholder="http://127.0.0.1:11434" />
-                  </div>
-                  <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Ollama model</div>
-                    <input value={aiDraft.ollamaModel} onChange={(e) => updateAiDraft({ ollamaModel: e.target.value })} placeholder="qwen3:8b" />
-                  </div>
-                  <div className="small" style={{ opacity: 0.82 }}>
-                    Local fallback planner. Use <code>qwen3:4b</code> on lighter CPU-only or low-memory systems.
-                  </div>
-                </>
-              ) : null}
+                <div>
+                  <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Runtime provider</div>
+                  <select value={aiDraft.provider} onChange={(e) => updateAiDraft({ provider: e.target.value })}>
+                    <option value="openai_compat">NVIDIA NIM / OpenAI-compatible</option>
+                  </select>
+                </div>
 
               {aiDraft.provider === "openai_compat" ? (
                 <>
@@ -905,12 +875,6 @@ export default function Settings(props: PageProps) {
                     Use this for NVIDIA NIM first. Non-NVIDIA OpenAI-style endpoints are compatibility gateways, not the primary product runtime.
                   </div>
                 </>
-              ) : null}
-
-              {aiDraft.provider === "rule_based" ? (
-                <div className="small" style={{ opacity: 0.82 }}>
-                  Legacy dependency-free fallback. No external AI service is required, but planning quality will be simpler and it will not exercise the NVIDIA Kit/NIM runtime path.
-                </div>
               ) : null}
             </>
           ) : (
@@ -1037,186 +1001,31 @@ export default function Settings(props: PageProps) {
           <button disabled={saving || !civitaiKey} onClick={() => saveSecret("civitai_api_key", civitaiKey)}>Save</button>
           <button className="secondary" disabled={saving || !secrets?.has_civitai_api_key} onClick={() => clearSecret("civitai_api_key")}>Clear</button>
 
-          <div>
-            <div className="small" style={{ fontWeight: 800 }}>Stability API key</div>
-            <div className="small" style={{ opacity: 0.8 }}>Used for the hosted Stability keyframe fallback inside Studio&apos;s internal video renderer.</div>
-            <input
-              value={stabilityApiKey}
-              onChange={(e) => setStabilityApiKey(e.target.value)}
-              placeholder={secrets?.has_stability_api_key ? "(set) paste to replace" : "paste Stability API key"}
-            />
-          </div>
-          <button disabled={saving || !stabilityApiKey} onClick={() => saveSecret("stability_api_key", stabilityApiKey)}>Save</button>
-          <button className="secondary" disabled={saving || !secrets?.has_stability_api_key} onClick={() => clearSecret("stability_api_key")}>Clear</button>
         </div>
       </div>
     ),
     renderRuntime: (
       <div className="card" style={{ marginTop: 14 }}>
-        <div style={{ fontWeight: 800, marginBottom: 10 }}>Hosted Render / AMD Runtime</div>
+        <div style={{ fontWeight: 800, marginBottom: 10 }}>NVIDIA Render Runtime</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          These controls affect Studio&apos;s internal render pipeline, not the planning provider above. Hosted Stability mode generates keyframes through the public Stability image API, then Studio assembles the video locally with the same cache, history, and resume flow as local renders.
+          This profile routes production rendering through NVIDIA CUDA internal rendering or NVIDIA Kit/OpenUSD jobs. Alternate hosted and non-NVIDIA device render providers are not configurable from Studio.
         </div>
-        {!renderProviders || !renderProviderDraft ? (
-          <div className="small" style={{ opacity: 0.75 }}>Loading render provider settings…</div>
-        ) : (
-          <div style={{ display: "grid", gap: 14 }}>
-            <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
-              <div style={{ fontWeight: 800 }}>Stability hosted fallback</div>
-              <div className="small" style={{ marginTop: 6, opacity: 0.86 }}>
-                API key saved: <b>{renderProviders?.stability?.has_api_key ? "yes" : "no"}</b>
-                {" "}• active in Render/Models: <b>{renderProviders?.stability?.visible ? "yes" : "no"}</b>
-                {" "}• service: <b>{renderProviderDraft?.stability?.service || "sd3"}</b>
-              </div>
-              <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>
-                {renderProviders?.stability?.note}
-              </div>
-              <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!renderProviderDraft?.stability?.enabled}
-                    onChange={(e) => setRenderProviderDraft((current: any) => ({
-                      ...(current || {}),
-                      stability: { ...(current?.stability || {}), enabled: e.target.checked },
-                    }))}
-                  />
-                  Enable Stability hosted fallback
-                </label>
-                <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!renderProviderDraft?.stability?.allow_auto_fallback}
-                    onChange={(e) => setRenderProviderDraft((current: any) => ({
-                      ...(current || {}),
-                      stability: { ...(current?.stability || {}), allow_auto_fallback: e.target.checked },
-                    }))}
-                  />
-                  Allow automatic fallback when local internal diffusion is unavailable
-                </label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-                  <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Service</div>
-                    <select
-                      value={renderProviderDraft?.stability?.service || "sd3"}
-                      onChange={(e) => setRenderProviderDraft((current: any) => ({
-                        ...(current || {}),
-                        stability: { ...(current?.stability || {}), service: e.target.value },
-                      }))}
-                    >
-                      {(renderProviders?.stability_services || []).map((item: string) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {(renderProviderDraft?.stability?.service || "sd3") === "sd3" ? (
-                    <div>
-                      <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>SD3 model</div>
-                      <select
-                        value={renderProviderDraft?.stability?.model || "sd3.5-large-turbo"}
-                        onChange={(e) => setRenderProviderDraft((current: any) => ({
-                          ...(current || {}),
-                          stability: { ...(current?.stability || {}), model: e.target.value },
-                        }))}
-                      >
-                        {(renderProviders?.stability_models || []).map((item: string) => (
-                          <option key={item} value={item}>{item}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : null}
-                  <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Style preset</div>
-                    <select
-                      value={renderProviderDraft?.stability?.style_preset || "none"}
-                      onChange={(e) => setRenderProviderDraft((current: any) => ({
-                        ...(current || {}),
-                        stability: { ...(current?.stability || {}), style_preset: e.target.value },
-                      }))}
-                    >
-                      {(renderProviders?.style_presets || []).map((item: string) => (
-                        <option key={item} value={item}>{item}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Output format</div>
-                    <select
-                      value={renderProviderDraft?.stability?.output_format || "png"}
-                      onChange={(e) => setRenderProviderDraft((current: any) => ({
-                        ...(current || {}),
-                        stability: { ...(current?.stability || {}), output_format: e.target.value },
-                      }))}
-                    >
-                      <option value="png">png</option>
-                      <option value="jpeg">jpeg</option>
-                      <option value="webp">webp</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
-              <div style={{ fontWeight: 800 }}>AMD / DirectML internal runtime</div>
-              <div className="small" style={{ marginTop: 6, opacity: 0.86 }}>
-                Runtime ready: <b>{renderProviders?.directml?.runtime_ready ? "yes" : "no"}</b>
-                {" "}• available on this machine: <b>{renderProviders?.directml?.available ? "yes" : "no"}</b>
-                {" "}• active backend: <b>{renderProviders?.directml?.active ? "yes" : "no"}</b>
-              </div>
-              <div className="small" style={{ marginTop: 4, opacity: 0.82 }}>
-                Device: <b>{renderProviders?.directml?.device_name || "not detected"}</b>
-              </div>
-              <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-                <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!renderProviderDraft?.directml?.enabled}
-                    onChange={(e) => setRenderProviderDraft((current: any) => ({
-                      ...(current || {}),
-                      directml: { ...(current?.directml || {}), enabled: e.target.checked },
-                    }))}
-                  />
-                  Enable DirectML internal renders on Windows when available
-                </label>
-                <label className="small" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={!!renderProviderDraft?.directml?.allow_auto_selection}
-                    onChange={(e) => setRenderProviderDraft((current: any) => ({
-                      ...(current || {}),
-                      directml: { ...(current?.directml || {}), allow_auto_selection: e.target.checked },
-                    }))}
-                  />
-                  Let Studio auto-select DirectML on supported AMD / Windows hardware
-                </label>
-                <div style={{ maxWidth: 320 }}>
-                  <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Preferred DirectML internal model</div>
-                  <select
-                    value={renderProviderDraft?.directml?.preferred_model || "auto"}
-                    onChange={(e) => setRenderProviderDraft((current: any) => ({
-                      ...(current || {}),
-                      directml: { ...(current?.directml || {}), preferred_model: e.target.value },
-                    }))}
-                  >
-                    <option value="auto">auto</option>
-                    <option value="hf_sdxl_internal">hf_sdxl_internal</option>
-                    <option value="hf_sd15_internal">hf_sd15_internal</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button disabled={savingProviders} onClick={saveRenderProviders}>
-                {savingProviders ? "Saving…" : "Save render provider settings"}
-              </button>
-              <div className="small" style={{ opacity: 0.82 }}>
-                Render and Models will only surface the hosted Stability controls after a key is saved and the hosted fallback is enabled.
-              </div>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontWeight: 800 }}>CUDA internal renderer</div>
+            <div className="small" style={{ marginTop: 6, opacity: 0.86 }}>
+              Backend: <b>{hardwareProfile.backend || "unknown"}</b>
+              {" "}• device <b>{hardwareProfile.device_name || hardwareProfile.device || "not detected"}</b>
             </div>
           </div>
-        )}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
+            <div style={{ fontWeight: 800 }}>NVIDIA service render path</div>
+            <div className="small" style={{ marginTop: 6, opacity: 0.86 }}>
+              NIM: <b>{nvidiaStatus?.nvidia?.services?.nim?.configured ? "configured" : "not configured"}</b>
+              {" "}• Omniverse: <b>{nvidiaStatus?.nvidia?.services?.omniverse?.configured ? "configured" : "not configured"}</b>
+            </div>
+          </div>
+        </div>
       </div>
     ),
     comfyui: (

@@ -182,7 +182,7 @@ def _extract_zip_with_cancel(task: SetupTask, archive_path: Path, dest_dir: Path
             SetupTaskManager.set_progress(task, max(task.progress or 0.0, min(0.98, 0.8 + (index / total) * 0.18)))
 
 
-# ------------------------------ Ollama ------------------------------
+# ------------------------------ Disabled local planner ------------------------------
 
 def _env_truthy(name: str) -> bool:
     value = str(os.environ.get(name, "")).strip().lower()
@@ -192,14 +192,14 @@ def _ollama_base(url: str) -> str:
     return (url or "http://127.0.0.1:11434").rstrip("/")
 
 
-def _managed_ollama_models_dir(models_dir: Path) -> Path:
-    explicit = str(os.environ.get("OLLAMA_MODELS") or "").strip()
+def _disabled_local_models_dir(models_dir: Path) -> Path:
+    explicit = str(os.environ.get("EDMG_DISABLED_LOCAL_MODELS") or "").strip()
     if explicit:
         return Path(explicit).expanduser().resolve()
     return (models_dir / "ollama").resolve()
 
 
-def _ollama_host_value(url: str) -> str:
+def _disabled_local_host_value(url: str) -> str:
     parsed = urlparse(_ollama_base(url))
     host = parsed.hostname or "127.0.0.1"
     port = parsed.port or (443 if parsed.scheme == "https" else 11434)
@@ -212,6 +212,7 @@ def managed_ollama_launch_script_path(external_dir: Path) -> Path:
 
 
 def _find_ollama_exe(external_dir: Path | None = None) -> str:
+    raise RuntimeError("Managed local planner executables are disabled by the NVIDIA-only profile.")
     env = os.environ.get("EDMG_OLLAMA_PATH")
     if env and Path(env).exists():
         return env
@@ -262,18 +263,19 @@ def write_managed_ollama_launch_script(
     ollama_url: str,
     ollama_exe: str | None = None,
 ) -> Path:
+    raise RuntimeError("Managed local planner launch scripts are disabled by the NVIDIA-only profile.")
     script_dir = (external_dir / "ollama").resolve()
     script_dir.mkdir(parents=True, exist_ok=True)
     script_path = managed_ollama_launch_script_path(external_dir)
-    models_root = _managed_ollama_models_dir(models_dir)
-    host_value = _ollama_host_value(ollama_url)
+    models_root = _disabled_local_models_dir(models_dir)
+    host_value = _disabled_local_host_value(ollama_url)
     command = ollama_exe or "ollama"
     if platform.system() == "Windows":
         content = (
             "@echo off\n"
             "setlocal\n"
-            f"set \"OLLAMA_MODELS={models_root}\"\n"
-            f"set \"OLLAMA_HOST={host_value}\"\n"
+            f"set \"EDMG_DISABLED_LOCAL_MODELS={models_root}\"\n"
+            f"set \"EDMG_DISABLED_LOCAL_HOST={host_value}\"\n"
             f"\"{command}\" serve\n"
         )
     else:
@@ -282,8 +284,8 @@ def write_managed_ollama_launch_script(
         content = (
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            f"export OLLAMA_MODELS=\"{escaped_models_root}\"\n"
-            f"export OLLAMA_HOST=\"{host_value}\"\n"
+            f"export EDMG_DISABLED_LOCAL_MODELS=\"{escaped_models_root}\"\n"
+            f"export EDMG_DISABLED_LOCAL_HOST=\"{host_value}\"\n"
             f"exec \"{escaped_command}\" serve\n"
         )
     script_path.write_text(content, encoding="utf-8")
@@ -292,30 +294,16 @@ def write_managed_ollama_launch_script(
     return script_path
 
 
-def check_ollama(ollama_url: str, model: str) -> dict[str, Any]:
+def check_legacy_local_planner(ollama_url: str, model: str) -> dict[str, Any]:
     base = _ollama_base(ollama_url)
-    try:
-        r = requests.get(f"{base}/api/tags", timeout=2.5)
-        r.raise_for_status()
-        data = r.json()
-        models = [m.get("name") for m in (data.get("models") or []) if isinstance(m, dict)]
-        present = (model in models) if model else False
-        return {
-            "ok": True,
-            "url": base,
-            "model": model,
-            "model_present": present,
-            "models": models[:50],
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "url": base,
-            "model": model,
-            "model_present": False,
-            "hint": "Install Ollama and ensure it is running (it exposes http://127.0.0.1:11434).",
-            "error": str(e),
-        }
+    return {
+        "ok": False,
+        "url": base,
+        "model": model,
+        "model_present": False,
+        "hint": "Legacy local planner checks are disabled by the NVIDIA-only profile.",
+        "error": "NVIDIA_ONLY_PROFILE",
+    }
 
 
 class OllamaManagedProcess:
@@ -330,13 +318,14 @@ class OllamaManagedProcess:
         return self.proc is not None and self.proc.poll() is None
 
     def start(self, task: SetupTask, external_dir: Path, models_dir: Path, ollama_url: str) -> None:
+        raise RuntimeError("Managed local planner startup is disabled by the NVIDIA-only profile.")
         base = _ollama_base(ollama_url)
-        if check_ollama(base, "").get("ok"):
+        if check_legacy_local_planner(base, "").get("ok"):
             SetupTaskManager.log(task, f"Ollama is already reachable at {base}.")
             return
 
         exe = _find_ollama_exe(external_dir)
-        models_root = _managed_ollama_models_dir(models_dir)
+        models_root = _disabled_local_models_dir(models_dir)
         models_root.mkdir(parents=True, exist_ok=True)
         external_dir.mkdir(parents=True, exist_ok=True)
         script_path = write_managed_ollama_launch_script(external_dir, models_dir, base, exe)
@@ -346,8 +335,8 @@ class OllamaManagedProcess:
             return
 
         env = os.environ.copy()
-        env["OLLAMA_MODELS"] = str(models_root)
-        env["OLLAMA_HOST"] = _ollama_host_value(base)
+        env["EDMG_DISABLED_LOCAL_MODELS"] = str(models_root)
+        env["EDMG_DISABLED_LOCAL_HOST"] = _disabled_local_host_value(base)
 
         creationflags = 0
         if os.name == "nt":
@@ -368,7 +357,7 @@ class OllamaManagedProcess:
         try:
             for _ in range(160):
                 SetupTaskManager.check_canceled(task, "Managed Ollama startup canceled.")
-                if check_ollama(base, "").get("ok"):
+                if check_legacy_local_planner(base, "").get("ok"):
                     SetupTaskManager.log(task, f"Ollama is running. Studio models path: {models_root}")
                     return
                 if self.proc.poll() is not None:
@@ -378,7 +367,7 @@ class OllamaManagedProcess:
             self.stop()
             raise
 
-        if check_ollama(base, "").get("ok"):
+        if check_legacy_local_planner(base, "").get("ok"):
             SetupTaskManager.log(task, f"Ollama is running. Studio models path: {models_root}")
             return
 
@@ -394,7 +383,7 @@ class OllamaManagedProcess:
                 pass
 
 
-def download_and_install_ollama(
+def download_and_install_legacy_local_planner(
     task: SetupTask,
     dest_dir: Path,
     external_dir: Path | None = None,
@@ -402,6 +391,7 @@ def download_and_install_ollama(
     ollama_url: str | None = None,
 ) -> None:
     """Install Ollama silently into the Studio-managed external-tools root."""
+    raise RuntimeError("Managed local planner install is disabled by the NVIDIA-only profile.")
 
     if platform.system().lower() != "windows":
         raise RuntimeError("Managed Ollama install is only implemented for Windows.")
@@ -490,7 +480,7 @@ def download_and_install_ollama(
             ollama_url or "http://127.0.0.1:11434",
             exe,
         )
-        models_root = _managed_ollama_models_dir(models_dir)
+        models_root = _disabled_local_models_dir(models_dir)
         SetupTaskManager.log(
             task,
             f"Ollama is installed at {exe}. Studio-managed models live under {models_root}. Helper script: {script_path}"
@@ -500,16 +490,17 @@ def download_and_install_ollama(
     SetupTaskManager.set_progress(task, 1.0)
 
 
-def pull_ollama_model(task: SetupTask, ollama_url: str, model: str) -> None:
+def pull_legacy_local_planner_model(task: SetupTask, ollama_url: str, model: str) -> None:
     base = _ollama_base(ollama_url)
     if not model:
         raise RuntimeError("No model specified")
+    raise RuntimeError("Legacy local planner model pulls are disabled by the NVIDIA-only profile.")
 
     SetupTaskManager.log(task, f"Pulling model {model}…")
     # Ollama supports streaming progress updates by default.
     # We parse JSON lines and surface the latest status.
     with requests.post(
-        f"{base}/api/pull",
+        "disabled://legacy-local-planner",
         json={"model": model, "stream": True},
         stream=True,
         timeout=60 * 60,
@@ -560,7 +551,11 @@ def _github_latest_assets(repo: str) -> list[dict[str, Any]]:
 
 
 def _pick_portable_asset(assets: list[dict[str, Any]], flavor: str) -> dict[str, Any]:
-    flavor = (flavor or "cpu").lower()
+    flavor = (flavor or "nvidia").lower()
+    if flavor == "cuda":
+        flavor = "nvidia"
+    if flavor != "nvidia":
+        raise RuntimeError("Only the NVIDIA ComfyUI portable flavor is supported by this profile.")
     # Heuristics across historical naming.
     candidates: list[dict[str, Any]] = []
     for a in assets:
@@ -574,18 +569,10 @@ def _pick_portable_asset(assets: list[dict[str, Any]], flavor: str) -> dict[str,
     def score(a: dict[str, Any]) -> int:
         name = (a.get("name") or "").lower()
         s = 0
-        if flavor == "cpu":
-            if "cpu" in name:
-                s += 5
-            if "or_cpu" in name or "cpu_or" in name:
-                s += 3
-            if "nvidia" in name or "cu" in name:
-                s -= 2
-        else:
-            if "nvidia" in name or "cu" in name:
-                s += 5
-            if "cpu" in name:
-                s -= 2
+        if "nvidia" in name or "cu" in name:
+            s += 5
+        if "cpu" in name:
+            s -= 4
         # prefer smaller artifacts when tie
         try:
             size = int(a.get("size") or 0)
@@ -856,8 +843,11 @@ class ComfyPortableProcess:
             str(port),
             "--windows-standalone-build",
         ]
-        if (flavor or "cpu").lower() == "cpu":
-            args.insert(3, "--cpu")
+        flavor_l = (flavor or "nvidia").lower()
+        if flavor_l == "cuda":
+            flavor_l = "nvidia"
+        if flavor_l != "nvidia":
+            raise RuntimeError("Only NVIDIA ComfyUI startup is supported by this profile.")
 
         # Hide console window.
         creationflags = 0
@@ -929,16 +919,11 @@ BACKEND_BUNDLE_MODULES: dict[str, dict[str, str]] = {
         "safetensors": "safetensors",
         "torch": "torch",
     },
-    "directml": {
-        "onnxruntime-directml": "onnxruntime",
-        "optimum": "optimum",
-    },
 }
 
 BACKEND_BUNDLE_ALIASES: dict[str, tuple[str, ...]] = {
     "full": ("audio", "asr", "internal"),
     "studio_bundle": ("audio", "asr", "internal"),
-    "studio_bundle_directml": ("audio", "asr", "internal", "directml"),
 }
 
 

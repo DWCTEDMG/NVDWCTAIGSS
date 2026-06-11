@@ -30,8 +30,6 @@ describe("Settings page", () => {
       "/v1/config": {
         ai_mode: "local",
         ai_provider: "openai_compat",
-        ai_ollama_url: "http://127.0.0.1:11434",
-        ai_ollama_model: "qwen3:8b",
         ai_openai_compat_base_url: "http://127.0.0.1:8001/v1",
         ai_openai_compat_model: "nvidia/llama-3.3-nemotron-super-49b-v1.5",
       },
@@ -112,26 +110,7 @@ describe("Settings page", () => {
         },
       },
       "/v1/settings/render_providers": {
-        settings: {
-          stability: {
-            enabled: false,
-            allow_auto_fallback: false,
-            service: "sd3",
-            model: "sd3.5-large-turbo",
-            style_preset: "none",
-            output_format: "png",
-          },
-          directml: {
-            enabled: false,
-            allow_auto_selection: false,
-            preferred_model: "auto",
-          },
-        },
-        stability: { has_api_key: false, visible: false, note: "disabled" },
-        directml: { runtime_ready: false, available: false, active: false, device_name: "" },
-        stability_services: ["sd3"],
-        stability_models: ["sd3.5-large-turbo"],
-        style_presets: ["none"],
+        settings: {},
       },
       "/health": { ok: true },
     });

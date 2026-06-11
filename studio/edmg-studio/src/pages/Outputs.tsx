@@ -32,26 +32,61 @@ export default function Outputs(props: PageProps) {
   const [unrealImportBusyBundle, setUnrealImportBusyBundle] = useState<string>("");
 
   const refreshProjects = async () => {
-    const d = await apiGet("/v1/projects");
-    const ps = d.projects || [];
-    setProjects(ps);
-    if (!projectId && ps.length) setProjectId(ps[0].id);
+    try {
+      const d = await apiGet("/v1/projects");
+      const ps = d?.projects || [];
+      setProjects(ps);
+      if (!projectId && ps.length) setProjectId(ps[0].id);
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    }
   };
 
   const refreshOutputs = async (pid: string) => {
-    const d = await apiGet(`/v1/projects/${pid}/outputs`);
-    setOuts(d);
-    setLastRefreshAt(Date.now());
+    try {
+      const d = await apiGet(`/v1/projects/${pid}/outputs`);
+      setOuts(d || {});
+      setLastRefreshAt(Date.now());
+    } catch (e: any) {
+      setErr(String(e?.message ?? e));
+    }
   };
 
-  useEffect(() => { refreshProjects().catch(() => {}); }, [backendUrl]);
-  useEffect(() => { if (projectId) refreshOutputs(projectId).catch((e) => setErr(String(e))); }, [projectId]);
+  useEffect(() => {
+    let mounted = true;
+    refreshProjects().catch((e) => {
+      if (mounted) setErr(String(e?.message ?? e));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [backendUrl]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let mounted = true;
+    refreshOutputs(projectId).catch((e) => {
+      if (mounted) setErr(String(e?.message ?? e));
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
+
   useEffect(() => {
     if (!projectId || !autoRefresh) return;
+    let mounted = true;
     const timer = window.setInterval(() => {
-      refreshOutputs(projectId).catch((e) => setErr(String(e)));
+      if (mounted) {
+        refreshOutputs(projectId).catch((e) => {
+          if (mounted) setErr(String(e?.message ?? e));
+        });
+      }
     }, 2500);
-    return () => window.clearInterval(timer);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
   }, [projectId, autoRefresh, backendUrl]);
 
   const fileUrl = (pid: string, rel: string) => `${backendUrl}/v1/projects/${pid}/file?path=${encodeURIComponent(rel)}`;
@@ -150,7 +185,7 @@ export default function Outputs(props: PageProps) {
         fps_output: Number(entry?.fps_output ?? 24),
         temporal_mode: String(entry?.temporal_mode || "frame_img2img"),
         render_mode: String(entry?.mode || "auto"),
-        allow_proxy_fallback: true,
+        allow_proxy_fallback: false,
         resume_existing_frames: true,
       });
       await refreshOutputs(projectId);

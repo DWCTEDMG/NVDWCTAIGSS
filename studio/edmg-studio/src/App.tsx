@@ -93,14 +93,11 @@ export default function App() {
     if (!backendUrl || setupChecked) return;
     apiGet("/v1/setup/status")
       .then((s) => {
-        const aiConfig = s?.ai_config ?? {};
-        const ollamaRequired = !!aiConfig?.ollama_required;
-        const modelRequired = !!aiConfig?.model_required;
+        const plannerRequired = !!s?.nvidia_profile?.enabled;
         const backendBundleOk = !!s?.backend_bundle?.ok;
         const ffmpegOk = !!s?.ffmpeg?.ok;
-        const ollamaOk = !!s?.ollama?.ok;
-        const modelOk = !modelRequired || !!s?.ollama?.model_present;
-        const need = !(backendBundleOk && ffmpegOk && (!ollamaRequired || (ollamaOk && modelOk)));
+        const plannerOk = !plannerRequired || !!s?.nvidia_planner?.ok;
+        const need = !(backendBundleOk && ffmpegOk && plannerOk);
         if (need && !forcedPage) setPage("setup" as any);
         setSetupChecked(true);
       })

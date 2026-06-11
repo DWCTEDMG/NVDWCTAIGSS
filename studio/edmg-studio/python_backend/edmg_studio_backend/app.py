@@ -74,7 +74,6 @@ from .services.internal_video import (
     render_internal_still_image,
     render_internal_video_variant,
     render_internal_proxy_video_variant,
-    render_stability_hosted_video_variant,
     render_internal_diffusion_preview_segment,
 )
 from .services.compositor import apply_timeline_layers
@@ -135,20 +134,14 @@ from .render_conductor.planner import build_advisory_render_plan
 from .services.setup_wizard import (
     SetupTaskManager,
     check_backend_bundle,
-    check_ollama,
-    download_and_install_ollama,
-    pull_ollama_model,
     download_and_extract_portable,
     ComfyPortableProcess,
-    OllamaManagedProcess,
     check_ffmpeg,
     comfy_portable_installed,
     comfy_portable_root,
     download_and_install_7zip,
     install_backend_bundle,
-    _find_ollama_exe,
     _find_7z_exe,
-    managed_ollama_launch_script_path,
 )
 
 settings = Settings()
@@ -163,7 +156,6 @@ settings.models_dir.mkdir(parents=True, exist_ok=True)
 settings.cache_dir.mkdir(parents=True, exist_ok=True)
 settings.logs_dir.mkdir(parents=True, exist_ok=True)
 settings.external_dir.mkdir(parents=True, exist_ok=True)
-settings.ollama_models_dir.mkdir(parents=True, exist_ok=True)
 
 store = ProjectStore(settings.data_dir)
 jobs = JobStore(store.projects_dir)
@@ -183,12 +175,11 @@ models = ModelManager(
     settings.models_dir,
     settings.external_dir,
     settings.comfyui_url,
-    os.getenv('EDMG_AI_OLLAMA_URL','http://127.0.0.1:11434'),
+    "",
     secrets=secrets,
 )
 
 comfy_portable = ComfyPortableProcess()
-ollama_managed = OllamaManagedProcess()
 
 @asynccontextmanager
 async def _app_lifespan(_app: FastAPI):
@@ -1408,7 +1399,7 @@ def _tier_rank(name: str) -> int:
 
 def _internal_render_defaults_for_tier(tier: str, hw: dict[str, Any], *, duration_s: float | None = None) -> dict[str, Any]:
     tier_l = str(tier or "draft").lower()
-    backend = str(hw.get("backend") or "cpu").lower()
+    backend = str(hw.get("backend") or "nvidia_cuda_required").lower()
     if tier_l == "quality":
         defaults: dict[str, Any] = {
             "fps_output": 24,
@@ -1431,7 +1422,7 @@ def _internal_render_defaults_for_tier(tier: str, hw: dict[str, Any], *, duratio
             "fps_render": 2,
             "width": 768,
             "height": 432,
-            "steps": 15 if backend == "cpu" else 16,
+            "steps": 16,
             "cfg": 6.8,
             "keyframe_interval_s": 5.0,
             "interpolation_engine": "auto",
@@ -1473,7 +1464,7 @@ def _build_render_chunk_plan(
     render_mode: str = "diffusion",
 ) -> dict[str, Any]:
     hw = dict(hw or {})
-    backend_family = str(hw.get("backend_family") or "cpu_only").lower()
+    backend_family = str(hw.get("backend_family") or "nvidia_cuda_required").lower()
     applied = str(applied_tier or "draft").lower()
     fps_r = max(1, int(fps_render or 1))
     total_frames_i = max(0, int(total_frames or 0))
@@ -1486,26 +1477,15 @@ def _build_render_chunk_plan(
     enabled = False
     strategy = "single_pass"
     checkpoint_interval_frames = max(1, min(60, fps_r * 15))
-    if backend_family == "cpu_only":
-        threshold_s = 45.0 if mode_l == "diffusion" else 90.0
-        frames_per_chunk = 90 if applied == "balanced" else 120
-        if total_frames_i >= frames_per_chunk * 2 or duration >= threshold_s:
-            enabled = True
-            strategy = "resume_friendly_chunks"
-            notes.append("CPU-only system detected; using resume-friendly chunk guidance for long renders.")
-    elif backend_family == "integrated_gpu":
-        threshold_s = 75.0 if mode_l == "diffusion" else 120.0
-        frames_per_chunk = 120 if applied == "balanced" else 180
-        if total_frames_i >= frames_per_chunk * 2 or duration >= threshold_s:
-            enabled = True
-            strategy = "integrated_gpu_chunks"
-            notes.append("Integrated-graphics system detected; chunk guidance is enabled to keep long renders recoverable.")
-    else:
+    if backend_family == "discrete_gpu":
         frames_per_chunk = 240 if mode_l == "diffusion" else 360
         if total_frames_i >= frames_per_chunk * 3 and applied != "quality":
             enabled = True
             strategy = "throughput_chunks"
             notes.append("Long render on discrete GPU; chunk checkpoints will improve retryability.")
+    else:
+        frames_per_chunk = max(total_frames_i, 1)
+        notes.append("NVIDIA CUDA runtime is required before render chunk planning can be applied.")
 
     if enabled:
         estimated_chunks = max(1, math.ceil(total_frames_i / max(1, frames_per_chunk)))
@@ -1582,7 +1562,7 @@ def _pick_windows_accel_gpu() -> dict[str, Any] | None:
 
 
 def _directml_runtime_status() -> dict[str, Any]:
-    out: dict[str, Any] = {
+    return {
         "available": False,
         "runtime_ready": False,
         "provider": "DmlExecutionProvider",
@@ -1591,40 +1571,15 @@ def _directml_runtime_status() -> dict[str, Any]:
         "vendor": None,
         "vram_gb": 0.0,
         "integrated": False,
-        "error": None,
+        "error": "DirectML is disabled by the NVIDIA-only profile.",
     }
-    if platform.system().lower() != "windows":
-        out["error"] = "DirectML is only available on Windows."
-        return out
-    try:
-        import onnxruntime as ort  # type: ignore
-
-        providers = list(ort.get_available_providers() or [])
-        out["providers"] = providers
-        out["runtime_ready"] = "DmlExecutionProvider" in providers
-    except Exception as e:
-        out["error"] = str(e)
-        return out
-
-    gpu = _pick_windows_accel_gpu()
-    if gpu:
-        out["device_name"] = gpu.get("name")
-        out["vendor"] = gpu.get("vendor")
-        out["vram_gb"] = float(gpu.get("vram_gb") or 0.0)
-        out["integrated"] = bool(gpu.get("vendor") == "intel")
-    out["available"] = bool(out["runtime_ready"])
-    return out
 
 
 def _backend_family_for(backend: str, *, integrated: bool = False) -> str:
-    backend_l = str(backend or "cpu").lower()
+    backend_l = str(backend or "nvidia_cuda_required").lower()
     if backend_l in {"cuda"}:
         return "discrete_gpu"
-    if backend_l in {"mps"}:
-        return "integrated_gpu"
-    if backend_l == "directml":
-        return "integrated_gpu" if integrated else "discrete_gpu"
-    return "cpu_only"
+    return "nvidia_cuda_required"
 
 
 def _parse_gpu_memory_gb(value: Any) -> float:
@@ -1646,11 +1601,9 @@ def _parse_gpu_memory_gb(value: Any) -> float:
 
 def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_tier: str = "auto", duration_s: float | None = None) -> dict[str, Any]:
     hw = dict(hw or {})
-    backend = str(hw.get("backend") or "cpu").lower()
+    backend = str(hw.get("backend") or "nvidia_cuda_required").lower()
     backend_family = str(hw.get("backend_family") or _backend_family_for(backend, integrated=bool(hw.get("integrated_acceleration")))).lower()
     vram_gb = float(hw.get("vram_gb") or 0.0)
-    ram_gb = float(hw.get("ram_gb") or 0.0)
-    cpu_threads = int(hw.get("cpu_threads") or 1)
     notes: list[str] = []
 
     if backend == "cuda":
@@ -1666,31 +1619,11 @@ def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_t
             max_supported = "draft"
             notes.append("Low-VRAM CUDA GPU detected; use draft settings for reliable renders.")
         device_preference = "cuda"
-    elif backend == "mps":
-        recommended = "balanced" if ram_gb >= 16.0 else "draft"
-        max_supported = "balanced"
-        device_preference = "mps"
-        notes.append("Apple Silicon acceleration detected; balanced tier is recommended for sustained laptop rendering.")
-    elif backend == "directml":
-        if backend_family == "discrete_gpu":
-            recommended = "balanced" if (vram_gb >= 6.0 or ram_gb >= 16.0) else "draft"
-            max_supported = "balanced"
-            notes.append("DirectML acceleration detected; SDXL is the preferred AMD / Windows internal path.")
-        else:
-            recommended = "draft"
-            max_supported = "balanced"
-            notes.append("Integrated DirectML acceleration detected; draft or balanced tiers are the safest choice.")
-        device_preference = "directml"
     else:
-        if ram_gb >= 24.0 and cpu_threads >= 12:
-            recommended = "balanced"
-            max_supported = "balanced"
-            notes.append("High-core CPU system detected; balanced tier is viable but slower than GPU rendering.")
-        else:
-            recommended = "draft"
-            max_supported = "draft"
-            notes.append("CPU-only or low-power system detected; draft tier is recommended for responsiveness.")
-        device_preference = "cpu"
+        recommended = "draft"
+        max_supported = "draft"
+        device_preference = "cuda"
+        notes.append("NVIDIA CUDA runtime is required; CPU, MPS, and DirectML render paths are disabled.")
 
     requested = str(requested_tier or "auto").strip().lower()
     if requested not in {"auto", "draft", "balanced", "quality"}:
@@ -1710,24 +1643,11 @@ def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_t
     )
     if chunk_plan["resume_recommended"]:
         defaults["resume_existing_frames"] = True
-    if chunk_plan["enabled"] and backend_family == "cpu_only":
-        defaults["interpolation_engine"] = "fps"
-        if float(duration_s or 0.0) >= 90.0 and _tier_rank(applied) <= _tier_rank("balanced"):
-            defaults["temporal_mode"] = "off"
-            defaults["refine_every_n_frames"] = max(int(defaults.get("refine_every_n_frames", 1)), 3)
-            notes.append("Long CPU render detected; using chunk-friendly temporal defaults to make resumes cheaper.")
-    elif chunk_plan["enabled"] and backend_family == "integrated_gpu":
-        if _tier_rank(applied) <= _tier_rank("balanced"):
-            defaults["temporal_mode"] = "keyframes"
-            defaults["refine_every_n_frames"] = max(int(defaults.get("refine_every_n_frames", 1)), 2)
-            notes.append("Integrated GPU path favors keyframe continuity over denser temporal refinement on long renders.")
 
     if backend == "cuda" and vram_gb >= 14.0 and _tier_rank(applied) >= _tier_rank("quality"):
         preferred_internal_model = "hf_sd35_medium_internal"
     elif backend == "cuda" and _tier_rank(applied) >= _tier_rank("balanced"):
         preferred_internal_model = "hf_sdxl_internal"
-    elif backend == "directml":
-        preferred_internal_model = "hf_sdxl_internal" if _tier_rank(applied) >= _tier_rank("balanced") else "hf_sd15_internal"
     else:
         preferred_internal_model = "hf_sd15_internal"
     return {
@@ -1741,7 +1661,7 @@ def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_t
         "chunk_plan": chunk_plan,
         "notes": notes + list(chunk_plan.get("notes") or []),
         "hardware_backend": backend,
-        "supports_proxy_render": True,
+        "supports_proxy_render": False,
     }
 
 
@@ -1749,11 +1669,11 @@ def _hardware_profile() -> dict[str, Any]:
     """Best-effort local hardware detection used for auto tiering."""
     cpu_threads = max(1, int(os.cpu_count() or 1))
     out: dict[str, Any] = {
-        "backend": "cpu",
-        "device": "cpu",
-        "device_name": "CPU",
-        "runtime_device_name": "CPU",
-        "available_backends": ["cpu"],
+        "backend": "nvidia_cuda_required",
+        "device": "cuda",
+        "device_name": "NVIDIA CUDA required",
+        "runtime_device_name": "NVIDIA CUDA required",
+        "available_backends": [],
         "vram_gb": 0.0,
         "ram_gb": 0.0,
         "cpu_threads": cpu_threads,
@@ -1789,25 +1709,13 @@ def _hardware_profile() -> dict[str, Any]:
             out["device_name"] = "CUDA GPU"
             out["runtime_device_name"] = out["device_name"]
             out["cuda_runtime_ready"] = True
-            out["available_backends"].append("cuda")
+            out["available_backends"] = ["cuda"]
+            out["gpu_vendor"] = "nvidia"
             try:
                 props = torch.cuda.get_device_properties(0)
                 out["device_name"] = getattr(props, "name", "cuda")
                 out["runtime_device_name"] = out["device_name"]
                 out["vram_gb"] = round(float(getattr(props, "total_memory", 0.0)) / float(1024 ** 3), 2)
-            except Exception:
-                pass
-        else:
-            try:
-                mps = getattr(getattr(torch, "backends", None), "mps", None)
-                if mps is not None and mps.is_available():
-                    out["backend"] = "mps"
-                    out["device"] = "mps"
-                    out["device_name"] = "Apple Silicon GPU"
-                    out["runtime_device_name"] = out["device_name"]
-                    out["available_backends"].append("mps")
-                    out["integrated_acceleration"] = True
-                    out["gpu_vendor"] = "apple"
             except Exception:
                 pass
     except Exception:
@@ -1829,30 +1737,12 @@ def _hardware_profile() -> dict[str, Any]:
         out["nvidia_driver_version"] = primary_gpu.get("driver_version")
         if not out.get("gpu_vendor"):
             out["gpu_vendor"] = "nvidia"
-        if str(out.get("backend") or "cpu").lower() == "cpu":
+        if str(out.get("backend") or "").lower() != "cuda":
             out["device_name"] = host_name
             out["vram_gb"] = max(float(out.get("vram_gb") or 0.0), host_vram_gb)
 
-    directml = _directml_runtime_status()
-    out["supports_directml"] = bool(directml.get("available"))
-    out["directml_runtime_ready"] = bool(directml.get("runtime_ready"))
-    out["directml_device_name"] = directml.get("device_name")
-    if directml.get("available"):
-        if "directml" not in out["available_backends"]:
-            out["available_backends"].append("directml")
-        if out["backend"] == "cpu":
-            out["backend"] = "directml"
-            out["device"] = "directml"
-            out["device_name"] = str(directml.get("device_name") or "DirectML GPU")
-            out["runtime_device_name"] = out["device_name"]
-            out["vram_gb"] = max(float(out.get("vram_gb") or 0.0), float(directml.get("vram_gb") or 0.0))
-            out["integrated_acceleration"] = bool(directml.get("integrated"))
-            out["gpu_vendor"] = directml.get("vendor")
-        elif not out.get("gpu_vendor") and directml.get("vendor"):
-            out["gpu_vendor"] = directml.get("vendor")
-
     out["backend_family"] = _backend_family_for(
-        str(out.get("backend") or "cpu"),
+        str(out.get("backend") or "nvidia_cuda_required"),
         integrated=bool(out.get("integrated_acceleration")),
     )
     plan = _build_internal_render_plan(out, requested_tier="auto")
@@ -1860,19 +1750,19 @@ def _hardware_profile() -> dict[str, Any]:
     out["max_supported_tier"] = plan["max_supported_tier"]
     out["preferred_internal_model"] = plan["preferred_internal_model"]
     out["device_preference"] = plan["device_preference"]
-    out["supports_internal_diffusion"] = True
-    out["supports_proxy_render"] = True
+    out["supports_internal_diffusion"] = bool(out.get("cuda_runtime_ready"))
+    out["supports_proxy_render"] = False
     return out
 
 
 def _render_profiles_for_hardware(hw: dict[str, Any] | None = None) -> dict[str, Any]:
     hw = dict(hw or _hardware_profile())
     recommended_tier = str(hw.get("recommended_tier") or "draft")
-    backend_family = str(hw.get("backend_family") or "cpu_only")
+    backend_family = str(hw.get("backend_family") or "nvidia_cuda_required")
     profiles = {
         "laptop_safe": {
-            "label": "Laptop-safe",
-            "description": "Fastest and safest defaults for CPU-only and integrated-GPU systems.",
+            "label": "CUDA draft",
+            "description": "Lowest-resource NVIDIA CUDA defaults for constrained GPUs.",
             "render_preset": "fast",
             "internal_render_tier": "draft",
             "resume_existing_frames": True,
@@ -1893,7 +1783,7 @@ def _render_profiles_for_hardware(hw: dict[str, Any] | None = None) -> dict[str,
         },
     }
     recommended_profile = "balanced_auto"
-    if backend_family in {"cpu_only", "integrated_gpu"} or recommended_tier == "draft":
+    if backend_family == "nvidia_cuda_required" or recommended_tier == "draft":
         recommended_profile = "laptop_safe"
     elif recommended_tier == "quality":
         recommended_profile = "high_quality"
@@ -1914,57 +1804,51 @@ def hardware():
 def _render_provider_status(hw: dict[str, Any] | None = None) -> dict[str, Any]:
     hw = dict(hw or _hardware_profile())
     cfg = render_settings.get()
-    stability_cfg = dict(cfg.get("stability") or {})
-    directml_cfg = dict(cfg.get("directml") or {})
-    has_stability_key = bool(secrets.get("stability_api_key"))
-    stability_enabled = bool(stability_cfg.get("enabled"))
-    stability_service = str(stability_cfg.get("service") or "sd3")
-    stability_model = str(stability_cfg.get("model") or "sd3.5-large-turbo")
-    directml_available = bool(hw.get("supports_directml"))
-    directml_enabled = bool(directml_cfg.get("enabled"))
     return {
         "ok": True,
         "settings": cfg,
+        "nvidia": {
+            "provider": "nvidia",
+            "enabled": True,
+            "cuda_runtime_ready": bool(hw.get("cuda_runtime_ready")),
+            "nim_base_url": os.getenv("EDMG_NVIDIA_NIM_URL")
+            or os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1"),
+            "planner_model": os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5"),
+        },
         "stability": {
             "provider": "stability",
-            "configured": bool(has_stability_key),
-            "enabled": stability_enabled,
-            "visible": bool(has_stability_key and stability_enabled),
-            "has_api_key": has_stability_key,
-            "allow_auto_fallback": bool(stability_cfg.get("allow_auto_fallback", True)),
-            "service": stability_service,
-            "model": stability_model,
-            "style_preset": str(stability_cfg.get("style_preset") or "none"),
-            "output_format": str(stability_cfg.get("output_format") or "png"),
+            "configured": False,
+            "enabled": False,
+            "visible": False,
+            "has_api_key": False,
+            "allow_auto_fallback": False,
+            "service": "",
+            "model": "",
+            "style_preset": "none",
+            "output_format": "png",
             "supports_video_api": False,
-            "note": "Studio uses the current public Stability image API for hosted keyframes, then assembles video locally. A public hosted video route was not found in the current API spec.",
+            "note": "Disabled by the NVIDIA-only profile.",
         },
         "directml": {
             "provider": "onnxruntime-directml",
-            "enabled": directml_enabled,
-            "available": directml_available,
-            "active": bool(directml_enabled and str(hw.get("backend") or "cpu").lower() == "directml"),
-            "runtime_ready": bool(hw.get("directml_runtime_ready")),
-            "device_name": hw.get("directml_device_name") or hw.get("device_name"),
-            "preferred_model": str(directml_cfg.get("preferred_model") or "auto"),
-            "allow_auto_selection": bool(directml_cfg.get("allow_auto_selection", True)),
+            "enabled": False,
+            "available": False,
+            "active": False,
+            "runtime_ready": False,
+            "device_name": None,
+            "preferred_model": "auto",
+            "allow_auto_selection": False,
+            "note": "Disabled by the NVIDIA-only profile.",
         },
-        "stability_services": list(STABILITY_SERVICES),
-        "stability_models": list(STABILITY_SD3_MODELS),
-        "style_presets": list(STABILITY_STYLE_PRESETS),
+        "stability_services": [],
+        "stability_models": [],
+        "style_presets": [],
         "hardware": hw,
     }
 
 
 def _hosted_stability_ready(payload: dict[str, Any] | None = None) -> bool:
-    payload = payload or {}
-    provider = _render_provider_status().get("stability") or {}
-    if not provider.get("configured") or not provider.get("enabled"):
-        return False
-    requested_mode = str(payload.get("render_mode") or "auto").strip().lower()
-    if requested_mode == "hosted":
-        return True
-    return bool(provider.get("allow_auto_fallback")) and bool(payload.get("allow_hosted_fallback", True))
+    return False
 
 
 @app.get("/v1/settings/render_providers")
@@ -1990,7 +1874,6 @@ def get_config():
         "studio_home": str(settings.studio_home),
         "data_dir": str(settings.data_dir),
         "models_dir": str(settings.models_dir),
-        "ollama_models_dir": str(settings.ollama_models_dir),
         "cache_dir": str(settings.cache_dir),
         "logs_dir": str(settings.logs_dir),
         "external_dir": str(settings.external_dir),
@@ -1998,14 +1881,11 @@ def get_config():
         "ai_base_url": settings.ai_base_url,
         "ai_timeout_s": settings.ai_timeout_s,
         "ai_provider": os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower() or "openai_compat",
-        "ai_ollama_url": os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434").strip(),
-        "ai_ollama_model": os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b").strip(),
         "ai_openai_compat_base_url": os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1").strip(),
         "ai_openai_compat_model": os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5").strip(),
         "ai_openai_compat_api_key_configured": bool(
             secrets.get("openai_compat_api_key") or os.getenv("EDMG_AI_OPENAI_COMPAT_API_KEY")
         ),
-        "stability_api_key_configured": bool(secrets.get("stability_api_key")),
         "comfyui_url": settings.comfyui_url,
         "comfyui_urls": list(settings.resolved_comfyui_urls()),
         "comfyui_node_concurrency": settings.comfyui_node_concurrency,
@@ -2034,7 +1914,6 @@ def secrets_status():
         "has_hf_token": st.has_hf_token,
         "has_civitai_api_key": st.has_civitai_api_key,
         "has_openai_compat_api_key": st.has_openai_compat_api_key,
-        "has_stability_api_key": st.has_stability_api_key,
         "note": st.note,
     }
 
@@ -2043,10 +1922,10 @@ def secrets_status():
 def secrets_set(payload: dict[str, Any]):
     name = str((payload or {}).get("name") or "").strip().lower()
     value = str((payload or {}).get("value") or "")
-    if name not in ("hf_token", "civitai_api_key", "openai_compat_api_key", "stability_api_key"):
+    if name not in ("hf_token", "civitai_api_key", "openai_compat_api_key"):
         raise UserFacingError(
             "Unknown secret",
-            hint="Supported: hf_token, civitai_api_key, openai_compat_api_key, stability_api_key",
+            hint="Supported: hf_token, civitai_api_key, openai_compat_api_key",
         )
     if not value:
         raise UserFacingError("Missing value", hint="Paste the token/key value, then click Save.")
@@ -2057,10 +1936,10 @@ def secrets_set(payload: dict[str, Any]):
 @app.post("/v1/settings/secrets/clear")
 def secrets_clear(payload: dict[str, Any]):
     name = str((payload or {}).get("name") or "").strip().lower()
-    if name not in ("hf_token", "civitai_api_key", "openai_compat_api_key", "stability_api_key"):
+    if name not in ("hf_token", "civitai_api_key", "openai_compat_api_key"):
         raise UserFacingError(
             "Unknown secret",
-            hint="Supported: hf_token, civitai_api_key, openai_compat_api_key, stability_api_key",
+            hint="Supported: hf_token, civitai_api_key, openai_compat_api_key",
         )
     secrets.delete(name)
     return {"ok": True}
@@ -2070,8 +1949,6 @@ def _setup_ai_config() -> dict[str, Any]:
     ai_mode = (settings.ai_mode or "local").strip().lower() or "local"
     ai_provider = (os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower() or "openai_compat")
     nvidia_profile = nvidia_profile_status()
-    ollama_url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model = os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b")
     openai_compat_base_url = os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1")
     openai_compat_model = os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5")
     openai_compat_api_key_configured = bool(
@@ -2083,7 +1960,6 @@ def _setup_ai_config() -> dict[str, Any]:
             "mode": "http",
             "provider": "remote_ai_service",
             "label": "Remote AI service",
-            "ollama_required": False,
             "model_required": False,
             "base_url": settings.ai_base_url,
             "hint": "Studio planning is configured to call a separate EDMG AI service over HTTP.",
@@ -2095,7 +1971,6 @@ def _setup_ai_config() -> dict[str, Any]:
             "mode": "local",
             "provider": "openai_compat",
             "label": label,
-            "ollama_required": False,
             "model_required": False,
             "base_url": openai_compat_base_url,
             "model": openai_compat_model,
@@ -2104,29 +1979,17 @@ def _setup_ai_config() -> dict[str, Any]:
             "hint": (
                 "Studio planning is configured for a NVIDIA/NIM-style OpenAI-compatible endpoint."
                 if nvidia_profile.get("enabled")
-                else "Studio planning is configured for an OpenAI-compatible endpoint instead of Ollama."
+                else "Studio planning is configured for an OpenAI-compatible endpoint."
             ),
-        }
-
-    if ai_provider == "rule_based":
-        return {
-            "mode": "local",
-            "provider": "rule_based",
-            "label": "Rule-based fallback",
-            "ollama_required": False,
-            "model_required": False,
-            "hint": "Studio planning is configured for the built-in rule-based fallback. Ollama is optional.",
         }
 
     return {
         "mode": "local",
-        "provider": "ollama",
-        "label": "Local Ollama",
-        "ollama_required": True,
-        "model_required": True,
-        "base_url": ollama_url,
-        "model": ollama_model,
-        "hint": "Studio planning is configured for local Ollama.",
+        "provider": ai_provider or "unsupported",
+        "label": "Unsupported AI provider",
+        "model_required": False,
+        "error": "NVIDIA-only profile supports EDMG_AI_PROVIDER=openai_compat only.",
+        "hint": "Set EDMG_AI_PROVIDER=openai_compat and configure EDMG_NVIDIA_NIM_URL.",
     }
 
 
@@ -2135,36 +1998,13 @@ def setup_status():
     """Installer GUI status for required components."""
     is_windows = platform.system() == "Windows"
     ai_config = _setup_ai_config()
-    ollama_url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
-    ollama_model = os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b")
-    ollama = check_ollama(ollama_url, ollama_model)
-    ollama_exe = None
-    ollama_exe_error = None
-    try:
-        ollama_exe = _find_ollama_exe(settings.external_dir)
-    except Exception as e:
-        ollama_exe_error = str(e)
-    ollama["managed_models_dir"] = str(settings.ollama_models_dir)
-    ollama["managed_launch_script"] = str(managed_ollama_launch_script_path(settings.external_dir))
-    ollama["launch_available"] = bool(ollama_exe)
-    ollama["ollama_exe"] = ollama_exe
-    ollama["managed_running"] = bool(ollama_managed.running())
-    if ollama_exe_error and not ollama.get("ok"):
-        ollama["launch_hint"] = ollama_exe_error
-    elif ollama_exe and not ollama.get("ok"):
-        ollama["hint"] = (
-            f"Studio can start Ollama with models stored under {settings.ollama_models_dir}. "
-            "Use Start Studio-managed Ollama, or run the helper script after installing Ollama."
-        )
-    elif not ollama.get("ok"):
-        ollama["hint"] = (
-            (
-                f"Studio can install Ollama into {settings.external_dir / 'ollama'} and keep models under "
-                f"{settings.ollama_models_dir}."
-            )
-            if is_windows
-            else "Install Ollama system-wide, or set EDMG_OLLAMA_PATH to your ollama binary, then point Studio at the running Ollama service."
-        )
+    nvidia_planner = {
+        "ok": ai_config.get("provider") == "openai_compat",
+        "provider": ai_config.get("provider"),
+        "base_url": ai_config.get("base_url"),
+        "model": ai_config.get("model"),
+        "hint": ai_config.get("hint"),
+    }
 
     # ComfyUI availability
     try:
@@ -2210,7 +2050,6 @@ def setup_status():
 
     ff = check_ffmpeg(settings.ffmpeg_path)
     backend_bundle = check_backend_bundle()
-    backend_bundle_directml = check_backend_bundle("studio_bundle_directml")
     edmg = core_status()
     if not edmg.get("available"):
         edmg.setdefault(
@@ -2239,8 +2078,7 @@ def setup_status():
             "ai_config": ai_config,
             "nvidia_profile": nvidia_profile_status(),
             "backend_bundle": backend_bundle,
-            "backend_bundle_directml": backend_bundle_directml,
-            "ollama": ollama,
+            "nvidia_planner": nvidia_planner,
             "comfyui": comfy_status,
             "ffmpeg": ff,
             "edmg": edmg,
@@ -2260,17 +2098,12 @@ def setup_task_cancel(task_id: str):
 
 @app.post("/v1/setup/ollama/install_managed")
 def setup_ollama_install_managed():
-    dest = settings.external_dir / "_installers"
-    url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
-    task = setup_tasks.start(
-        "install_managed_ollama",
-        download_and_install_ollama,
-        dest,
-        settings.external_dir,
-        settings.models_dir,
-        url,
+    raise UserFacingError(
+        "Ollama setup is disabled in the NVIDIA-only profile.",
+        hint="Use deployment/nvidia/start_nvidia_runtime_local.ps1 so planning goes through NVIDIA NIM.",
+        code="NVIDIA_ONLY_PROFILE",
+        status_code=400,
     )
-    return {"ok": True, "task": task.to_dict()}
 
 
 @app.post("/v1/setup/ollama/download_and_run")
@@ -2280,25 +2113,22 @@ def setup_ollama_download_and_run():
 
 @app.post("/v1/setup/ollama/start_managed")
 def setup_ollama_start_managed():
-    url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
-    task = setup_tasks.start(
-        "start_managed_ollama",
-        ollama_managed.start,
-        settings.external_dir,
-        settings.models_dir,
-        url,
+    raise UserFacingError(
+        "Ollama startup is disabled in the NVIDIA-only profile.",
+        hint="Start the NVIDIA runtime profile instead.",
+        code="NVIDIA_ONLY_PROFILE",
+        status_code=400,
     )
-    return {"ok": True, "task": task.to_dict()}
 
 
 @app.post("/v1/setup/ollama/pull")
 def setup_ollama_pull(payload: dict[str, Any]):
-    import os
-
-    model = (payload or {}).get("model") or os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b")
-    url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
-    task = setup_tasks.start(f"pull_model:{model}", pull_ollama_model, url, model)
-    return {"ok": True, "task": task.to_dict()}
+    raise UserFacingError(
+        "Ollama model pulls are disabled in the NVIDIA-only profile.",
+        hint="Configure EDMG_NVIDIA_NIM_URL and EDMG_AI_OPENAI_COMPAT_MODEL for NVIDIA NIM.",
+        code="NVIDIA_ONLY_PROFILE",
+        status_code=400,
+    )
 
 @app.post("/v1/setup/7zip/install")
 def setup_7zip_install():
@@ -2309,21 +2139,40 @@ def setup_7zip_install():
 @app.post("/v1/setup/backend/install")
 def setup_backend_install(payload: dict[str, Any]):
     bundle = str((payload or {}).get("bundle") or "studio_bundle").strip() or "studio_bundle"
+    if bundle != "studio_bundle":
+        raise UserFacingError(
+            "Only the NVIDIA backend runtime bundle is supported in the NVIDIA-only profile.",
+            hint="Use bundle=studio_bundle and launch through deployment/nvidia/start_nvidia_runtime_local.ps1.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     task = setup_tasks.start(f"install_backend_bundle:{bundle}", install_backend_bundle, bundle)
     return {"ok": True, "task": task.to_dict()}
 
 @app.post("/v1/setup/full/install")
 def setup_full_install(payload: dict[str, Any]):
-    """Run one-click setup for the NVIDIA-first stack plus local fallback engines."""
+    """Run one-click setup for the NVIDIA service profile."""
     import os
 
-    flavor = (payload or {}).get("flavor") or "cpu"
+    flavor = str((payload or {}).get("flavor") or "nvidia").strip().lower() or "nvidia"
+    if flavor == "cuda":
+        flavor = "nvidia"
+    if flavor != "nvidia":
+        raise UserFacingError(
+            "Only NVIDIA setup is supported in the NVIDIA-only profile.",
+            hint="Use flavor=nvidia or launch deployment/nvidia/start_nvidia_runtime_local.ps1.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     port = int((payload or {}).get("comfy_port") or 8188)
     bundle = str((payload or {}).get("bundle") or "studio_bundle").strip() or "studio_bundle"
-    if flavor == "amd" and bundle == "studio_bundle":
-        bundle = "studio_bundle_directml"
-    model = (payload or {}).get("model") or os.getenv("EDMG_AI_OLLAMA_MODEL", "qwen3:8b")
-    ollama_url = os.getenv("EDMG_AI_OLLAMA_URL", "http://127.0.0.1:11434")
+    if bundle != "studio_bundle":
+        raise UserFacingError(
+            "Only the NVIDIA backend runtime bundle is supported in the NVIDIA-only profile.",
+            hint="Use bundle=studio_bundle with flavor=nvidia.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     ai_config = _setup_ai_config()
 
     def _run(task):
@@ -2341,30 +2190,11 @@ def setup_full_install(payload: dict[str, Any]):
         except Exception:
             download_and_install_7zip(task, settings.external_dir, settings.data_dir)
 
-        # 3) Ollama install/model only when the active AI path actually uses Ollama as fallback.
+        # 3) NVIDIA planner uses the configured service profile; no local LLM pull is performed.
         SetupTaskManager.check_canceled(task, "Full setup canceled.")
-        if ai_config.get("ollama_required"):
-            ollama_status = check_ollama(ollama_url, model)
-            if not ollama_status.get("ok"):
-                try:
-                    ollama_managed.start(task, settings.external_dir, settings.models_dir, ollama_url)
-                except Exception:
-                    dest = settings.external_dir / "_installers"
-                    download_and_install_ollama(task, dest, settings.external_dir, settings.models_dir, ollama_url)
-                    ollama_managed.start(task, settings.external_dir, settings.models_dir, ollama_url)
-            else:
-                SetupTaskManager.log(task, "Ollama is already reachable.")
-
-            ollama_status = check_ollama(ollama_url, model)
-            if not ollama_status.get("model_present"):
-                pull_ollama_model(task, ollama_url, model)
-            else:
-                SetupTaskManager.log(task, f"Ollama model {model} is already present.")
-        else:
-            SetupTaskManager.log(
-                task,
-                f"Skipping Ollama install because Studio AI is configured for {ai_config.get('label')}.",
-            )
+        if ai_config.get("provider") != "openai_compat":
+            raise RuntimeError(str(ai_config.get("error") or "NVIDIA planner is not configured."))
+        SetupTaskManager.log(task, f"NVIDIA planner configured: {ai_config.get('model')} at {ai_config.get('base_url')}.")
 
         # 4) ComfyUI Portable secondary workflow install + start
         SetupTaskManager.check_canceled(task, "Full setup canceled.")
@@ -2391,7 +2221,16 @@ def setup_full_install(payload: dict[str, Any]):
 
 @app.post("/v1/setup/comfyui/portable/install")
 def setup_comfyui_portable_install(payload: dict[str, Any]):
-    flavor = (payload or {}).get("flavor") or "cpu"
+    flavor = str((payload or {}).get("flavor") or "nvidia").strip().lower() or "nvidia"
+    if flavor == "cuda":
+        flavor = "nvidia"
+    if flavor != "nvidia":
+        raise UserFacingError(
+            "Only NVIDIA ComfyUI Portable setup is supported in the NVIDIA-only profile.",
+            hint="Use flavor=nvidia.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     task = setup_tasks.start(
         f"install_comfyui_portable:{flavor}",
         download_and_extract_portable,
@@ -2405,7 +2244,16 @@ def setup_comfyui_portable_install(payload: dict[str, Any]):
 
 @app.post("/v1/setup/comfyui/portable/start")
 def setup_comfyui_portable_start(payload: dict[str, Any]):
-    flavor = (payload or {}).get("flavor") or "cpu"
+    flavor = str((payload or {}).get("flavor") or "nvidia").strip().lower() or "nvidia"
+    if flavor == "cuda":
+        flavor = "nvidia"
+    if flavor != "nvidia":
+        raise UserFacingError(
+            "Only NVIDIA ComfyUI Portable startup is supported in the NVIDIA-only profile.",
+            hint="Use flavor=nvidia.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     port = int((payload or {}).get("port") or 8188)
     task = setup_tasks.start(
         f"start_comfyui_portable:{flavor}",
@@ -2429,7 +2277,16 @@ def setup_comfyui_portable_stop():
 @app.post("/v1/setup/edmg/install")
 def setup_edmg_install(payload: dict[str, Any]):
     mode = str((payload or {}).get("mode") or "standard").strip().lower() or "standard"
-    backend = str((payload or {}).get("backend") or "cpu").strip().lower() or "cpu"
+    backend = str((payload or {}).get("backend") or "nvidia").strip().lower() or "nvidia"
+    if backend == "cuda":
+        backend = "nvidia"
+    if backend != "nvidia":
+        raise UserFacingError(
+            "Only NVIDIA EDMG Core setup is supported in the NVIDIA-only profile.",
+            hint="Use backend=nvidia.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
     task = setup_tasks.start(f"install_edmg_core:{mode}:{backend}", edmg_install_core, settings.data_dir, mode=mode, backend=backend)
     return {"ok": True, "task": task.to_dict()}
 
@@ -4094,10 +3951,8 @@ def _creative_provider_mode(plan: dict[str, Any]) -> str:
     source = str((plan or {}).get("source") or "").strip().lower()
     provider = os.getenv("EDMG_AI_PROVIDER", "openai_compat").strip().lower()
     if source == "ai":
-        if provider == "ollama":
-            return "ollama-contract"
         if provider in {"openai_compat", "openai-compatible", "openai"}:
-            return "openai-contract"
+            return "nvidia-nim-contract"
         return f"{provider}-contract" if provider else "provider-contract"
     return "local-heuristic"
 
@@ -5545,16 +5400,13 @@ def _build_render_conductor_environment() -> dict[str, Any]:
         bool(models.installed_path(model_id))
         for model_id in ("hf_sd15_internal", "hf_sdxl_internal", "hf_sd35_medium_internal")
     )
-    backend_family = str(hw.get("backend_family") or "cpu_only").lower()
+    backend_family = str(hw.get("backend_family") or "nvidia_cuda_required").lower()
     if backend_family == "discrete_gpu":
         internal_quality = 0.92
         internal_speed = 0.74
-    elif backend_family == "integrated_gpu":
-        internal_quality = 0.8
-        internal_speed = 0.56
     else:
-        internal_quality = 0.66
-        internal_speed = 0.32
+        internal_quality = 0.0
+        internal_speed = 0.0
 
     ckpt, _fallback = _resolve_comfy_checkpoint_name(settings.comfyui_checkpoint, allow_auto_fallback=True)
     try:
@@ -5599,7 +5451,7 @@ def _build_render_conductor_environment() -> dict[str, Any]:
         f"internal_models={'installed' if installed_internal else 'missing'}",
         f"comfyui_still={'ready' if base_ok else 'unavailable'}",
         f"comfyui_motion={'ready' if (ad_ok or svd_ok) else 'unavailable'}",
-        f"hosted_stability={'ready' if _hosted_stability_ready({'allow_hosted_fallback': True}) else 'unavailable'}",
+        "nvidia_profile=active",
         f"deforum_export={'ready' if deforum_ok else 'unavailable'}",
     ]
     return {
@@ -5623,12 +5475,12 @@ def _build_render_conductor_environment() -> dict[str, Any]:
                 "speed_score": 0.62 if ad_ok else 0.57,
             },
             "hosted_video": {
-                "available": _hosted_stability_ready({"allow_hosted_fallback": True}),
+                "available": False,
                 "quality_score": 0.78,
                 "speed_score": 0.82,
             },
             "proxy": {
-                "available": True,
+                "available": False,
                 "quality_score": 0.38,
                 "speed_score": 0.95,
             },
@@ -6063,12 +5915,9 @@ def _storyboard_movie_payload_from_request(
     preset = str(req.preset or "balanced").lower()
     requested_tier = "draft" if preset == "fast" else ("quality" if preset in {"quality", "ultra"} else "auto")
     hw = _hardware_profile()
-    provider_status = _render_provider_status(hw)
     tier_plan = _build_internal_render_plan(hw, requested_tier=requested_tier, duration_s=duration_s)
     defaults = dict(tier_plan.get("defaults") or {})
-    device_preference = str(tier_plan.get("device_preference") or "auto")
-    if device_preference == "directml" and not bool((provider_status.get("directml") or {}).get("enabled", True)):
-        device_preference = "cpu"
+    device_preference = "cuda"
 
     payload: dict[str, Any] = {
         "variant_index": int(req.variant_index or 0),
@@ -6090,8 +5939,8 @@ def _storyboard_movie_payload_from_request(
         "refine_every_n_frames": int(defaults.get("refine_every_n_frames") or 1),
         "anchor_strength": float(defaults.get("anchor_strength") or 0.20),
         "prompt_blend": bool(defaults.get("prompt_blend", True)),
-        "allow_hosted_fallback": bool(req.allow_hosted_fallback),
-        "allow_proxy_fallback": bool(req.allow_proxy_fallback),
+        "allow_hosted_fallback": False,
+        "allow_proxy_fallback": False,
         "resume_existing_frames": bool(req.resume_existing_frames),
         "storyboard_movie": {
             "source": "ai_storyboard",
@@ -6137,29 +5986,34 @@ def generate_plan(project_id: str, req: PlanRequest, mode: str = "auto"):
             if isinstance(plan, dict):
                 plan.setdefault("source", "ai")
         except Exception as e:
-            if mode_norm == "ai":
-                # strict AI mode
+            if mode_norm in ("ai", "auto"):
                 raise UserFacingError(
-                    message="The configured planning/transcription provider is not available.",
+                    message="The configured NVIDIA planning provider is not available.",
                     hint=(
-                        "Fix: If you're using Ollama, make sure it is installed and running (Ollama app or `ollama serve`), "
-                        "and that the model is pulled (e.g., `ollama pull qwen3:8b`). "
-                        "If you want a remote AI, set EDMG_AI_MODE=http and EDMG_AI_BASE_URL to the running AI service."
+                        "Start the NVIDIA runtime profile and confirm EDMG_NVIDIA_NIM_URL, "
+                        "EDMG_AI_OPENAI_COMPAT_BASE_URL, and the NVIDIA API key are configured."
                     ),
-                    code="AI_UNAVAILABLE",
+                    code="NVIDIA_AI_UNAVAILABLE",
                     status_code=502,
-                )
+                ) from e
             plan = None
 
     if plan is None:
-        # deterministic local fallback (no LLM)
-        plan = _local_plan_from_project(
-            proj,
-            title=req.title or proj.name,
-            style_prefs=req.style_prefs or "",
-            num_variants=req.num_variants,
-            max_scenes=req.max_scenes,
-        )
+        if mode_norm in ("local", "edmg_core"):
+            plan = _local_plan_from_project(
+                proj,
+                title=req.title or proj.name,
+                style_prefs=req.style_prefs or "",
+                num_variants=req.num_variants,
+                max_scenes=req.max_scenes,
+            )
+        else:
+            raise UserFacingError(
+                message="NVIDIA planning did not return a plan.",
+                hint="Check the NVIDIA NIM endpoint and retry.",
+                code="NVIDIA_PLAN_REQUIRED",
+                status_code=502,
+            )
 
     if isinstance(plan, dict):
         plan = _normalize_plan_payload(
@@ -6733,7 +6587,7 @@ def _run_internal_still_scene(project_id: str, job_id: str, payload: dict[str, A
         resolved_model_asset=str(model_path),
         mask_source=str(prepared_assets.get("mask_source") or ""),
         outpaint=prepared_assets.get("outpaint"),
-        device=str(result.get("device") or "cpu"),
+        device=str(result.get("device") or "cuda"),
     )
     metadata_path = _write_generation_metadata(out_path, metadata)
     jobs.update_progress(project_id, job_id, stage="complete", current=1, total=1, message=f"Saved {out_path.name}")
@@ -7320,7 +7174,13 @@ def _run_comfyui_motion_scene(project_id: str, job_id: str, payload: dict[str, A
 
 def _run_internal_video(project_id: str, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     preflight = _internal_render_preflight_data(project_id, payload)
-    if preflight.get("mode") == "proxy":
+    if preflight.get("mode") in {"proxy", "hosted"}:
+        raise UserFacingError(
+            "Proxy and hosted render modes are disabled in the NVIDIA-only profile.",
+            hint="Use CUDA internal rendering or the NVIDIA RTX/OpenUSD render-job path.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
         proj = store.get(project_id)
         if not proj:
             raise UserFacingError("Project not found", hint="Open Projects and select a valid project.")
@@ -7347,7 +7207,7 @@ def _run_internal_video(project_id: str, job_id: str, payload: dict[str, Any]) -
             payload,
             model_id="proxy_draft",
             render_tier=str(payload.get("render_tier") or "auto"),
-            device_preference="cpu",
+            device_preference="cuda",
             temporal_mode="off",
         )
 
@@ -7487,7 +7347,7 @@ def _run_internal_video(project_id: str, job_id: str, payload: dict[str, Any]) -
             hosted_payload,
             model_id=str(preflight.get("model_id") or "stability:sd3:sd3.5-large-turbo"),
             render_tier=str(payload.get("render_tier") or "auto"),
-            device_preference="cpu",
+            device_preference="cuda",
             temporal_mode="keyframes" if str(payload.get("temporal_mode") or "frame_img2img") == "frame_img2img" else str(payload.get("temporal_mode") or "keyframes"),
         )
 
@@ -7548,33 +7408,11 @@ def _run_internal_video(project_id: str, job_id: str, payload: dict[str, Any]) -
             for warning in preflight["warnings"]:
                 _log(f"Warning: {warning}")
 
-        _progress("starting", 0, estimated_total, "Starting hosted Stability render")
-        variant2 = dict(variant)
-        variant2["index"] = variant_index
-        variant2["duration_s"] = _resolved_project_duration_s(proj, variant, scenes)
-
-        out = render_stability_hosted_video_variant(
-            ffmpeg_path=settings.ffmpeg_path,
-            project_dir=pdir,
-            variant=variant2,
-            scenes=scenes,
-            audio_path=audio_path,
-            settings=settings_obj,
-            stability_api_key=str(secrets.get("stability_api_key") or ""),
-            hosted_settings={
-                "service": str(preflight.get("hosted_provider", {}).get("service") or provider_cfg.get("service") or "sd3"),
-                "model": str(preflight.get("hosted_provider", {}).get("model") or provider_cfg.get("model") or "sd3.5-large-turbo"),
-                "style_preset": str(preflight.get("hosted_provider", {}).get("style_preset") or provider_cfg.get("style_preset") or "none"),
-                "output_format": str(preflight.get("hosted_provider", {}).get("output_format") or provider_cfg.get("output_format") or "png"),
-                "strength": float(provider_cfg.get("strength", 0.55)),
-                "cfg_scale": float(provider_cfg.get("cfg_scale", 6.5)),
-            },
-            timeline=(proj.meta.get("timeline") or None),
-            log_fn=_log,
-            progress_fn=_progress,
-            cancel_check_fn=_check_canceled,
-            chunk_plan=chunk_plan,
-            checkpoint_fn=_checkpoint,
+        raise UserFacingError(
+            "Hosted Stability rendering is disabled in the NVIDIA-only profile.",
+            hint="Use NVIDIA RTX/OpenUSD render jobs or CUDA internal rendering.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
         )
         checkpoint_summary = runtime_checkpoint or _load_render_checkpoint(out)
 
@@ -7928,7 +7766,7 @@ def _internal_model_hardware_issue(
         return None
 
     requested = str(requested_device or "auto").strip().lower()
-    backend = requested if requested in {"cuda", "cpu", "mps", "directml"} else str(hw.get("backend") or "cpu").lower()
+    backend = "cuda" if requested in {"auto", "cuda"} else str(hw.get("backend") or "nvidia_cuda_required").lower()
     if backend != "cuda":
         return None
 
@@ -7943,7 +7781,7 @@ def _internal_model_hardware_issue(
             f"{SD35_INTERNAL_MIN_CUDA_VRAM_GB:.0f} GB of CUDA VRAM for this Studio video path; "
             f"this GPU reports {vram_gb:.1f} GB."
         ),
-        "hint": "Use SDXL or SD 1.5 for local CUDA rendering on this GPU, or use hosted Stability for SD3.5 keyframes.",
+        "hint": "Use SDXL or SD 1.5 for local CUDA rendering on this GPU, or lower the render tier for SD3.5.",
     }
 
 
@@ -8019,37 +7857,32 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
 
     req_model_id = str(payload.get("model_id") or "hf_sd15_internal")
     hw = _hardware_profile()
-    tier_plan = _build_internal_render_plan(hw, requested_tier=str(payload.get("render_tier") or "auto"))
-    provider_cfg = _render_provider_status(hw).get("settings") or {}
-    directml_cfg = dict(provider_cfg.get("directml") or {})
-    directml_enabled = bool(directml_cfg.get("enabled", True))
-    requested_device = str(payload.get("device_preference") or tier_plan.get("device_preference") or "auto").strip().lower()
-    if requested_device == "directml" and not directml_enabled:
+    if str(hw.get("backend") or "").lower() != "cuda":
         raise UserFacingError(
-            "DirectML is disabled in Settings.",
-            hint="Enable AMD / DirectML internal runtime in Settings, or switch the device preference to CPU/CUDA/MPS.",
-            code="DIRECTML_DISABLED",
+            "NVIDIA CUDA runtime is required for internal diffusion rendering.",
+            hint="Launch the NVIDIA profile and confirm torch.cuda is available, or use the NVIDIA RTX/OpenUSD render-job path.",
+            code="NVIDIA_CUDA_REQUIRED",
             status_code=400,
         )
-    if requested_device == "auto" and str(hw.get("backend") or "").lower() == "directml" and not directml_enabled:
-        requested_device = "cpu"
-    if requested_device == "auto" and str(hw.get("backend") or "").lower() == "directml" and not bool(directml_cfg.get("allow_auto_selection", True)):
-        requested_device = "cpu"
+    tier_plan = _build_internal_render_plan(hw, requested_tier=str(payload.get("render_tier") or "auto"))
+    requested_device = str(payload.get("device_preference") or tier_plan.get("device_preference") or "auto").strip().lower()
+    if requested_device not in {"auto", "cuda"}:
+        raise UserFacingError(
+            "Only NVIDIA CUDA device execution is supported by this profile.",
+            hint="Use device_preference='auto' or 'cuda'. CPU, MPS, and DirectML fallbacks are disabled.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
+    requested_device = "cuda"
 
     auto_model_hardware_issue: dict[str, str] | None = None
 
     def _pick_auto_model() -> str | None:
         nonlocal auto_model_hardware_issue
         preferred = str(tier_plan.get("preferred_internal_model") or hw.get("preferred_internal_model") or "hf_sd15_internal")
-        if requested_device == "directml":
-            preferred = str(directml_cfg.get("preferred_model") or preferred or "auto").strip().lower()
-            if preferred == "auto":
-                preferred = "hf_sdxl_internal"
-            fallbacks = [preferred, "hf_sdxl_internal", "hf_sd15_internal"]
-        else:
-            fallbacks = [preferred, "hf_sd35_medium_internal", "hf_sdxl_internal", "hf_sd15_internal"]
+        candidates = [preferred, "hf_sd35_medium_internal", "hf_sdxl_internal", "hf_sd15_internal"]
         seen: set[str] = set()
-        for mid in fallbacks:
+        for mid in candidates:
             if mid in seen:
                 continue
             seen.add(mid)
@@ -8101,16 +7934,6 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
         )
 
     model_family = _internal_model_family_for_request(model_id, model_path)
-    effective_device_preference = requested_device
-    if requested_device == "directml" and model_family not in {"sd15", "sdxl"}:
-        raise UserFacingError(
-            "DirectML currently supports SD 1.5 and SDXL only.",
-            hint="Use SDXL or SD 1.5 for AMD / DirectML, or switch device preference to CPU for SD3.5.",
-            code="DIRECTML_MODEL_UNSUPPORTED",
-            status_code=400,
-        )
-    if requested_device == "auto" and str(hw.get("backend") or "").lower() == "directml" and model_family not in {"sd15", "sdxl"}:
-        effective_device_preference = "cpu"
     hardware_issue = _internal_model_hardware_issue(model_id, model_family, hw, requested_device)
     if hardware_issue:
         raise UserFacingError(
@@ -8124,7 +7947,7 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
         payload,
         model_id=model_id,
         render_tier=str(tier_plan.get("applied_tier") or payload.get("render_tier") or "auto"),
-        device_preference=effective_device_preference,
+        device_preference="cuda",
     )
     return proj, variant, model_id, model_path, settings_obj
 
@@ -8157,7 +7980,7 @@ def _proxy_render_preflight_data(
         payload,
         model_id="proxy_draft",
         render_tier=str(payload.get("render_tier") or "auto"),
-        device_preference="cpu",
+        device_preference="cuda",
         temporal_mode="off",
     )
 
@@ -8224,6 +8047,12 @@ def _hosted_render_preflight_data(
     *,
     reason: str | None = None,
 ) -> dict[str, Any]:
+    raise UserFacingError(
+        "Hosted Stability rendering is disabled in the NVIDIA-only profile.",
+        hint="Use NVIDIA RTX/OpenUSD render jobs or NVIDIA service-backed rendering.",
+        code="NVIDIA_ONLY_PROFILE",
+        status_code=400,
+    )
     provider_status = _render_provider_status()
     stability = dict(provider_status.get("stability") or {})
     provider_cfg = dict((provider_status.get("settings") or {}).get("stability") or {})
@@ -8273,7 +8102,7 @@ def _hosted_render_preflight_data(
         hosted_payload,
         model_id=hosted_model_id,
         render_tier=str(payload.get("render_tier") or "auto"),
-        device_preference="cpu",
+        device_preference="cuda",
         temporal_mode="keyframes" if str(payload.get("temporal_mode") or "frame_img2img") == "frame_img2img" else str(payload.get("temporal_mode") or "keyframes"),
     )
 
@@ -8289,7 +8118,7 @@ def _hosted_render_preflight_data(
         variant=variant,
         scenes=scenes,
         timeline=(proj.meta.get("timeline") or None),
-        model_dir=Path(f"stability_platform/{hosted_service}/{hosted_model}"),
+        model_dir=Path(f"hosted_disabled/{hosted_service}/{hosted_model}"),
         settings=settings_obj,
         total_frames=total_frames,
     )
@@ -8344,19 +8173,17 @@ def _hosted_render_preflight_data(
 
 def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     requested_mode = str(payload.get("render_mode") or "auto").strip().lower()
-    if requested_mode == "proxy":
-        return _proxy_render_preflight_data(project_id, payload, reason="Proxy mode requested explicitly.")
-    if requested_mode == "hosted":
-        return _hosted_render_preflight_data(project_id, payload)
+    if requested_mode not in {"auto", "diffusion"}:
+        raise UserFacingError(
+            "Only NVIDIA CUDA diffusion rendering is enabled by this profile.",
+            hint="Use CUDA internal rendering or the NVIDIA RTX/OpenUSD render-job path.",
+            code="NVIDIA_ONLY_PROFILE",
+            status_code=400,
+        )
 
     try:
         proj, variant, model_id, model_path, settings_obj = _resolve_internal_render_request(project_id, payload)
     except UserFacingError as e:
-        if e.code in {"MODEL_NOT_INSTALLED", "DIRECTML_MODEL_UNSUPPORTED", "MODEL_UNSUPPORTED_FOR_HARDWARE"} and _hosted_stability_ready(payload):
-            return _hosted_render_preflight_data(project_id, payload, reason=e.message)
-        allow_proxy = bool(payload.get("allow_proxy_fallback", True))
-        if allow_proxy and e.code in {"MODEL_NOT_INSTALLED", "MODEL_UNSUPPORTED_FOR_HARDWARE"}:
-            return _proxy_render_preflight_data(project_id, payload, reason=e.message, requested_model_id=str(payload.get("model_id") or "auto"))
         raise
 
     scenes = variant.get("scenes") or []
@@ -8368,14 +8195,6 @@ def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) ->
     tier_plan = _build_internal_render_plan(hw, requested_tier=str(payload.get("render_tier") or settings_obj.render_tier or "auto"), duration_s=duration_s)
     tier_plan["chunk_plan"] = _build_render_chunk_plan(hw, applied_tier=str(tier_plan.get("applied_tier") or "draft"), duration_s=duration_s, total_frames=total_frames, fps_render=fps_render, render_mode="diffusion")
     warnings: list[str] = []
-    if str(hw.get("backend") or "").lower() == "cpu":
-        warnings.append("No GPU acceleration detected; internal diffusion will run on CPU and may be slow on longer renders.")
-    elif str(hw.get("backend") or "").lower() == "mps":
-        warnings.append("Apple Silicon acceleration detected; balanced settings are recommended for sustained laptop rendering.")
-    elif str(hw.get("backend") or "").lower() == "directml":
-        warnings.append("DirectML acceleration detected; SDXL and SD 1.5 are the supported AMD / Windows GPU paths.")
-    if str(hw.get("backend") or "").lower() == "directml" and str(settings_obj.device_preference or "auto") == "cpu":
-        warnings.append("The selected internal model is not DirectML-compatible, so this render will fall back to CPU.")
     if total_frames > 900:
         warnings.append("This render is long for the current FPS render setting; consider lowering FPS render or increasing keyframe interval.")
     if settings_obj.temporal_mode == "frame_img2img" and total_frames > 600:
@@ -8410,7 +8229,7 @@ def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) ->
         "duration_s": duration_s,
         "estimated_frames": total_frames,
         "estimated_keyframes": keyframes,
-        "device": str(tier_plan.get("device_preference") or hw.get("backend") or "cpu"),
+        "device": "cuda",
         "hardware": hw,
         "tier_plan": tier_plan,
         "resume_existing_frames": bool(settings_obj.resume_existing_frames),
@@ -8625,34 +8444,25 @@ def _internal_diffusion_runtime_status() -> dict[str, Any]:
     try:
         import diffusers  # type: ignore  # noqa: F401
         import torch  # type: ignore  # noqa: F401
-        diagnostics = ["internal_runtime=ready"]
-        directml = _directml_runtime_status()
-        if directml.get("runtime_ready"):
-            diagnostics.append("directml_runtime=ready")
-        return {"ok": True, "diagnostics": diagnostics}
+        return {"ok": True, "diagnostics": ["internal_runtime=ready"]}
     except Exception as e:
         return {"ok": False, "error": str(e), "diagnostics": ["internal_runtime=missing"]}
 
 
 def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> dict[str, Any]:
     hw = _hardware_profile()
-    provider_status = _render_provider_status(hw)
-    directml_status = dict(provider_status.get("directml") or {})
-    if str(hw.get("backend") or "").lower() == "directml" and not bool(directml_status.get("enabled", True)):
-        hw = dict(hw)
-        hw["backend"] = "cpu"
-        hw["device"] = "cpu"
-        hw["backend_family"] = "cpu_only"
-        hw["device_preference"] = "cpu"
-        hw["available_backends"] = [b for b in list(hw.get("available_backends") or []) if str(b).lower() != "directml"]
+    if str(hw.get("backend") or "").lower() != "cuda":
+        raise UserFacingError(
+            f"{reason} NVIDIA CUDA is required by the NVIDIA-only profile.",
+            hint="Start the NVIDIA runtime on a CUDA-capable GPU, or use the NVIDIA RTX/OpenUSD render-job path.",
+            code="NVIDIA_CUDA_REQUIRED",
+            status_code=400,
+        )
     preset_l = str(preset or "balanced").lower().strip()
     requested_tier = "draft" if preset_l == "fast" else ("quality" if preset_l in ("quality", "ultra") else "auto")
     tier_plan = _build_internal_render_plan(hw, requested_tier=requested_tier)
     preferred = str(tier_plan.get("preferred_internal_model") or hw.get("preferred_internal_model") or "hf_sd15_internal")
-    if str(tier_plan.get("device_preference") or "auto") == "directml":
-        fallbacks = [preferred, "hf_sdxl_internal", "hf_sd15_internal"]
-    else:
-        fallbacks = [preferred, "hf_sd15_internal", "hf_sdxl_internal"]
+    fallbacks = [preferred, "hf_sd15_internal", "hf_sdxl_internal"]
     runtime = _internal_diffusion_runtime_status()
     picked = next((mid for mid in fallbacks if models.installed_path(mid)), None)
     if picked and runtime.get("ok"):
@@ -8660,21 +8470,9 @@ def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> d
             "mode": "internal",
             "engine": "diffusion",
             "model_id": picked,
-            "reason": f"{reason} Falling back to local internal render.",
+            "reason": f"{reason} Using CUDA internal render.",
             "diagnostics": ["comfyui=unavailable", f"internal_model={picked}", *list(runtime.get("diagnostics") or [])],
             "tier_plan": tier_plan,
-        }
-    if _hosted_stability_ready({"allow_hosted_fallback": True}):
-        stability = provider_status.get("stability") or {}
-        diagnostics = ["comfyui=unavailable", "hosted_stability=ready", *list(runtime.get("diagnostics") or [])]
-        return {
-            "mode": "hosted",
-            "engine": "stability",
-            "model_id": f"stability:{stability.get('service')}:{stability.get('model')}",
-            "reason": f"{reason} Falling back to hosted Stability keyframes.",
-            "diagnostics": diagnostics,
-            "tier_plan": tier_plan,
-            "hosted_provider": stability,
         }
     diagnostics = ["comfyui=unavailable"]
     if picked:
@@ -8682,17 +8480,14 @@ def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> d
     else:
         diagnostics.append("internal_models=missing")
     diagnostics.extend(list(runtime.get("diagnostics") or []))
-    proxy_reason = reason
     if picked and not runtime.get("ok"):
-        proxy_reason = f"{reason} Internal diffusion runtime is not installed."
-    return {
-        "mode": "proxy",
-        "engine": "proxy",
-        "model_id": "proxy_draft",
-        "reason": f"{proxy_reason} Falling back to proxy draft render.",
-        "diagnostics": diagnostics + [f"project={project_id}"],
-        "tier_plan": tier_plan,
-    }
+        reason = f"{reason} Internal diffusion runtime is not installed."
+    raise UserFacingError(
+        f"{reason} No CUDA internal render model is ready.",
+        hint="Install a CUDA internal render model or use the NVIDIA RTX/OpenUSD render-job path.",
+        code="NVIDIA_RENDER_MODEL_REQUIRED",
+        status_code=400,
+    )
 
 
 def _recommend_pipeline(project_id: str, preset: str, mode: str = "auto", engine: str = "auto") -> dict[str, Any]:
@@ -8836,12 +8631,8 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
         preset_l = str(preset or "balanced").lower().strip()
         requested_tier = "draft" if preset_l == "fast" else ("quality" if preset_l in ("quality", "ultra") else "auto")
         hw = _hardware_profile()
-        provider_status = _render_provider_status(hw)
         tier_plan = _build_internal_render_plan(hw, requested_tier=requested_tier)
         tier_defaults = dict(tier_plan.get("defaults") or {})
-        device_preference = str(tier_plan.get("device_preference") or "auto")
-        if device_preference == "directml" and not bool((provider_status.get("directml") or {}).get("enabled", True)):
-            device_preference = "cpu"
         internal_req = InternalVideoRenderRequest(
             variant_index=variant_index,
             fps_output=int(tier_defaults.get("fps_output", 24)),
@@ -8855,13 +8646,13 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
             model_id=os.getenv("EDMG_INTERNAL_MODEL_ID", "auto"),
             render_mode="auto",
             render_tier=str(tier_plan.get("applied_tier") or requested_tier),
-            device_preference=device_preference,
+            device_preference="cuda",
             temporal_mode=str(tier_defaults.get("temporal_mode", "frame_img2img")),
             temporal_steps=int(tier_defaults.get("temporal_steps", 12)),
             refine_every_n_frames=int(tier_defaults.get("refine_every_n_frames", 1)),
             anchor_strength=float(tier_defaults.get("anchor_strength", 0.20)),
             prompt_blend=bool(tier_defaults.get("prompt_blend", True)),
-            allow_proxy_fallback=True,
+            allow_proxy_fallback=False,
         )
         res = render_internal_video(project_id, internal_req)
         return {"ok": True, "mode": str(res.get("preflight", {}).get("mode") or "internal"), "job": res.get("job"), "preflight": res.get("preflight")}
@@ -8869,14 +8660,10 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
     defaults = _preset_defaults(preset)
     rec = _recommend_pipeline(project_id, preset=preset, mode=mode, engine=engine)
 
-    if rec["mode"] in ("internal", "proxy", "hosted"):
+    if rec["mode"] == "internal":
         hw = _hardware_profile()
-        provider_status = _render_provider_status(hw)
         tier_plan = dict(rec.get("tier_plan") or _build_internal_render_plan(hw, requested_tier=("draft" if preset == "fast" else ("quality" if preset in ("quality", "ultra") else "auto"))))
         tier_defaults = dict(tier_plan.get("defaults") or {})
-        device_preference = str(tier_plan.get("device_preference") or "auto")
-        if device_preference == "directml" and not bool((provider_status.get("directml") or {}).get("enabled", True)):
-            device_preference = "cpu"
         internal_req = InternalVideoRenderRequest(
             variant_index=variant_index,
             fps_output=int(tier_defaults.get("fps_output", 24)),
@@ -8888,16 +8675,16 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
             keyframe_interval_s=float(tier_defaults.get("keyframe_interval_s", os.getenv("EDMG_INTERNAL_KEYFRAME_INTERVAL_S", "5.0"))),
             interpolation_engine=str(tier_defaults.get("interpolation_engine", os.getenv("EDMG_INTERPOLATION_ENGINE", "auto"))),
             model_id=str(rec.get("model_id") or os.getenv("EDMG_INTERNAL_MODEL_ID", "auto")),
-            render_mode=("proxy" if rec["mode"] == "proxy" else ("hosted" if rec["mode"] == "hosted" else "auto")),
+            render_mode="auto",
             render_tier=str(tier_plan.get("applied_tier") or "auto"),
-            device_preference=device_preference,
+            device_preference="cuda",
             temporal_mode=str(tier_defaults.get("temporal_mode", "frame_img2img")),
             temporal_steps=int(tier_defaults.get("temporal_steps", 12)),
             refine_every_n_frames=int(tier_defaults.get("refine_every_n_frames", 1)),
             anchor_strength=float(tier_defaults.get("anchor_strength", 0.20)),
             prompt_blend=bool(tier_defaults.get("prompt_blend", True)),
-            allow_hosted_fallback=True,
-            allow_proxy_fallback=True,
+            allow_hosted_fallback=False,
+            allow_proxy_fallback=False,
         )
         res = render_internal_video(project_id, internal_req)
         effective_mode = str(res.get("preflight", {}).get("mode") or rec["mode"])
@@ -8906,8 +8693,6 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
             selected["mode"] = "internal"
             selected["engine"] = "diffusion"
             selected["model_id"] = str(res.get("preflight", {}).get("model_id") or selected.get("model_id") or "auto")
-        elif effective_mode in {"proxy", "hosted"}:
-            selected["mode"] = effective_mode
         return {
             "ok": True,
             "preset": preset,

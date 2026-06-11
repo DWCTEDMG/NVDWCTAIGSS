@@ -236,7 +236,8 @@ function Doctor($RepoRoot, $StudioDir, $PyBackendDir, $BackendPkgDir, $BundledFf
   Write-Host "== Port checks ==" -ForegroundColor Cyan
   Check-Port 7863 "Studio backend"
   Check-Port 8188 "ComfyUI"
-  Check-Port 11434 "Ollama"
+  Check-Port 8001 "NVIDIA NIM"
+  Check-Port 50051 "NVIDIA Riva"
   Write-Host "================" -ForegroundColor Cyan
   Write-Host ("Backend package: " + $BackendPkgDir) -ForegroundColor Cyan
 }

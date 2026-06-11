@@ -106,11 +106,9 @@ def _ensure_venv(venv_dir: Path, *, env: Optional[dict[str, str]] = None) -> Pat
 
 def _torch_index_url(backend: str) -> str:
     backend = backend.strip().lower()
-    if backend in {"cpu", "cpu-only"}:
-        return "https://download.pytorch.org/whl/cpu"
     if backend in {"cu118", "cu121", "cu124"}:
         return f"https://download.pytorch.org/whl/{backend}"
-    raise ValueError(f"Unsupported backend: {backend} (use cpu, cu118, cu121, cu124)")
+    raise ValueError(f"Unsupported backend: {backend} (use cu118, cu121, cu124)")
 
 
 def _install_torch(py: Path, backend: str, *, env: Optional[dict[str, str]] = None) -> int:
@@ -279,7 +277,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     install_parser.add_argument("--venv", default="", help="Optional venv dir (empty uses current Python)")
     install_parser.add_argument("--cache-root", default="", help="Shared cache root for pip/HF/Torch/Whisper/temp files")
     install_parser.add_argument("--skip-torch", action="store_true", default=False)
-    install_parser.add_argument("--backend", default="cpu", choices=["cpu", "cu118", "cu121", "cu124"])
+    install_parser.add_argument("--backend", default="cu124", choices=["cu118", "cu121", "cu124"])
     install_parser.add_argument("--cuda", action="store_true", default=False, help="Deprecated alias for --backend cu121")
     install_parser.add_argument("--cuda-version", default="", choices=["", "118", "121", "124"], help="Deprecated convenience alias")
     install_parser.add_argument("--skip-corpora", action="store_true", default=False)
@@ -297,7 +295,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         backend = str(args.backend)
         if args.cuda_version:
             backend = f"cu{args.cuda_version}"
-        if bool(args.cuda) and not args.cuda_version and args.backend == "cpu":
+        if bool(args.cuda) and not args.cuda_version:
             backend = "cu121"
 
         return install(

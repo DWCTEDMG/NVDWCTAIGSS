@@ -10,9 +10,9 @@ from enhanced_deforum_music_generator.api import models as hf_video_api
 def test_model_catalog_defaults_and_pack_references() -> None:
     catalog = {entry["id"]: entry for entry in built_in_catalog()}
 
-    assert catalog["ollama_qwen3_8b"]["ollama_model"] == "qwen3:8b"
-    assert catalog["ollama_qwen3_8b"]["recommended"] == "default"
-    assert catalog["ollama_qwen3_4b"]["ollama_model"] == "qwen3:4b"
+    assert catalog["nvidia_nim_nemotron_super"]["source"] == "nvidia_nim"
+    assert catalog["nvidia_nim_nemotron_super"]["recommended"] == "default"
+    assert catalog["nvidia_nim_nemotron_super"]["installable"] is False
     assert catalog["hf_sdxl_base_1_0"]["recommended"] == "default"
     assert catalog["hf_sd35_large_turbo_ckpt"]["recommended"] == "advanced"
 
@@ -21,9 +21,9 @@ def test_model_catalog_defaults_and_pack_references() -> None:
         for model_id in pack["models"]:
             assert model_id in catalog
 
-    assert packs["basic"]["models"] == ["ollama_qwen3_8b"]
-    assert packs["creator"]["models"] == ["ollama_qwen3_8b", "hf_sdxl_base_1_0"]
-    assert "hf_sd35_controlnet_depth" in packs["stability_sd35"]["models"]
+    assert packs["basic"]["models"] == []
+    assert packs["creator"]["models"] == []
+    assert "hf_sd35_controlnet_depth" in packs["nvidia_sd35"]["models"]
 
 
 def test_hf_video_catalog_api_preserves_primary_and_fallback_order(tmp_path: Path, monkeypatch) -> None:

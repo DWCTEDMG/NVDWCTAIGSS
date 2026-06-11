@@ -430,8 +430,7 @@ class EnhancedNLPAnalyzer:
 class AIPromptGenerator:
     """Generates cinematic prompts via Claude API with a deterministic fallback.
 
-    The generator supports optional AI provider backends (OpenAI-compatible,
-    Ollama, llama.cpp, HuggingFace Transformers) with a deterministic fallback.
+    The generator supports the NVIDIA/OpenAI-compatible provider with a deterministic fallback.
     When unavailable, it synthesizes high-quality prompts locally using the
     analysis data.
     """
@@ -440,7 +439,7 @@ class AIPromptGenerator:
         self,
         anthropic_api_key: Optional[str] = None,
         model: str = "claude-3-5-sonnet-20240620",
-        provider: str = "claude",
+        provider: str = "openai",
         provider_config: Optional[Dict[str, Any]] = None,
     ):
         self.api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")

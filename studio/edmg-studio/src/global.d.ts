@@ -79,8 +79,6 @@ declare global {
         mode: string;
         provider: string;
         aiBaseUrl: string;
-        ollamaUrl: string;
-        ollamaModel: string;
         openaiCompatBaseUrl: string;
         openaiCompatModel: string;
         source: string;
@@ -122,8 +120,6 @@ declare global {
         mode: string;
         provider: string;
         aiBaseUrl: string;
-        ollamaUrl: string;
-        ollamaModel: string;
         openaiCompatBaseUrl: string;
         openaiCompatModel: string;
       }) => Promise<{
@@ -133,8 +129,6 @@ declare global {
         mode?: string;
         provider?: string;
         aiBaseUrl?: string;
-        ollamaUrl?: string;
-        ollamaModel?: string;
         openaiCompatBaseUrl?: string;
         openaiCompatModel?: string;
       }>;
