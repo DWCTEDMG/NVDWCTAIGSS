@@ -464,7 +464,7 @@ export default function Settings(props: PageProps) {
     setBackendNotice(null);
     try {
       if (!window.edmg?.setBackendSettings) {
-        throw new Error("This Studio build cannot persist desktop backend startup settings yet.");
+        throw new Error("This Workshop build cannot persist desktop backend startup settings yet.");
       }
       const normalizedDraft = normalizeBackendSettings(backendDraft);
       const backendUrl =
@@ -491,7 +491,7 @@ export default function Settings(props: PageProps) {
       setLiveBackendUrl(nextLiveUrl);
       setBackendNotice(
         response.restartRequired
-          ? "Saved. Restart Studio so it relaunches against the selected backend target."
+          ? "Saved. Restart Workshop so it relaunches against the selected backend target."
           : "Saved."
       );
       await refreshBackendHealth(nextLiveUrl);
@@ -508,7 +508,7 @@ export default function Settings(props: PageProps) {
     setAiNotice(null);
     try {
       if (!window.edmg?.setAiSettings) {
-        throw new Error("This Studio build cannot persist AI startup settings yet.");
+        throw new Error("This Workshop build cannot persist AI startup settings yet.");
       }
       const response = await window.edmg.setAiSettings(normalizeAiSettings(aiDraft));
       if (!response?.ok) {
@@ -520,7 +520,7 @@ export default function Settings(props: PageProps) {
       setAiRestartRequired(!!response.restartRequired);
       setAiNotice(
         response.restartRequired
-          ? "Saved. Restart Studio so the backend relaunches on the new AI provider."
+          ? "Saved. Restart Workshop so the backend relaunches on the new AI provider."
           : "Saved."
       );
     } catch (e: any) {
@@ -668,7 +668,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>Appearance</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          Theme changes affect only this legacy React client. They do not affect NVIDIA Kit panels, backend spawning, model installs, render settings, or package outputs.
+          Theme changes affect this React control surface. They do not affect NVIDIA Kit panels, backend spawning, model installs, render settings, or package outputs.
         </div>
         <div style={{ display: "grid", gap: 12 }}>
           <div>
@@ -692,7 +692,7 @@ export default function Settings(props: PageProps) {
             </div>
           </div>
           <div className="small" style={{ opacity: 0.86 }}>
-            Current phase: Dashboard, Projects, Settings, Models, Studio Forge, and the advanced workbench pages support modular section ordering and visibility. These controls only change local presentation, not runtime behavior.
+            Current phase: Dashboard, Projects, Settings, Models, Workshop Forge, and the advanced workbench pages support modular section ordering and visibility. These controls only change local presentation, not NVIDIA runtime behavior.
           </div>
         </div>
       </div>
@@ -738,7 +738,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>Desktop Backend</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          Choose whether Studio should launch and own its local backend or just connect the GUI to an already running backend. This keeps Windows-first packaging intact while making Ubuntu and Linux desktop installs first-class.
+          Choose whether Workshop should launch and own its local backend or just connect the GUI to an already running backend. This keeps Windows-first packaging intact while making Ubuntu and Linux desktop installs first-class.
         </div>
         <div className="small" style={{ marginBottom: 12, opacity: 0.85 }}>
           Saved startup config: <b>{backendSettingsLoaded ? `${studioBackendSettings.mode} (${buildBackendUrl(studioBackendSettings)})` : "loading"}</b>
@@ -832,7 +832,7 @@ export default function Settings(props: PageProps) {
           <div>
             <div className="small" style={{ fontWeight: 800, marginBottom: 4 }}>Mode</div>
             <select value={aiDraft.mode} onChange={(e) => updateAiDraft({ mode: e.target.value })}>
-              <option value="local">Local provider inside Studio backend</option>
+              <option value="local">Local provider inside Workshop backend</option>
               <option value="http">Remote AI service over HTTP</option>
             </select>
           </div>
@@ -884,7 +884,7 @@ export default function Settings(props: PageProps) {
                 <input value={aiDraft.aiBaseUrl} onChange={(e) => updateAiDraft({ aiBaseUrl: e.target.value })} placeholder="http://127.0.0.1:7862" />
               </div>
               <div className="small" style={{ opacity: 0.82 }}>
-                Use this only when an external NVIDIA-compatible gateway owns planning outside the Studio backend.
+                Use this only when an external NVIDIA-compatible gateway owns planning outside the Workshop backend.
               </div>
             </>
           )}
@@ -965,7 +965,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>Tokens</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          Optional. Needed only for gated Hugging Face downloads and some Civitai downloads. Stored in OS keychain when available; otherwise stored locally under the Studio data directory.
+          Optional. Needed only for gated Hugging Face downloads and some Civitai downloads. Stored in OS keychain when available; otherwise stored locally under the Workshop data directory.
         </div>
         {secrets ? (
           <div className="small" style={{ marginBottom: 10, opacity: 0.9 }}>
@@ -1008,7 +1008,7 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>NVIDIA Render Runtime</div>
         <div className="small" style={{ marginBottom: 10 }}>
-          This profile routes production rendering through NVIDIA CUDA internal rendering or NVIDIA Kit/OpenUSD jobs. Alternate hosted and non-NVIDIA device render providers are not configurable from Studio.
+          This profile routes production rendering through NVIDIA CUDA internal rendering or NVIDIA Kit/OpenUSD jobs. Alternate hosted and non-NVIDIA device render providers are not configurable from Workshop.
         </div>
         <div style={{ display: "grid", gap: 10 }}>
           <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 12 }}>
@@ -1032,14 +1032,14 @@ export default function Settings(props: PageProps) {
       <div className="card" style={{ marginTop: 14 }}>
         <div style={{ fontWeight: 800, marginBottom: 10 }}>ComfyUI workflow</div>
         <div className="small">
-          Studio keeps NVIDIA/OpenUSD as the primary production handoff and ships curated ComfyUI routing for secondary stills, AnimateDiff motion, SVD image-to-video, and reference-driven ControlNet stills. The manual checkpoint override still uses <code>EDMG_COMFYUI_CHECKPOINT</code> when no catalog-backed model is selected.
+          Workshop keeps NVIDIA/OpenUSD as the primary production handoff and ships curated ComfyUI routing for secondary stills, AnimateDiff motion, SVD image-to-video, and reference-driven ControlNet stills. The manual checkpoint override still uses <code>EDMG_COMFYUI_CHECKPOINT</code> when no catalog-backed model is selected.
         </div>
         <div className="small" style={{ marginTop: 10, opacity: 0.92 }}>
           Use this mental model:
         </div>
         <ul className="guide-list" style={{ marginTop: 8 }}>
           <li>Setup gets ComfyUI installed and reachable at the configured URL.</li>
-          <li>Models decides which base checkpoints and ControlNet units Studio knows how to route through that ComfyUI server.</li>
+          <li>Models decides which base checkpoints and ControlNet units Workshop knows how to route through that ComfyUI server.</li>
           <li>Render only exposes ComfyUI workflow export and ComfyUI-specific still or motion paths when the selected model actually uses the `ComfyUI` engine and the server capabilities are live.</li>
           <li>If Render is still acting like nothing changed, the usual cause is one of three things: ComfyUI is not running, the selected model is an `Internal` model rather than a `ComfyUI` model, or the needed workflow family or ControlNet model is not installed yet.</li>
         </ul>

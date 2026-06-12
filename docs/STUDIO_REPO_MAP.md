@@ -1,20 +1,19 @@
-# EDMG Studio Repo Map
+# EDMG NVIDIA Workshop Repo Map
 
-This repository now presents one product surface: EDMG NVIDIA Studio.
+This repository now presents one product surface: EDMG NVIDIA Workshop.
 
 ## Canonical product tree
 
 - `studio/edmg-studio/`
-  Legacy Electron/React compatibility client and Node tooling.
+  React control surface and Node tooling for the Workshop.
 - `studio/edmg-studio/src/`
-  React/Vite frontend retained for migration and browser/client experiments.
+  React/Vite frontend retained as the Workshop control surface and browser/client experiments.
 - `studio/edmg-studio/main.mjs`, `preload.cjs`, `main-process/`
-  Legacy Electron desktop shell and runtime glue.
+  Electron runtime glue for the React control surface.
 - `studio/edmg-studio/python_backend/`
   FastAPI backend plus the vendored EDMG engine packages.
 - `studio/edmg-studio/tools/launcher_gui.py`
-  Shared NVIDIA launcher, Studio Home bootstrap flow, backend controls, and
-  legacy Electron dev controls.
+  Shared NVIDIA launcher, Workshop Home bootstrap flow, and backend controls.
 - `studio/edmg-studio/packaging/windows/`
   Windows-first packaged release automation.
 - `studio/edmg-studio/packaging/linux/`
@@ -64,7 +63,7 @@ Primary Studio docs:
 - [docs/STUDIO_RELEASE_RUNBOOK.md](./STUDIO_RELEASE_RUNBOOK.md)
 - [docs/NVIDIA_OMNIVERSE_STUDIO.md](./NVIDIA_OMNIVERSE_STUDIO.md)
 
-Key legacy client validation commands run from `studio/edmg-studio/`:
+Key React control-surface validation commands run from `studio/edmg-studio/`:
 
 - `pnpm run check:tooling`
 - `pnpm run validate:desktop`

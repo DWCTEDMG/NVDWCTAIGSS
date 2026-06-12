@@ -51,6 +51,6 @@ def hint_from_exception(e: Exception) -> str | None:
         return "ComfyUI may be busy or stuck. Check ComfyUI console, then retry the job."
 
     if "symlink loop" in sl or "too many symbolic links" in sl or "winerror 1921" in sl:
-        return "Studio detected a broken storage junction. Restart EDMG Studio so it can repair the models path, then retry."
+        return "EDMG NVIDIA Workshop detected a broken storage junction. Restart EDMG NVIDIA Workshop so it can repair the models path, then retry."
 
     return None

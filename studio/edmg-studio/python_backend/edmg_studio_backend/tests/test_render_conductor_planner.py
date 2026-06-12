@@ -76,8 +76,6 @@ def test_advisory_render_plan_routes_by_scene_profile_and_dna_bias():
             "internal": {"available": True, "quality_score": 0.9, "speed_score": 0.55},
             "comfyui_motion": {"available": True, "quality_score": 0.82, "speed_score": 0.62},
             "comfyui_still": {"available": True, "quality_score": 0.88, "speed_score": 0.4},
-            "hosted_video": {"available": False},
-            "proxy": {"available": True},
             "deforum_export": {"available": False},
         }
     }
@@ -96,9 +94,10 @@ def test_advisory_render_plan_routes_by_scene_profile_and_dna_bias():
     assert any(step.kind == "render_motion" for step in plan.sections[1].steps)
     assert plan.fallback_branches[1].reroute_to == "internal"
     assert any(item.startswith("visual_dna_confidence=") for item in plan.diagnostics)
+    assert "nvidia_only=true" in plan.diagnostics
 
 
-def test_advisory_render_plan_falls_back_to_proxy_when_only_proxy_is_available():
+def test_advisory_render_plan_fails_closed_to_internal_when_no_engine_is_available():
     snapshot = ProjectSnapshot(
         project_id="proj-789",
         plan={
@@ -126,14 +125,13 @@ def test_advisory_render_plan_falls_back_to_proxy_when_only_proxy_is_available()
                 "internal": {"available": False},
                 "comfyui_still": {"available": False},
                 "comfyui_motion": {"available": False},
-                "hosted_video": {"available": False},
-                "proxy": {"available": True},
                 "deforum_export": {"available": False},
             }
         },
     )
 
     assert len(plan.sections) == 1
-    assert plan.sections[0].engine == "proxy"
-    assert plan.fallback_branches[0].reroute_to == "proxy"
+    assert plan.sections[0].engine == "internal"
+    assert plan.fallback_branches == []
+    assert "nvidia_only=true" in plan.diagnostics
     assert plan.assembly.expected_output_path.endswith(".mp4")

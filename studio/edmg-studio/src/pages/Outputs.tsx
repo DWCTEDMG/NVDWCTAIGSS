@@ -178,14 +178,15 @@ export default function Outputs(props: PageProps) {
     if (!projectId) return;
     try {
       setErr(null);
+      const originalMode = String(entry?.mode || "auto");
+      const retryMode = originalMode === "proxy" || originalMode === "hosted" ? "auto" : originalMode;
       await apiPost(`/v1/projects/${projectId}/render/internal/video`, {
         variant_index: Number(entry?.variant_index ?? 0),
-        model_id: String(entry?.mode === "proxy" ? "auto" : (entry?.model_id || "auto")),
+        model_id: String(originalMode === "proxy" || originalMode === "hosted" ? "auto" : (entry?.model_id || "auto")),
         fps_render: Number(entry?.fps_render ?? 2),
         fps_output: Number(entry?.fps_output ?? 24),
         temporal_mode: String(entry?.temporal_mode || "frame_img2img"),
-        render_mode: String(entry?.mode || "auto"),
-        allow_proxy_fallback: false,
+        render_mode: retryMode,
         resume_existing_frames: true,
       });
       await refreshOutputs(projectId);

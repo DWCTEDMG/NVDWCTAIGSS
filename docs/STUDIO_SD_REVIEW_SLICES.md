@@ -35,7 +35,7 @@ These files are not required for the still-image diffusion feature path and shou
 - `studio/edmg-studio/python_backend/enhanced_deforum_music_generator/api/models.py`
 - `studio/edmg-studio/python_backend/enhanced_deforum_music_generator/cli/hf_models.py`
 - `studio/edmg-studio/python_backend/enhanced_deforum_music_generator/presets/hf_video_model_catalog.json`
-- `studio/edmg-studio/scripts/packaged-zero-state-setup-proof.mjs`
+- `studio/edmg-studio/scripts/packaged-nvidia-setup-proof.mjs`
 - `studio/edmg-studio/src/pages/Settings.tsx`
 - `studio/edmg-studio/tools/edmgctl/internal/support/support_test.go`
 

@@ -20,7 +20,7 @@ describe("Sidebar", () => {
   it("uses grouped navigation while keeping standalone labs available", () => {
     render(<Sidebar page="plannerLab" onNavigate={() => {}} />);
 
-    const logo = screen.getByAltText("EDMG Studio logo");
+    const logo = screen.getByAltText("EDMG NVIDIA Workshop logo");
     expect(logo.getAttribute("src")).toBe("studio-logo.png");
     expect(screen.getByText("Labs")).toBeTruthy();
     expect(screen.getByRole("button", { name: /EDMG Director/i })).toBeTruthy();

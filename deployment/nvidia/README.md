@@ -1,7 +1,6 @@
 # NVIDIA Service Profile
 
-This directory is the first deployment lane for the NVIDIA-first EDMG Studio
-rework.
+This directory is the deployment lane for EDMG NVIDIA Workshop.
 
 For the larger official NVIDIA product map and Windows packaging boundary, see
 [`docs/NVIDIA_OFFICIAL_OPTIONS.md`](../../docs/NVIDIA_OFFICIAL_OPTIONS.md).
@@ -10,9 +9,8 @@ For the Kit runtime packaging decision, see
 For the step-by-step local setup path, see
 [`docs/NVIDIA_GETTING_STARTED.md`](../../docs/NVIDIA_GETTING_STARTED.md).
 
-The immediate goal is to keep the existing backend usable while pointing its AI
-routes at NVIDIA-hosted or locally hosted services. The longer-term goal is a
-dedicated Omniverse Kit app plus a GPU service stack.
+The immediate goal is to keep the backend, Kit shell, and GPU service profile
+on one NVIDIA runtime path.
 
 ## Intended runtime split
 
@@ -103,8 +101,7 @@ pin one with `-ProjectId`.
 
 To prove the Kit-facing generated-planner path, run the AI Director smoke with
 `--generate`. With a reachable NIM-compatible endpoint it uses that provider;
-otherwise the backend reports or falls back according to the configured AI
-provider:
+otherwise the backend reports the NVIDIA planner setup error:
 
 ```powershell
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
@@ -152,8 +149,8 @@ Riva ASR is now represented by `/v1/nvidia/riva/status` and the direct
 `/v1/projects/{project_id}/nvidia/riva/transcribe` route. Set
 `EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva` only when the backend
 environment has the NVIDIA Riva Python client installed and the Riva gRPC URI is
-reachable; otherwise the normal Studio analysis path keeps using the existing
-local ASR fallback.
+reachable; otherwise the Riva route reports the NVIDIA ASR setup error. Local
+ASR fallback is disabled in the NVIDIA-only profile.
 For the default local Riva `2.19.0` lane, install the backend Riva extra and
 prepare NVIDIA's Quick Start scripts before enabling ASR:
 
@@ -345,7 +342,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deployment/nvidia/run_live_g
   secrets. Use `-ConfigureOnly` to update `.env.local` without pulling or
   starting the service. Use it service-by-service on this 6 GB RTX workstation.
 - `stage_nvidia_kit_app.ps1` creates a local distributable source bundle for
-  the EDMG NVIDIA Kit app under `dist/nvidia-kit-app/`, including app config,
+  the EDMG NVIDIA Workshop app under `dist/nvidia-workshop-app/`, including app config,
   extensions, tools, deployment helpers, a manifest, and a generated launch
   script. It defaults to `-PackageMode thin` and does not copy the Kit SDK.
   `-PackageMode internal-fat` or legacy `-IncludeKitSdk` copies the SDK only for

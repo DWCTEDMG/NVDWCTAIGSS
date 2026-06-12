@@ -5,7 +5,7 @@ import Setup from "../pages/Setup";
 import { installEdmgBridge, installFetchMock, renderWithStudio } from "./testUtils";
 
 describe("Setup page", () => {
-  it("shows the active AI path and Studio Home controls", async () => {
+  it("shows the active AI path and Workshop Home controls", async () => {
     installEdmgBridge();
     installFetchMock({
       "/v1/setup/status": {
@@ -51,7 +51,7 @@ describe("Setup page", () => {
     expect(activeAiPath.textContent).toContain("enabled");
     expect(await screen.findByText("NVIDIA Runtime Readiness")).toBeTruthy();
     expect((await screen.findAllByText(/Test RTX/)).length).toBeGreaterThan(0);
-    expect(await screen.findByDisplayValue("D:\\EDMG-Studio")).toBeTruthy();
+    expect(await screen.findByDisplayValue("D:\\EDMG-NVIDIA-Workshop")).toBeTruthy();
   });
 
   it("shows Linux-friendly storage paths and manual setup guidance", async () => {
@@ -59,15 +59,15 @@ describe("Setup page", () => {
       getStudioPaths: async () => ({
         ok: true,
         platform: "linux",
-        studioHome: "/home/test/EDMG-Studio",
-        dataDir: "/home/test/EDMG-Studio/data",
-        modelsDir: "/home/test/EDMG-Studio/models",
-        cacheRoot: "/home/test/EDMG-Studio/cache",
-        logsDir: "/home/test/EDMG-Studio/logs",
-        externalDir: "/home/test/EDMG-Studio/external",
-        electronUserData: "/home/test/EDMG-Studio/electron",
-        sessionData: "/home/test/EDMG-Studio/electron/session",
-        bootstrapConfigPath: "/home/test/.config/EDMG Studio/bootstrap.json",
+        studioHome: "/home/test/EDMG-NVIDIA-Workshop",
+        dataDir: "/home/test/EDMG-NVIDIA-Workshop/data",
+        modelsDir: "/home/test/EDMG-NVIDIA-Workshop/models",
+        cacheRoot: "/home/test/EDMG-NVIDIA-Workshop/cache",
+        logsDir: "/home/test/EDMG-NVIDIA-Workshop/logs",
+        externalDir: "/home/test/EDMG-NVIDIA-Workshop/external",
+        electronUserData: "/home/test/EDMG-NVIDIA-Workshop/electron",
+        sessionData: "/home/test/EDMG-NVIDIA-Workshop/electron/session",
+        bootstrapConfigPath: "/home/test/.config/EDMG NVIDIA Workshop/bootstrap.json",
         source: "test",
       }),
     });
@@ -95,7 +95,7 @@ describe("Setup page", () => {
 
     renderWithStudio(<Setup />);
 
-    expect(await screen.findByDisplayValue("/home/test/EDMG-Studio")).toBeTruthy();
+    expect(await screen.findByDisplayValue("/home/test/EDMG-NVIDIA-Workshop")).toBeTruthy();
     expect(await screen.findByText("0) System Setup")).toBeTruthy();
     expect(await screen.findByText(/Linux and macOS use the manual NVIDIA path/)).toBeTruthy();
     expect(await screen.findByText(/Linux support uses a manually installed ComfyUI instance.*secondary workflows/i)).toBeTruthy();

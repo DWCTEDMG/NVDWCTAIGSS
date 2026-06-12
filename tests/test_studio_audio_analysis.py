@@ -51,7 +51,7 @@ def test_analyze_audio_builds_rich_longform_payload(tmp_path, monkeypatch):
             "segment_count": 3,
             "word_count": 21,
             "model_size": model_size,
-            "source": "faster_whisper",
+            "source": "nvidia_riva",
             "segments": [
                 {"start": 0.0, "end": 18.0, "text": "Neon streets open into the skyline."},
                 {"start": 296.0, "end": 332.0, "text": "The chorus lifts the crowd through electric rain."},
@@ -117,7 +117,7 @@ def test_analyze_audio_surfaces_no_speech_after_vad_status(tmp_path, monkeypatch
             "segment_count": 0,
             "word_count": 0,
             "model_size": "medium",
-            "source": "faster_whisper",
+            "source": "nvidia_riva",
             "segments": [],
             "note": "No speech detected after VAD.",
         },

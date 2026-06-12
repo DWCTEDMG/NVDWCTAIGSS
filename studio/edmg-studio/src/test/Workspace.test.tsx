@@ -155,7 +155,8 @@ describe("Workspace page", () => {
                 text: "",
                 note: "No speech detected after VAD.",
                 duration_after_vad_s: 0,
-                source: "faster_whisper",
+                segment_count: 0,
+                source: "nvidia_riva",
               },
               features: {
                 duration_s: 374.8,
@@ -180,7 +181,7 @@ describe("Workspace page", () => {
           waveform: [],
           motifs: [],
           transcript_text: "",
-          transcript_summary: "No speech detected after VAD. Studio is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.",
+          transcript_summary: "No speech detected after VAD. Workshop is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.",
           preset: "cinematic",
           sensitivity: 1,
           provider_mode: "local",

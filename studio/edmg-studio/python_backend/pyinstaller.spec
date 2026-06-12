@@ -1,4 +1,4 @@
-# PyInstaller spec for the EDMG Studio backend.
+# PyInstaller spec for the EDMG NVIDIA Workshop backend.
 # Build from: studio/edmg-studio/python_backend
 
 import os

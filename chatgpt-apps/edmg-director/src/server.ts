@@ -21,7 +21,7 @@ const BIND_HOST = String(process.env.HOST ?? "127.0.0.1");
 const EDMG_BASE_URL = String(process.env.EDMG_BASE_URL ?? "http://127.0.0.1:7863").replace(/\/+$/, "");
 const REVIEW_WIDGET_URI = "ui://edmg-director/review-board.html";
 const REVIEW_WIDGET_DESCRIPTION =
-  "Interactive review board for EDMG storyboard variants. Inspect scenes, compare directions, and apply the chosen variant to the Studio timeline.";
+  "Interactive review board for EDMG storyboard variants. Inspect scenes, compare directions, and apply the chosen variant to the Workshop timeline.";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -418,7 +418,7 @@ function normalizePlanPreview(
 
 function describeSearchResults(results: ProjectSearchResult[]): string {
   if (!results.length) {
-    return "No EDMG Studio projects matched the search.";
+    return "No EDMG NVIDIA Workshop projects matched the search.";
   }
   return results
     .map((project) => `- ${project.name} (${project.id})`)
@@ -476,7 +476,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
     {
       title: "Check EDMG backend status",
       description:
-        "Use this when you need to verify whether the EDMG Studio backend is reachable before running project tools.",
+        "Use this when you need to verify whether the EDMG NVIDIA Workshop backend is reachable before running project tools.",
       inputSchema: {},
       annotations: {
         readOnlyHint: true,
@@ -532,7 +532,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
     {
       title: "Search EDMG projects",
       description:
-        "Use this when you need to find an EDMG Studio project by name or ID before inspecting or planning it.",
+        "Use this when you need to find an EDMG NVIDIA Workshop project by name or ID before inspecting or planning it.",
       inputSchema: {
         query: z.string().optional(),
         limit: z.number().int().min(1).max(20).optional(),
@@ -679,7 +679,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
     {
       title: "Generate EDMG plan preview",
       description:
-        "Use this when you want EDMG Studio to generate storyboard variants and review them in an interactive board before writing anything into the timeline.",
+        "Use this when you want EDMG NVIDIA Workshop to generate storyboard variants and review them in an interactive board before writing anything into the timeline.",
       inputSchema: {
         projectId: z.string().min(1),
         mode: z.enum(["auto", "ai", "local", "edmg_core"]).optional(),
@@ -756,7 +756,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
     {
       title: "Apply EDMG plan variant",
       description:
-        "Use this when a reviewer has chosen a storyboard variant and wants that variant written into the EDMG Studio timeline.",
+        "Use this when a reviewer has chosen a storyboard variant and wants that variant written into the Workshop timeline.",
       inputSchema: {
         projectId: z.string().min(1),
         variantIndex: z.number().int().min(0),
@@ -865,7 +865,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
         timelineSummary: summarizeTimeline(payload.timeline),
         message:
           `Imported planner payload into ${asString(project.name) || projectId}` +
-          (applyTimeline ? " and refreshed the Studio timeline." : "."),
+          (applyTimeline ? " and refreshed the Workshop timeline." : "."),
       };
 
       return {
@@ -881,7 +881,7 @@ export function createServer(config: ServerConfig = resolveServerConfig()): McpS
     {
       title: "Apply reactive handoff into EDMG",
       description:
-        "Use this when you have reactive cue events, schedules, and handoff metadata that should be merged into an EDMG Studio timeline.",
+        "Use this when you have reactive cue events, schedules, and handoff metadata that should be merged into a Workshop timeline.",
       inputSchema: {
         projectId: z.string().min(1),
         metadata: jsonObjectSchema.optional(),

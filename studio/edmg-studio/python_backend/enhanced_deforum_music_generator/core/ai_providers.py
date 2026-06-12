@@ -2,7 +2,7 @@
 AI Provider abstraction layer for EDMG.
 
 This module provides a lightweight, optional integration layer for
-API-based NVIDIA/OpenAI-compatible LLM providers.
+NVIDIA NIM / OpenAI-compatible LLM providers.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class SemanticAnalysis:
 
 @dataclass
 class AIProviderConfig:
-    provider: str = "openai"
+    provider: str = "nvidia_nim"
     model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     base_url: str = "http://127.0.0.1:8001"
     api_key_env: str = "EDMG_AI_OPENAI_COMPAT_API_KEY"
@@ -115,7 +115,7 @@ class OpenAIProvider(BaseJSONProvider):
 
 def build_ai_provider(config: AIProviderConfig) -> AIProvider:
     provider = config.provider.lower()
-    if provider in {"openai", "api", "openai_compat", "nvidia", "nvidia_nim", "nim"}:
+    if provider in {"openai_compat", "nvidia", "nvidia_nim", "nim"}:
         return OpenAIProvider(config)
     raise ValueError(f"Unsupported AI provider for NVIDIA-only profile: {config.provider}")
 

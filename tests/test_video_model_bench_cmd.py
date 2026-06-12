@@ -30,7 +30,7 @@ def test_build_run_command_smoke(tmp_path: Path) -> None:
         steps=4,
         guidance_scale=5.0,
         dtype="float16",
-        device="cpu",
+        device="cuda",
         vae_dtype="float16",
         family="wan",
         image=None,
@@ -40,3 +40,4 @@ def test_build_run_command_smoke(tmp_path: Path) -> None:
     assert "--model-id" in cmd
     assert "Org/Model" in cmd
     assert "--prompt" in cmd
+    assert "--cpu-offload" not in cmd

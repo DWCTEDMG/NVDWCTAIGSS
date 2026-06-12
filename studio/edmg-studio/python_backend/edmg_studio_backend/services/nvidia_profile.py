@@ -64,7 +64,6 @@ def nvidia_profile_status() -> dict[str, Any]:
                 "language_code": _env("EDMG_NVIDIA_RIVA_LANGUAGE_CODE", "en-US") or "en-US",
                 "model": _env("EDMG_NVIDIA_RIVA_MODEL"),
                 "ssl": _truthy(_env("EDMG_NVIDIA_RIVA_USE_SSL")),
-                "fallback_enabled": _truthy(_env("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "0")),
             },
             "omniverse": {
                 "base_url": omniverse_url,

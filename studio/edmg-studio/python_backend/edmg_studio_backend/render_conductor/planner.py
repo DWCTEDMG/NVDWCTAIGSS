@@ -17,6 +17,13 @@ from ..schemas import (
     RenderStep,
 )
 
+NVIDIA_RENDER_ENGINES: tuple[EngineKind, ...] = (
+    "internal",
+    "comfyui_motion",
+    "comfyui_still",
+    "deforum_export",
+)
+
 
 @dataclass
 class CapabilityReport:
@@ -76,15 +83,20 @@ def _environment_engines(environment: dict[str, Any] | None, intent: RenderInten
     payload = environment if isinstance(environment, dict) else {}
     raw_engines = payload.get("engines") if isinstance(payload.get("engines"), dict) else {}
     out: dict[str, dict[str, Any]] = {}
-    for engine in intent.allowed_engines:
+    for engine in _nvidia_allowed_engines(intent.allowed_engines):
         details = raw_engines.get(engine)
         if isinstance(details, dict):
             out[engine] = {"available": bool(details.get("available", True)), **details}
         elif isinstance(details, bool):
             out[engine] = {"available": bool(details)}
         else:
-            out[engine] = {"available": engine == "proxy" or engine == "internal"}
+            out[engine] = {"available": engine == "internal"}
     return out
+
+
+def _nvidia_allowed_engines(engines: list[EngineKind] | tuple[EngineKind, ...]) -> list[EngineKind]:
+    selected = [engine for engine in engines if engine in NVIDIA_RENDER_ENGINES]
+    return selected or ["internal"]
 
 
 def _resolve_variant(snapshot: ProjectSnapshot, variant_index: int) -> dict[str, Any]:
@@ -214,10 +226,6 @@ def _engine_score(
         base = 0.38 + motion_complexity * 0.46 + hero_frame * 0.12 - continuity_priority * 0.12 + speed * 0.06
     elif engine == "comfyui_still":
         base = 0.34 + hero_frame * 0.28 + style_lock * 0.12 + (0.18 if has_reference else 0.0) - motion_complexity * 0.24
-    elif engine == "hosted_video":
-        base = 0.3 + speed * 0.24 + motion_complexity * 0.18 + quality_bonus - style_lock * 0.08
-    elif engine == "proxy":
-        base = 0.12 + speed * 0.1 - quality_bonus * 0.5
     elif engine == "deforum_export":
         base = 0.18 + continuity_priority * 0.08
 
@@ -245,8 +253,6 @@ def _estimate_section(engine: EngineKind, duration_s: float, intent: RenderInten
     if engine == "comfyui_still":
         still_factor = max(1.0, duration_s / 3.0)
         return (still_factor * 18.0 * quality, still_factor * 0.16 * quality)
-    if engine == "hosted_video":
-        return (duration_s * 40.0 * quality, duration_s * 0.35 * quality)
     if engine == "deforum_export":
         return (duration_s * 24.0, duration_s * 0.05)
     return (duration_s * 6.0, duration_s * 0.02)
@@ -257,8 +263,6 @@ def _continuity_risk(engine: EngineKind, continuity_priority: float, style_lock:
         "internal": 0.18,
         "comfyui_motion": 0.42,
         "comfyui_still": 0.62,
-        "hosted_video": 0.46,
-        "proxy": 0.34,
         "deforum_export": 0.38,
     }.get(engine, 0.4)
     risk = baseline + continuity_priority * 0.18 - style_lock * 0.1
@@ -271,17 +275,15 @@ def _fallback_engine(
     intent: RenderIntent,
 ) -> EngineKind:
     preferred_orders: dict[EngineKind, list[EngineKind]] = {
-        "internal": ["proxy"],
-        "comfyui_motion": ["internal", "proxy"],
-        "comfyui_still": ["internal", "proxy"],
-        "hosted_video": ["internal", "proxy"],
-        "deforum_export": ["internal", "proxy"],
-        "proxy": ["proxy"],
+        "internal": ["comfyui_motion", "comfyui_still", "deforum_export"],
+        "comfyui_motion": ["internal", "comfyui_still", "deforum_export"],
+        "comfyui_still": ["internal", "comfyui_motion", "deforum_export"],
+        "deforum_export": ["internal", "comfyui_motion", "comfyui_still"],
     }
-    for candidate in preferred_orders.get(primary, ["proxy"]):
+    for candidate in preferred_orders.get(primary, ["internal"]):
         if candidate in intent.allowed_engines and bool(engines.get(candidate, {}).get("available", False)):
             return candidate
-    return "proxy"
+    return primary if primary in NVIDIA_RENDER_ENGINES else "internal"
 
 
 def _section_steps(
@@ -349,7 +351,7 @@ def _section_steps(
                 notes=["Scene routes through the selected motion-capable engine in advisory mode."],
             )
         )
-        if intent.output_mode == "full_video" and engine in {"internal", "proxy"}:
+        if intent.output_mode == "full_video" and engine == "internal":
             steps.append(
                 RenderStep(
                     id=f"{scene_id}-interp",
@@ -360,7 +362,7 @@ def _section_steps(
                     notes=["Interpolation stays explicit so conductor plans can trade speed against polish later."],
                 )
             )
-    if continuity_priority >= 0.72 and engine not in {"proxy", "deforum_export"}:
+    if continuity_priority >= 0.72 and engine != "deforum_export":
         steps.append(
             RenderStep(
                 id=f"{scene_id}-repair",
@@ -391,6 +393,7 @@ def build_advisory_render_plan(
     environment: dict[str, Any] | None = None,
 ) -> RenderPlan:
     intent_obj = intent if isinstance(intent, RenderIntent) else RenderIntent.model_validate(intent)
+    allowed_engines = _nvidia_allowed_engines(intent_obj.allowed_engines)
     snapshot_obj = snapshot if isinstance(snapshot, ProjectSnapshot) else ProjectSnapshot.model_validate(snapshot)
     dna = snapshot_obj.visual_dna
     variant = _resolve_variant(snapshot_obj, intent_obj.variant_index)
@@ -413,10 +416,10 @@ def build_advisory_render_plan(
             continuity_priority = _clamp_unit(override.continuity_priority, continuity_priority)
         hero_frame = _hero_frame(scene)
 
-        chosen_engine: EngineKind = "proxy"
+        chosen_engine: EngineKind = allowed_engines[0]
         chosen_score = -1.0
         rationale_parts: list[str] = []
-        for engine in intent_obj.allowed_engines:
+        for engine in allowed_engines:
             score = _engine_score(
                 engine,
                 continuity_priority=continuity_priority,
@@ -439,12 +442,10 @@ def build_advisory_render_plan(
             rationale_parts.append("short, kinetic motion profile favors a ComfyUI motion pass")
         elif chosen_engine == "comfyui_still":
             rationale_parts.append("hero framing or reference-driven styling favors a still-anchor path")
-        elif chosen_engine == "hosted_video":
-            rationale_parts.append("speed and motion density justify a hosted video recommendation")
         elif chosen_engine == "deforum_export":
             rationale_parts.append("scene is a better fit for Deforum-aligned export than direct execution")
         else:
-            rationale_parts.append("proxy remains the safest fallback for this scene on the current environment")
+            rationale_parts.append("NVIDIA execution is required; unavailable adapters fail closed")
 
         if dna and dna.identity.motifs:
             rationale_parts.append(f"project DNA motifs in play: {', '.join(dna.identity.motifs[:3])}")
@@ -480,20 +481,22 @@ def build_advisory_render_plan(
             )
         )
         fallback = _fallback_engine(chosen_engine, engines, intent_obj)
-        fallbacks.append(
-            FallbackBranch(
-                trigger=f"{scene_id}:{chosen_engine}:unavailable",
-                reroute_to=fallback,
-                notes=f"Fallback to {fallback} if the recommended adapter is unavailable when the plan is executed.",
+        if fallback != chosen_engine and fallback in NVIDIA_RENDER_ENGINES:
+            fallbacks.append(
+                FallbackBranch(
+                    trigger=f"{scene_id}:{chosen_engine}:unavailable",
+                    reroute_to=fallback,
+                    notes=f"Reroute to NVIDIA engine {fallback} if the recommended adapter is unavailable when the plan is executed.",
+                )
             )
-        )
         engine_counts[chosen_engine] = engine_counts.get(chosen_engine, 0) + 1
 
     engine_summary = ", ".join(f"{engine} x{count}" for engine, count in sorted(engine_counts.items()))
     diagnostics = [
         "advisory_only=true",
-        f"allowed_engines={','.join(intent_obj.allowed_engines)}",
+        f"allowed_engines={','.join(allowed_engines)}",
         f"available_engines={','.join(engine for engine, info in engines.items() if info.get('available'))}",
+        "nvidia_only=true",
     ]
     if dna is not None:
         diagnostics.append(f"visual_dna_confidence={dna.learning_state.confidence:.2f}")

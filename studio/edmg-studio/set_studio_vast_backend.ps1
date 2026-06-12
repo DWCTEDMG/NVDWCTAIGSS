@@ -147,8 +147,8 @@ $launcher["EDMG_STUDIO_SPAWN_BACKEND"] = "0"
 Write-JsonObject $launcherPath $launcher
 Write-Step "Updated launcher_env.json for dev Electron"
 
-# 4) Already-installed packaged app: main.mjs reads %APPDATA%\EDMG Studio\bootstrap.json.
-$bootstrapPath = Join-Path $env:APPDATA "EDMG Studio\bootstrap.json"
+# 4) Already-installed packaged app: main.mjs reads %APPDATA%\EDMG NVIDIA Workshop\bootstrap.json.
+$bootstrapPath = Join-Path $env:APPDATA "EDMG NVIDIA Workshop\bootstrap.json"
 $bootstrap = Read-JsonObject $bootstrapPath
 $bootstrap["backendSettings"] = [ordered]@{
   mode = "external"
@@ -161,7 +161,7 @@ Write-JsonObject $bootstrapPath $bootstrap
 Write-Step "Updated packaged app bootstrap: $bootstrapPath"
 
 Write-Host ""
-Write-Host "Configured EDMG Studio for Vast backend:" -ForegroundColor Green
+Write-Host "Configured EDMG NVIDIA Workshop for Vast backend:" -ForegroundColor Green
 Write-Host "  Backend:  $BackendUrl"
 Write-Host "  Host:     $backendHost"
 Write-Host "  Port:     $backendPort"
@@ -171,7 +171,7 @@ Write-Host "  cd `"$studioDir`""
 Write-Host "  pnpm dev"
 Write-Host ""
 Write-Host "Packaged app:" -ForegroundColor Green
-Write-Host "  Close and reopen EDMG Studio. It will read $bootstrapPath"
+Write-Host "  Close and reopen EDMG NVIDIA Workshop. It will read $bootstrapPath"
 Write-Host ""
 Write-Host "Vast web UI URL, if needed:" -ForegroundColor Green
 Write-Host "  http://174.88.252.119:16476/?backendUrl=$BackendUrl"
@@ -183,14 +183,14 @@ if ($LaunchDev) {
 
 if ($LaunchPackaged) {
   $exeCandidates = @(
-    (Join-Path $env:LOCALAPPDATA "Programs\EDMG Studio\EDMG Studio.exe"),
-    (Join-Path $env:PROGRAMFILES "EDMG Studio\EDMG Studio.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "EDMG Studio\EDMG Studio.exe")
+    (Join-Path $env:LOCALAPPDATA "Programs\EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe"),
+    (Join-Path $env:PROGRAMFILES "EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe")
   ) | Where-Object { $_ -and (Test-Path $_) }
   if ($exeCandidates.Count -gt 0) {
-    Write-Step "Launching packaged EDMG Studio: $($exeCandidates[0])"
+    Write-Step "Launching packaged EDMG NVIDIA Workshop: $($exeCandidates[0])"
     Start-Process $exeCandidates[0]
   } else {
-    Write-Warn "Packaged EDMG Studio exe not found under LocalAppData/Program Files. Launch it manually."
+    Write-Warn "Packaged EDMG NVIDIA Workshop exe not found under LocalAppData/Program Files. Launch it manually."
   }
 }

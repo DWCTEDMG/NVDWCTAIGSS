@@ -134,7 +134,7 @@ export default function Dashboard({ backendUrl, config, onNavigate }: PageProps)
           <li>Generate the NVIDIA/OpenUSD scene plan</li>
           <li>Export an NVIDIA RTX render job for Omniverse Kit</li>
           <li>Assemble MP4 (FFmpeg)</li>
-          <li>Use local renderer, ComfyUI, or Deforum only as fallback/export lanes</li>
+          <li>Use CUDA renderer, ComfyUI, or Deforum only as NVIDIA render lanes</li>
         </ol>
       </div>
     ),

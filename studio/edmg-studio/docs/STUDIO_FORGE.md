@@ -1,6 +1,6 @@
-# Studio Forge
+# Workshop Forge
 
-Studio Forge is an experimental, opt-in AI builder workbench for EDMG Studio.
+Workshop Forge is an experimental, opt-in AI builder workbench for EDMG NVIDIA Workshop.
 
 It is currently read-only. It does not replace:
 - Electron shell
@@ -56,4 +56,4 @@ Honest state:
 - Unreal-side runtime integration: partial
 - Full Unreal support: not finished
 
-Studio Forge v1 does not generate code, run workflows, install runtimes, pull models, mutate project data, or execute shell commands from the frontend.
+Workshop Forge v1 does not generate code, run workflows, install runtimes, pull models, mutate project data, or execute shell commands from the frontend.

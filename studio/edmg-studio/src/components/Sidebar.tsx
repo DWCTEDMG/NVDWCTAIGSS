@@ -43,7 +43,7 @@ function getNavGroups(): NavGroup[] {
     { page: "reactiveLab", label: "Reactive Lab", hint: "audio-reactive scheduling", icon: AudioWaveform },
   ];
   if (isStudioForgeEnabled()) {
-    labs.push({ page: "studioForge", label: "Studio Forge", hint: "AI builder preview", icon: Hammer });
+    labs.push({ page: "studioForge", label: "Workshop Forge", hint: "AI builder preview", icon: Hammer });
   }
 
   return [
@@ -115,13 +115,13 @@ export default function Sidebar({
         <div className="sidebar-logoShell">
           <img
             src="studio-logo.png"
-            alt="EDMG Studio logo"
+            alt="EDMG NVIDIA Workshop logo"
             className="sidebar-logo"
           />
         </div>
         <div className="sidebar-brandText">
           <div className="sidebar-eyebrow">NVIDIA Kit Runtime</div>
-          <div className="sidebar-brand">EDMG NVIDIA Studio</div>
+          <div className="sidebar-brand">EDMG NVIDIA Workshop</div>
         </div>
       </div>
       <div className="small sidebar-tagline">
@@ -130,7 +130,7 @@ export default function Sidebar({
 
       <div className="sidebar-focusCard">
         <div className="sidebar-focusLabel">Current focus</div>
-        <div className="sidebar-focusValue">{activeItem?.label || "Studio home"}</div>
+        <div className="sidebar-focusValue">{activeItem?.label || "Workshop home"}</div>
         <div className="small">{activeItem?.hint || "Use Workspace as the integrated hub."}</div>
       </div>
 

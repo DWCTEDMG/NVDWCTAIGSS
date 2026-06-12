@@ -21,7 +21,6 @@ services:
       EDMG_AI_OPENAI_COMPAT_MODEL: ${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}
       EDMG_NVIDIA_RIVA_URL: ${EDMG_NVIDIA_RIVA_URL:-host.docker.internal:50051}
       EDMG_NVIDIA_RIVA_ASR: ${EDMG_NVIDIA_RIVA_ASR:-1}
-      EDMG_NVIDIA_RIVA_ASR_FALLBACK: ${EDMG_NVIDIA_RIVA_ASR_FALLBACK:-0}
       EDMG_COMFYUI_URL: ${EDMG_COMFYUI_URL:-http://host.docker.internal:8188}
       EDMG_FFMPEG_PATH: ffmpeg
     volumes:

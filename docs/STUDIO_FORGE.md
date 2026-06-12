@@ -1,6 +1,6 @@
-# Studio Forge
+# Workshop Forge
 
-Studio Forge is an experimental, opt-in AI builder workbench retained in the
+Workshop Forge is an experimental, opt-in AI builder workbench retained in the
 legacy React client while the primary product shell moves to NVIDIA Kit.
 
 It is currently read-only. It does not replace:
@@ -58,4 +58,4 @@ Honest state:
 - Unreal-side runtime integration: partial
 - Full Unreal support: not finished
 
-Studio Forge v1 does not generate code, run workflows, write files, install runtimes, or mutate project data.
+Workshop Forge v1 does not generate code, run workflows, write files, install runtimes, or mutate project data.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bootstrap EDMG Studio on an Ubuntu GPU VM after the instance, firewall, and
+# Bootstrap EDMG NVIDIA Workshop on an Ubuntu GPU VM after the instance, firewall, and
 # NVIDIA driver are already in place.
 
 REPO_URL="${REPO_URL:-https://github.com/HIMOI890/DWCTGenerativeSoundStudio.git}"
@@ -10,7 +10,7 @@ REPO_PARENT="${REPO_PARENT:-/opt/edmg}"
 REPO_DIR="${REPO_DIR:-${REPO_PARENT}/DWCTGenerativeSoundStudio}"
 STUDIO_DIR="${REPO_DIR}/studio/edmg-studio"
 BACKEND_DIR="${STUDIO_DIR}/python_backend"
-STUDIO_HOME="${EDMG_STUDIO_HOME:-/mnt/edmg-studio-home}"
+STUDIO_HOME="${EDMG_STUDIO_HOME:-/mnt/edmg-nvidia-workshop}"
 BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 BACKEND_PORT="${BACKEND_PORT:-7863}"
 UI_HOST="${UI_HOST:-0.0.0.0}"
@@ -36,7 +36,7 @@ UI_LOG_PATH="${LOG_DIR}/ui.log"
 MODEL_QUEUE_LOG_PATH="${LOG_DIR}/queue-default-models.log"
 BACKEND_SERVICE_NAME="edmg-backend"
 
-AI_MODE="${AI_MODE:-local}"
+AI_MODE="${AI_MODE:-nvidia_nim}"
 AI_PROVIDER="${AI_PROVIDER:-openai_compat}"
 NVIDIA_NIM_URL="${EDMG_NVIDIA_NIM_URL:-${NVIDIA_NIM_URL:-http://127.0.0.1:8001}}"
 NVIDIA_NIM_BASE_URL="${EDMG_AI_OPENAI_COMPAT_BASE_URL:-${NVIDIA_NIM_URL%/}/v1}"
@@ -106,7 +106,6 @@ export EDMG_NVIDIA_PROFILE=omniverse
 export EDMG_NVIDIA_NIM_URL=${NVIDIA_NIM_URL}
 export EDMG_NVIDIA_RIVA_URL=${NVIDIA_RIVA_URL}
 export EDMG_NVIDIA_RIVA_ASR=1
-export EDMG_NVIDIA_RIVA_ASR_FALLBACK=0
 export EDMG_AI_MODE=${AI_MODE}
 export EDMG_AI_PROVIDER=${AI_PROVIDER}
 export EDMG_AI_OPENAI_COMPAT_BASE_URL=${NVIDIA_NIM_BASE_URL}
@@ -323,7 +322,7 @@ install_backend_service() {
   step "Installing systemd service ${BACKEND_SERVICE_NAME}"
   "${SUDO[@]}" tee "/etc/systemd/system/${BACKEND_SERVICE_NAME}.service" >/dev/null <<EOF
 [Unit]
-Description=EDMG Studio Backend
+Description=EDMG NVIDIA Workshop Backend
 After=network-online.target
 Wants=network-online.target
 
@@ -405,7 +404,7 @@ print_summary() {
       echo "Browser frontend: http://${external_ip}:${UI_PORT}/?backendUrl=http://${external_ip}:${BACKEND_PORT}"
     fi
   fi
-  echo "Studio Home: ${STUDIO_HOME}"
+  echo "Workshop Home: ${STUDIO_HOME}"
   echo "Backend log dir: ${LOG_DIR}"
   echo "UI log: ${UI_LOG_PATH}"
   if [[ "${QUEUE_DEFAULT_MODELS}" == "1" ]]; then

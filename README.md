@@ -1,20 +1,20 @@
-# EDMG Studio Monolith Repo
+# EDMG NVIDIA Workshop Monolith Repo
 
-This repository is the single authoritative source tree for EDMG Studio.
+This repository is the single authoritative source tree for EDMG NVIDIA Workshop.
 
-Studio is not a sidecar anymore. The NVIDIA Kit shell, OpenUSD/RTX workflow,
+The Studio code is merged into the NVIDIA Workshop. The NVIDIA Kit shell, OpenUSD/RTX workflow,
 FastAPI backend, vendored EDMG engine packages, setup flow, release packaging,
 and support tooling all converge on one product path:
 
 - `studio/nvidia-kit/` for the primary NVIDIA desktop runtime
 - `studio/edmg-studio/python_backend/` for the orchestration backend
 
-The older standalone-engine installers, Electron-first shell, and extra
-README entrypoints have been retired so the repo presents one product instead
-of multiple competing workflows.
+The older standalone-engine installers, Electron-first launch path, and extra
+README entrypoints have been retired so the repo presents one NVIDIA product
+instead of multiple competing workflows.
 
 The legacy standalone web UI prototypes have also been retired. Their planning
-and audio-reactive capabilities now live inside the Studio app workbenches:
+and audio-reactive capabilities now live inside the Workshop workbenches:
 
 - `studio/edmg-studio/src/workbenches/AiNlpWorkbench.tsx`
 - `studio/edmg-studio/src/workbenches/AudioReactiveWorkbench.tsx`
@@ -34,16 +34,14 @@ macOS/Linux:
 ```
 
 Those launchers start the NVIDIA Kit runtime through
-`deployment/nvidia/start_nvidia_runtime_local.ps1`. Use
-`RUN_ME.bat legacy-electron` or `./run_me.sh legacy-electron` only when you need
-the old Electron dev UI during migration.
+`deployment/nvidia/start_nvidia_runtime_local.ps1`.
 
 ## Canonical product layout
 
 - `studio/edmg-studio/`
-  Legacy Electron/React client, packaging scripts, release validation, and the
-  only Node/pnpm package root in the repo. This is compatibility tooling, not
-  the primary runtime shell.
+  React control surface, packaging scripts, release validation, and the only
+  Node/pnpm package root in the repo. This supports the NVIDIA Workshop instead
+  of defining a separate app.
 - `studio/nvidia-kit/`
   Omniverse Kit app, EDMG extensions, OpenUSD sample projects, RTX render queue,
   AI Director panel, and dependency-light validators.
@@ -52,15 +50,14 @@ the old Electron dev UI during migration.
   `deforum_music` engine packages that power planning, analysis, schedules, and
   EDMG Core support.
 - `studio/edmg-studio/tools/launcher_gui.py`
-  Shared NVIDIA launcher, Studio Home bootstrap flow, backend controls, and
-  legacy Electron dev controls.
+  Shared NVIDIA launcher, Workshop Home bootstrap flow, and backend controls.
 - `deployment/nvidia/`
   NVIDIA runtime, Kit staging, service profile, diagnostics, and smoke helpers.
 
-## Studio Home
+## Workshop Home
 
-Studio separates the app install directory from the heavy runtime storage root.
-The `Studio Home` contains:
+The Workshop separates the app install directory from the heavy runtime storage
+root. The `Workshop Home` contains:
 
 - `data`
 - `models`
@@ -71,12 +68,11 @@ The `Studio Home` contains:
 
 That keeps large downloads, render caches, and external tools off the app
 install path and allows migration to another drive or mount such as `D:\` on
-Windows or `/mnt/media/EDMG-Studio` on Linux.
+Windows or `/mnt/media/EDMG-NVIDIA-Workshop` on Linux.
 
 ## JS Tooling
 
-- Run JS commands only for the legacy React/Electron compatibility client from
-  `studio/edmg-studio/`.
+- Run JS commands for the React control surface from `studio/edmg-studio/`.
 - The canonical package manager is `pnpm@10.33.0`, pinned in `studio/edmg-studio/package.json`.
 - NVIDIA Kit packaging is staged by `deployment/nvidia/stage_nvidia_kit_app.ps1`.
 
@@ -109,20 +105,17 @@ Windows or `/mnt/media/EDMG-Studio` on Linux.
 ## Recommended Local Stack
 
 - Planner default: NVIDIA NIM / OpenAI-compatible `nvidia/llama-3.3-nemotron-super-49b-v1.5`
-- Local fallback planner: `qwen3:8b` via Ollama
-- Low-resource fallback planner: `qwen3:4b`
 - OpenAI-compatible default base URL: `http://127.0.0.1:8001/v1`
 - Broad still-image default: SDXL Base 1.0
 - Fast still-image option: SD3.5 Large Turbo
 - Reference still guidance: SD3.5 ControlNet Blur, Canny, and Depth
 - Primary HF video backend: Wan2.2 TI2V 5B
-- Short image-to-video fallback: SVD XT Img2Vid
+- Short image-to-video option: SVD XT Img2Vid
 
 ## Hardware Tiers
 
-- Low-spec fallback: `qwen3:4b` + SDXL Base 1.0
 - Mid-range: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
-- High-end: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
+- High-end: NVIDIA NIM + RTX/OpenUSD Kit render jobs + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
 
 ## Compatibility shims
 
@@ -136,6 +129,6 @@ Windows or `/mnt/media/EDMG-Studio` on Linux.
 
 ## Compatibility note
 
-The repo root now keeps only thin launch aliases and monolith-level docs. The
-runtime code, packaging logic, backend engine packages, and operator tooling
-live under `studio/edmg-studio/`.
+The repo root now keeps one launch path and monolith-level docs. Runtime code,
+packaging logic, backend engine packages, and operator tooling live under
+`studio/edmg-studio/` and serve the NVIDIA Workshop runtime.

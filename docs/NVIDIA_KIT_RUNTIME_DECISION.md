@@ -1,17 +1,17 @@
-# NVIDIA Kit Runtime Packaging Decision
+# NVIDIA Workshop Kit Runtime Packaging Decision
 
 Decision date: 2026-06-01
 
 ## Decision
 
-EDMG NVIDIA Studio uses a thin Kit runtime distribution policy by default.
+EDMG NVIDIA Workshop uses a thin Kit runtime distribution policy by default.
 
 - Public/external packages must not embed the local Kit SDK tree.
 - The Windows app bundle carries EDMG-owned Kit app config, extensions, tools,
   helper scripts, and a launcher that resolves an installed Kit SDK.
 - Internal development builds may use `-PackageMode internal-fat` only for
   licensed/internal testing where copying the selected Kit SDK is allowed.
-- The local staging artifact is `dist/nvidia-kit-app/edmg-nvidia-kit`; it is a
+- The local staging artifact is `dist/nvidia-workshop-app/edmg-nvidia-workshop`; it is a
   source/app bundle, not a claim that the Kit SDK is redistributable.
 
 ## Rationale

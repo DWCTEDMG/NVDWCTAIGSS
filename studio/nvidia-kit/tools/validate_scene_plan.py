@@ -78,7 +78,7 @@ def validate_scene_plan(payload: dict[str, Any]) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate an EDMG NVIDIA Kit scene_plan.json file.")
+    parser = argparse.ArgumentParser(description="Validate an EDMG NVIDIA Workshop scene_plan.json file.")
     parser.add_argument("path", type=Path)
     args = parser.parse_args()
 

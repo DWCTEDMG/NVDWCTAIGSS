@@ -29,11 +29,6 @@ def riva_asr_enabled() -> bool:
     return provider in {"riva", "nvidia_riva"} or _truthy(_env("EDMG_NVIDIA_RIVA_ASR")) or _truthy(_env("EDMG_RIVA_ASR"))
 
 
-def riva_fallback_enabled() -> bool:
-    raw = _env("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "0")
-    return _truthy(raw)
-
-
 def riva_language_code() -> str:
     return _env("EDMG_NVIDIA_RIVA_LANGUAGE_CODE", "en-US") or "en-US"
 
@@ -66,7 +61,6 @@ def riva_asr_status() -> dict[str, Any]:
         "language_code": riva_language_code(),
         "model": riva_model_name(),
         "ssl": riva_use_ssl(),
-        "fallback_enabled": riva_fallback_enabled(),
     }
 
 

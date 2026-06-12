@@ -1,6 +1,6 @@
 param(
   [string]$KitSdkRoot = $env:OMNI_KIT_SDK_ROOT,
-  [string]$OutputRoot = "dist/nvidia-kit-app",
+  [string]$OutputRoot = "dist/nvidia-workshop-app",
   [string]$BackendUrl = "http://127.0.0.1:8000",
   [string]$ProjectsRoot = "studio/edmg-studio/python_backend/data/projects",
   [string]$ProjectId = "",
@@ -74,8 +74,8 @@ Set-Location $repoRoot
 
 $sourceKitRoot = Resolve-Path "studio\nvidia-kit"
 $outputRootResolved = Resolve-RepoPath -PathValue $OutputRoot
-$bundleRoot = Join-Path $outputRootResolved "edmg-nvidia-kit"
-$zipPath = Join-Path $outputRootResolved "edmg-nvidia-kit.zip"
+$bundleRoot = Join-Path $outputRootResolved "edmg-nvidia-workshop"
+$zipPath = Join-Path $outputRootResolved "edmg-nvidia-workshop.zip"
 $resolvedProjectsRoot = Resolve-RepoPath -PathValue $ProjectsRoot
 $resolvedKitSdkRoot = Resolve-OptionalPath -PathValue $KitSdkRoot
 $resolvedFfmpegPath = Resolve-OptionalPath -PathValue $FfmpegPath
@@ -158,11 +158,11 @@ $launchLines = @(
   "& powershell @args",
   "exit `$LASTEXITCODE"
 )
-$launchPath = Join-Path $bundleRoot "Start-EDMG-NVIDIA-Kit.ps1"
+$launchPath = Join-Path $bundleRoot "Start-EDMG-NVIDIA-Workshop.ps1"
 $launchLines | Set-Content -LiteralPath $launchPath -Encoding UTF8
 
 $manifest = [ordered]@{
-  name = "edmg-nvidia-kit"
+  name = "edmg-nvidia-workshop"
   created_at = (Get-Date).ToString("s")
   git_commit = $gitCommit
   repo_root = $repoRoot.Path
@@ -179,7 +179,7 @@ $manifest = [ordered]@{
   ffmpeg_path = $resolvedFfmpegPath
   project_id = $ProjectId
   render_worker_poll_seconds = $RenderWorkerPollSeconds
-  launcher = "Start-EDMG-NVIDIA-Kit.ps1"
+  launcher = "Start-EDMG-NVIDIA-Workshop.ps1"
   contents = @(
     "studio/nvidia-kit/apps",
     "studio/nvidia-kit/extensions",
@@ -192,12 +192,12 @@ $manifestPath = Join-Path $bundleRoot "bundle-manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 
 $bundleReadme = @"
-# EDMG NVIDIA Kit Bundle
+# EDMG NVIDIA Workshop Bundle
 
 Launch the staged Kit app with:
 
 ````powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-EDMG-NVIDIA-Kit.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Start-EDMG-NVIDIA-Workshop.ps1
 ````
 
 Use `-ListExtensions` for a fast Kit extension resolution check. Default bundles

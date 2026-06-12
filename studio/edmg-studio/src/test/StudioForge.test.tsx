@@ -125,7 +125,7 @@ const FETCH_FIXTURES = {
   },
 };
 
-describe("Studio Forge", () => {
+describe("Workshop Forge", () => {
   afterEach(() => {
     vi.stubEnv("VITE_EDMG_ENABLE_STUDIO_FORGE", ORIGINAL_STUDIO_FORGE_FLAG ?? "");
     window.history.pushState({}, "", "/");
@@ -139,7 +139,7 @@ describe("Studio Forge", () => {
       <StudioForge backendUrl="http://127.0.0.1:7863" config={FETCH_FIXTURES["/v1/config"]} />,
     );
 
-    expect(await screen.findByRole("heading", { name: /Studio Forge/i })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /Workshop Forge/i })).toBeTruthy();
     expect(screen.getByText(/Read-only preview mode/i)).toBeTruthy();
     expect(screen.getByRole("heading", { name: /Runtime Recommendations/i })).toBeTruthy();
     expect(screen.getByRole("heading", { name: /Unreal Bridge Previews/i })).toBeTruthy();
@@ -206,7 +206,7 @@ describe("Studio Forge", () => {
     renderWithStudio(<App />);
 
     expect(await screen.findByRole("heading", { name: /Dashboard/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Studio Forge/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Workshop Forge/i })).toBeNull();
   });
 
   it("enables direct page access and labs navigation when the flag is on", async () => {
@@ -217,8 +217,8 @@ describe("Studio Forge", () => {
 
     renderWithStudio(<App />);
 
-    expect(await screen.findByRole("heading", { name: /Studio Forge/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Studio Forge/i })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /Workshop Forge/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Workshop Forge/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /AI Planner Lab/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Reactive Lab/i })).toBeTruthy();
   });

@@ -162,8 +162,6 @@ class InternalVideoRenderRequest(BaseModel):
     render_mode: Literal["auto","diffusion"] = "auto"
     render_tier: Literal["auto","draft","balanced","quality"] = "auto"
     device_preference: Literal["auto","cuda"] = "auto"
-    allow_hosted_fallback: bool = False
-    allow_proxy_fallback: bool = False
     negative_prompt: str = "blurry, low quality, watermark, text, logo"
     loras: list[LoraSelection] = Field(default_factory=list)
     vae: str | None = None
@@ -194,8 +192,6 @@ class StoryboardMovieRenderRequest(BaseModel):
     model_id: str = "auto"
     apply_storyboard: bool = True
     overwrite_timeline: bool = True
-    allow_hosted_fallback: bool = False
-    allow_proxy_fallback: bool = False
 
     fps_output: int | None = Field(default=None, ge=1, le=60)
     fps_render: int | None = Field(default=None, ge=1, le=30)
@@ -300,8 +296,6 @@ EngineKind = Literal[
     "internal",
     "comfyui_still",
     "comfyui_motion",
-    "hosted_video",
-    "proxy",
     "deforum_export",
 ]
 RenderStepKind = Literal[
@@ -470,7 +464,6 @@ class RenderIntent(BaseModel):
             "internal",
             "comfyui_still",
             "comfyui_motion",
-            "proxy",
             "deforum_export",
         ]
     )
@@ -540,7 +533,6 @@ class RenderConductorPlanRequest(BaseModel):
             "internal",
             "comfyui_still",
             "comfyui_motion",
-            "proxy",
             "deforum_export",
         ]
     )

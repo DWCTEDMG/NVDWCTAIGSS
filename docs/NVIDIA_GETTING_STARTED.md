@@ -1,6 +1,6 @@
 # NVIDIA Getting Started
 
-This is the local setup path for the NVIDIA-first branch.
+This is the local setup path for EDMG NVIDIA Workshop.
 
 The Kit runtime packaging decision is documented in
 [`NVIDIA_KIT_RUNTIME_DECISION.md`](NVIDIA_KIT_RUNTIME_DECISION.md): default
@@ -53,7 +53,6 @@ EDMG_AI_OPENAI_COMPAT_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1.5
 EDMG_NVIDIA_RIVA_URL=host.docker.internal:50051
 EDMG_NVIDIA_RIVA_ASR=0
 EDMG_NVIDIA_RIVA_LANGUAGE_CODE=en-US
-EDMG_NVIDIA_RIVA_ASR_FALLBACK=1
 EDMG_NVIDIA_OMNIVERSE_URL=
 NGC_API_KEY=
 EDMG_AI_OPENAI_COMPAT_API_KEY=
@@ -121,9 +120,9 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 ```
 
 The Kit app staging helper creates a repeatable local bundle at
-`dist/nvidia-kit-app/edmg-nvidia-kit` and a zip beside it. It includes the Kit
+`dist/nvidia-workshop-app/edmg-nvidia-workshop` and a zip beside it. It includes the Kit
 app config, EDMG extensions, tools, deployment helpers, `bundle-manifest.json`,
-and `Start-EDMG-NVIDIA-Kit.ps1`. It intentionally does not copy the Kit SDK
+and `Start-EDMG-NVIDIA-Workshop.ps1`. It intentionally does not copy the Kit SDK
 unless `-IncludeKitSdk` is supplied after confirming redistribution terms for
 the selected SDK. Known-good staging command:
 
@@ -259,7 +258,7 @@ From the desktop app:
   configuration state plus host GPU, Docker NVIDIA runtime, and NIM endpoint
   reachability without printing key values.
 - `/v1/nvidia/riva/status` reports the configured Riva ASR URI, language,
-  model, SSL flag, and fallback behavior without secrets.
+  model, SSL flag, and disabled fallback state without secrets.
 - `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
   direct no-secret status checks for NIM, Riva, Omniverse, NeMo, Triton,
   Audio2Face, ACE, and Cosmos.
@@ -370,9 +369,8 @@ scene-level render output metadata. It can also build an RTX render-job JSON han
 `outputs/nvidia/render_jobs/` for the Omniverse Kit RTX worker.
 
 If Riva is running and you want it to handle project transcription, set
-`EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva`. The backend will try
-Riva first through the NVIDIA Riva Python client, then fall back to the existing
-local faster-whisper path when `EDMG_NVIDIA_RIVA_ASR_FALLBACK=1`. You can also
+`EDMG_NVIDIA_RIVA_ASR=1` or `EDMG_AI_ASR_PROVIDER=riva`. The backend uses the
+NVIDIA Riva Python client and fails closed if Riva is unavailable. You can also
 call the direct project route without changing the default ASR provider:
 
 ```powershell

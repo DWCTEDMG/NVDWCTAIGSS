@@ -25,6 +25,7 @@ const ignoredDirNames = new Set([
   ".git",
   ".mypy_cache",
   ".pytest_cache",
+  ".venv",
   "__pycache__",
   "build",
   "dist",
@@ -108,7 +109,7 @@ function assertSupportedPython(command, args, label, options = {}) {
   }
   if (!isSupportedPythonVersion(version.tuple)) {
     throw new Error(
-      `${label} ${version.raw} is unsupported for Studio release builds. Use Python >= ${SUPPORTED_PYTHON_MIN.join(".")} and < ${SUPPORTED_PYTHON_MAX_EXCLUSIVE.join(".")}.`,
+      `${label} ${version.raw} is unsupported for NVIDIA Workshop release builds. Use Python >= ${SUPPORTED_PYTHON_MIN.join(".")} and < ${SUPPORTED_PYTHON_MAX_EXCLUSIVE.join(".")}.`,
     );
   }
   return version.raw;
@@ -260,8 +261,8 @@ function ensureBackendBuild() {
   runChecked("upgrade backend packaging tools", venvPython, ["-m", "pip", "install", "-U", "pip", "wheel", backendSetuptoolsConstraint], {
     cwd: pythonBackendDir,
   });
-  const backendBundleExtra = process.platform === "win32" ? "studio_bundle_directml" : "studio_bundle";
-  runChecked("install backend studio bundle", venvPython, ["-m", "pip", "install", "-e", `.[${backendBundleExtra}]`], {
+  const backendBundleExtra = "studio_bundle";
+  runChecked("install backend NVIDIA Workshop bundle", venvPython, ["-m", "pip", "install", "-e", `.[${backendBundleExtra}]`], {
     cwd: pythonBackendDir,
   });
   runChecked("install pyinstaller", venvPython, ["-m", "pip", "install", "pyinstaller"], {

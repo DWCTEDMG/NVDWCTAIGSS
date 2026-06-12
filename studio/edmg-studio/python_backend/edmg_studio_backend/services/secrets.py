@@ -61,7 +61,6 @@ class SecretsStatus:
     has_hf_token: bool
     has_civitai_api_key: bool
     has_openai_compat_api_key: bool
-    has_stability_api_key: bool
     note: str | None = None
 
 
@@ -105,7 +104,6 @@ class SecretStore:
         hf = bool(self.get("hf_token"))
         cv = bool(self.get("civitai_api_key"))
         oa = bool(self.get("openai_compat_api_key"))
-        st = bool(self.get("stability_api_key"))
         store = "keyring" if self._keyring_ok else "file"
         if self._forced in ("file", "plaintext"):
             store = "file"
@@ -115,7 +113,6 @@ class SecretStore:
             has_hf_token=hf,
             has_civitai_api_key=cv,
             has_openai_compat_api_key=oa,
-            has_stability_api_key=st,
             note=self._note,
         )
 

@@ -471,7 +471,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
           ? "Backend bundle, FFmpeg, and the NVIDIA AI path are ready."
           : `Still needs ${missingSetupParts.join(", ")}.`
       ),
-      impact: "Studio Forge reads setup health only; NVIDIA Kit launch and repair stay in the runtime launcher and Setup page.",
+      impact: "Workshop Forge reads setup health only; NVIDIA Kit launch and repair stay in the runtime launcher and Setup page.",
     },
     {
       id: "nvidia-nim",
@@ -703,7 +703,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
       <div className="card">
         <h2 style={{ marginBottom: 10 }}>Validation Checklist</h2>
         <div className="small" style={{ marginBottom: 10 }}>
-          Developer validation commands only. Studio Forge v1 does not execute shell commands from the frontend.
+          Developer validation commands only. Workshop Forge v1 does not execute shell commands from the frontend.
         </div>
         <div style={{ display: "grid", gap: 8 }}>
           {VALIDATION_COMMANDS.map((command) => (
@@ -720,7 +720,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
     <div style={{ display: "grid", gap: 14 }}>
       <div className="card">
         <div className="timeline-kicker">Experimental Workbench</div>
-        <h1>Studio Forge</h1>
+        <h1>Workshop Forge</h1>
         <div className="small" style={{ marginTop: 8, maxWidth: 900 }}>
           Experimental NVIDIA builder workbench in the legacy React client. Read-only preview mode. This surface inspects
           Kit/runtime state and previews future builder templates without writing files, changing setup,
@@ -737,7 +737,7 @@ export default function StudioForge({ backendUrl, config, onNavigate }: PageProp
 
       <div style={{ display: "grid", gap: 14 }}>
         <StudioLayoutCustomizer
-          title="Studio Forge layout"
+          title="Workshop Forge layout"
           description="Reorder or hide preview panels for your own working style. This only changes the local page layout."
           items={sectionControlItems}
           profileOptions={profileOptions}

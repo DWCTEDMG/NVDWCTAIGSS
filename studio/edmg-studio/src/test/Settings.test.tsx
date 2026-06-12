@@ -137,7 +137,7 @@ describe("Settings page", () => {
       });
     });
 
-    expect(await screen.findByText(/Saved\. Restart Studio so it relaunches against the selected backend target\./)).toBeTruthy();
+    expect(await screen.findByText(/Saved\. Restart Workshop so it relaunches against the selected backend target\./)).toBeTruthy();
     expect(await screen.findByText("NVIDIA service profile")).toBeTruthy();
     expect(await screen.findByText("NVIDIA runtime diagnostics")).toBeTruthy();
     expect(await screen.findByText("NVIDIA service stack")).toBeTruthy();

@@ -1,7 +1,7 @@
 # Auto-generated from package.json build. Do not edit by hand.
 {
-  "appId": "com.dwct.edmgstudio",
-  "productName": "EDMG Studio",
+  "appId": "com.dwct.edmgnvidiaworkshop",
+  "productName": "EDMG NVIDIA Workshop",
   "icon": "electron-resources/app-icon.png",
   "directories": {
     "output": "dist",
@@ -28,7 +28,7 @@
     "target": [
       "nsis"
     ],
-    "artifactName": "${name} Setup ${version}.${ext}"
+    "artifactName": "EDMG NVIDIA Workshop Setup ${version}.${ext}"
   },
   "linux": {
     "target": [

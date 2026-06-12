@@ -39,7 +39,7 @@ export function sanitizePackageJsonForStage(pkg) {
   return {
     name: rest.name,
     version: rest.version,
-    description: rest.description || 'EDMG Studio desktop app',
+    description: rest.description || 'EDMG NVIDIA Workshop desktop app',
     author: rest.author || 'Dwct',
     type: rest.type,
     main: rest.main || 'main.mjs',

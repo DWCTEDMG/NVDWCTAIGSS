@@ -1,6 +1,6 @@
 # EDMG Unreal Bridge Importer
 
-This folder contains the first Unreal-side consumer for EDMG Studio Unreal bridge bundles.
+This folder contains the first Unreal-side consumer for EDMG NVIDIA Workshop Unreal bridge bundles.
 
 ## What it does
 

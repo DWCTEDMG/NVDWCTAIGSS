@@ -82,7 +82,6 @@ def build_run_command(
     width: int = 512,
     height: int = 512,
     seed: int | None = None,
-    cpu_offload: bool = False,
     python_exe: str | None = None,
 ) -> list[str]:
     """Build the subprocess command used to render a single model in the bench.
@@ -124,8 +123,6 @@ def build_run_command(
         cmd.extend(["--family", family])
     if seed is not None:
         cmd.extend(["--seed", str(seed)])
-    if cpu_offload:
-        cmd.append("--cpu-offload")
     if image:
         cmd.extend(["--image", image])
     return cmd
@@ -149,10 +146,11 @@ def _run_one(
     seed: Optional[int],
     dtype: str,
     device: str,
-    cpu_offload: bool,
     image: str,
     vae_dtype: str,
 ) -> ModelRun:
+    if device != "cuda":
+        raise RuntimeError("The NVIDIA-only profile requires --device cuda.")
     cmd = [
         python_exe,
         str(RUNNER_PATH),
@@ -187,8 +185,6 @@ def _run_one(
     ]
     if seed is not None:
         cmd += ["--seed", str(seed)]
-    if cpu_offload:
-        cmd += ["--cpu-offload"]
     if image:
         cmd += ["--image", image]
 
@@ -277,8 +273,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--dtype", default="bfloat16")
     p.add_argument("--vae-dtype", default="float32")
-    p.add_argument("--device", default="cuda")
-    p.add_argument("--cpu-offload", action="store_true")
+    p.add_argument("--device", default="cuda", choices=["cuda"], help="CUDA device for the NVIDIA-only profile.")
     p.add_argument("--image", default="", help="Optional image path for I2V models.")
     p.add_argument("--python", default=sys.executable)
     p.add_argument("--dry-run", action="store_true")
@@ -287,6 +282,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.device != "cuda":
+        print("ERROR: the NVIDIA-only profile requires --device cuda.", file=sys.stderr)
+        return 2
 
     out_dir = Path("outputs") / args.bench_name
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -347,7 +345,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             seed=args.seed,
             dtype=args.dtype,
             device=args.device,
-            cpu_offload=args.cpu_offload,
             image=args.image,
             vae_dtype=args.vae_dtype,
         )
@@ -376,7 +373,6 @@ def main(argv: Optional[List[str]] = None) -> int:
             "dtype": args.dtype,
             "vae_dtype": args.vae_dtype,
             "device": args.device,
-            "cpu_offload": args.cpu_offload,
             "image": args.image,
         },
         "runs": [asdict(r) for r in runs],

@@ -10,7 +10,7 @@ import { createWindowRuntime } from "./main-process/window-runtime.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const APP_NAME = "EDMG Studio";
+const APP_NAME = "EDMG NVIDIA Workshop";
 const IS_DEV = !app.isPackaged;
 const IS_WINDOWS = process.platform === "win32";
 const BOOTSTRAP_CONFIG_BASENAME = "bootstrap.json";
@@ -873,8 +873,6 @@ function buildManagedAiEnv() {
     EDMG_NVIDIA_RIVA_ASR: String(process.env.EDMG_NVIDIA_RIVA_ASR ?? "0").trim() || "0",
     EDMG_NVIDIA_RIVA_LANGUAGE_CODE:
       String(process.env.EDMG_NVIDIA_RIVA_LANGUAGE_CODE ?? "en-US").trim() || "en-US",
-    EDMG_NVIDIA_RIVA_ASR_FALLBACK:
-      String(process.env.EDMG_NVIDIA_RIVA_ASR_FALLBACK ?? "0").trim() || "0",
   };
 }
 
@@ -1516,6 +1514,6 @@ app.whenReady().then(async () => {
 }).catch((error) => {
   appendTestTrace(`app.whenReady:error ${String(error?.message ?? error)}`);
   console.error("[main] fatal startup error:", error);
-  dialog.showErrorBox("EDMG Studio failed to start", String(error?.message ?? error));
+  dialog.showErrorBox("EDMG NVIDIA Workshop failed to start", String(error?.message ?? error));
   app.quit();
 });

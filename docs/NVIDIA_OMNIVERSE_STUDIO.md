@@ -1,9 +1,9 @@
-# NVIDIA Omniverse Studio Rework
+# EDMG NVIDIA Workshop
 
-This branch starts a separate NVIDIA-first direction for EDMG Studio. The goal
-is not to bolt NVIDIA services onto the legacy Electron app. The goal is to
-define a new product lane where Omniverse, OpenUSD, RTX rendering, and NVIDIA AI
-services are the default runtime assumptions.
+This document describes the merged NVIDIA Workshop product surface. Omniverse,
+OpenUSD, RTX rendering, and NVIDIA AI services are the default runtime
+assumptions; the previous Studio code now serves this one product instead of a
+separate Electron-first app lane.
 
 For the broader product/service map, see
 [`docs/NVIDIA_OFFICIAL_OPTIONS.md`](NVIDIA_OFFICIAL_OPTIONS.md).
@@ -13,7 +13,7 @@ For the Kit runtime packaging decision, see
 
 ## Product thesis
 
-EDMG NVIDIA Studio is a packaged Windows workstation app backed by GPU services:
+EDMG NVIDIA Workshop is a packaged Windows workstation app backed by GPU services:
 
 - Omniverse Kit owns the desktop shell, USD stage editing, RTX viewport, and
   extension system.
@@ -25,14 +25,14 @@ EDMG NVIDIA Studio is a packaged Windows workstation app backed by GPU services:
   through a GPU service stack, WSL2/Linux containers, a remote Linux GPU host, or
   a later cloud deployment.
 
-The existing `studio/edmg-studio/` product remains the canonical desktop app for
-this repository. This rework should evolve as a separate product surface until
-the NVIDIA assumptions are proven.
+The `studio/edmg-studio/` source tree remains the backend, React control
+surface, and packaging/tooling root, but it is no longer a separate product. It
+serves the NVIDIA Workshop shell under `studio/nvidia-kit/`.
 
 ## Target architecture
 
 ```text
-EDMG NVIDIA Studio
+EDMG NVIDIA Workshop
 |- Windows packaged Omniverse Kit app
 |  |- OpenUSD stage editor
 |  |- RTX viewport and render preview
@@ -46,7 +46,7 @@ EDMG NVIDIA Studio
 |  |- project and artifact metadata
 |  |- job submission and status
 |  |- service health aggregation
-|  `- compatibility routes for existing Studio workflows
+|  `- compatibility routes for existing project workflows
 |
 |- NVIDIA service layer
 |  |- NIM LLM or multimodal endpoints
@@ -137,7 +137,7 @@ Current local lane status:
 - `/v1/nvidia/scene-plan` asks the configured NVIDIA/NIM-compatible planner for
   a plan, converts the selected variant into the normalized NVIDIA scene-plan
   contract, returns a production USDA shot graph, and saves the normalized
-  result into existing Studio project metadata when the request includes a
+  result into existing project metadata when the request includes a
   matching `project_id`.
 - `/v1/projects/{project_id}/nvidia/scene-plan` provides the project-scoped
   generate-and-fetch path for the persisted NVIDIA scene plan.
@@ -149,8 +149,8 @@ Current local lane status:
   exports.
 - `/v1/nvidia/riva/status` and
   `/v1/projects/{project_id}/nvidia/riva/transcribe` add the first Riva ASR
-  service-profile adapter while keeping faster-whisper as the default fallback
-  unless Riva ASR is explicitly enabled.
+  service-profile adapter. The NVIDIA-only profile requires Riva for ASR and
+  fails closed when Riva is unavailable.
 - `/v1/nvidia/services` and `/v1/nvidia/services/{service_id}/status` expose
   direct no-secret status payloads for configured optional NVIDIA services such
   as Triton, Audio2Face/ACE, Cosmos, NeMo, Omniverse, NIM, and Riva.
@@ -196,7 +196,7 @@ Current local lane status:
   for Kit completion, and probing the MP4 result.
 - `deployment/nvidia/stage_nvidia_kit_app.ps1` stages the Kit app config,
   extensions, tools, deployment helpers, generated launch script, and manifest
-  into `dist/nvidia-kit-app/` for local distribution testing. It defaults to
+  into `dist/nvidia-workshop-app/` for local distribution testing. It defaults to
   `-PackageMode thin`; SDK-included bundles require explicit
   `-PackageMode internal-fat` or legacy `-IncludeKitSdk` and are internal only.
 - `.github/workflows/nvidia-live-smoke.yml` exposes the RTX render-job smoke as
@@ -206,11 +206,10 @@ Current local lane status:
 
 Build a minimum useful NVIDIA path:
 
-1. Package or run a minimal Omniverse Kit app called EDMG NVIDIA Studio.
+1. Package or run the Omniverse Kit app called EDMG NVIDIA Workshop.
 2. Open a starter USD stage with camera, lights, and audio timeline metadata.
 3. Connect to a configured NIM-compatible LLM endpoint for AI scene planning.
-4. Connect to a configured Riva-compatible ASR endpoint for transcription, or
-   fall back to the current faster-whisper path.
+4. Connect to a configured Riva-compatible ASR endpoint for transcription.
 5. Surface the persisted NVIDIA scene plan in the Kit UI.
 6. Render an RTX preview/movie from the Kit render queue handoff.
 
@@ -247,5 +246,5 @@ machine.
   to remote Linux GPU machines.
 - USD schema design before generated projects accumulate.
 - Model storage and license acceptance flow.
-- Which remaining legacy Electron UI panels should be deleted once their Kit
-  extension replacements are verified.
+- Which remaining React control-surface panels should move fully into Kit
+  extensions after their replacements are verified.

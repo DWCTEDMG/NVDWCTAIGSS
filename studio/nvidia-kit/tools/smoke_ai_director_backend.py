@@ -23,7 +23,7 @@ def main() -> int:
     )
     parser.add_argument("--output-usda", type=Path)
     parser.add_argument("--generate", action="store_true", help="Call /v1/nvidia/scene-plan before exporting USDA.")
-    parser.add_argument("--title", default="EDMG NVIDIA Kit Smoke")
+    parser.add_argument("--title", default="EDMG NVIDIA Workshop Smoke")
     parser.add_argument("--duration-s", type=float, default=60.0)
     parser.add_argument("--bpm", type=float, default=128.0)
     parser.add_argument("--style-prefs", default="RTX stage lighting, OpenUSD-ready camera moves, audio-reactive motion")

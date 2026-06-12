@@ -27,11 +27,6 @@ def test_hardware_profile_surfaces_host_nvidia_gpu_when_cuda_runtime_missing(mon
     monkeypatch.setitem(sys.modules, "torch", _FakeTorch())
     monkeypatch.setattr(
         backend_app,
-        "_directml_runtime_status",
-        lambda: {"available": False, "runtime_ready": False, "device_name": None, "vram_gb": 0.0, "vendor": None},
-    )
-    monkeypatch.setattr(
-        backend_app,
         "nvidia_host_gpu_status",
         lambda: {
             "available": True,
@@ -330,7 +325,6 @@ def test_setup_ai_config_defaults_to_nvidia_openai_compat(monkeypatch):
     assert payload["label"] == "NVIDIA NIM / OpenAI-compatible provider"
     assert payload["base_url"] == "http://127.0.0.1:8001/v1"
     assert payload["model"] == "nvidia/llama-3.3-nemotron-super-49b-v1.5"
-    assert "ollama_required" not in payload
     assert payload["nvidia_profile"]["enabled"] is True
 
 

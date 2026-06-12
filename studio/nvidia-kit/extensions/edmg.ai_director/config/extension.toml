@@ -1,6 +1,6 @@
 [package]
 title = "EDMG AI Director"
-description = "Backend/NIM planning bridge for EDMG NVIDIA Studio."
+description = "Backend/NIM planning bridge for EDMG NVIDIA Workshop."
 version = "0.1.0"
 category = "EDMG"
 

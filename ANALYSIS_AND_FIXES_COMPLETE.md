@@ -234,7 +234,6 @@
   ```toml
   # Before - allows breaking changes
   librosa>=0.10.2      # Could jump to 1.0.0
-  faster-whisper>=1.1.0 # Could jump to 2.0.0
   torch>=2.2.0         # Major version unconstrained
   ```
 
@@ -242,7 +241,6 @@
   ```toml
   # After - future-proofed with major version caps
   librosa>=0.10.2,<0.11        # ✅ Caps minor version
-  faster-whisper>=1.1.0,<2.0   # ✅ Caps major version
   torch>=2.2.0,<3.0            # ✅ Safe from torch 3.x
   numpy>=1.23.0,<2.0           # ✅ Array API v1
   transformers>=4.42.0,<5.0    # ✅ API stability
@@ -277,30 +275,22 @@
   ```
 - **Impact**: Consistent dependency resolution ✅
 
-#### **Issue 5.3: Inconsistent Whisper Package Specification**
+#### **Issue 5.3: ASR Provider Contract**
 - **Problem**:
-  - File imports `whisper` (OpenAI's official package)
-  - Backend depends on `faster-whisper` (alternative)
-  - Could cause conflicts if both installed
+  - Legacy ASR notes described local transcription packages.
+  - The NVIDIA Workshop profile requires NVIDIA Riva for ASR.
+  - Local ASR packages would create a non-NVIDIA runtime path.
 
 - **Fix Applied**:
   ```python
-  # lyrics_analyzer.py explicitly documents fallback
-  try:
-      import whisper
-      WHISPER_AVAILABLE = True
-  except ImportError:
-      WHISPER_AVAILABLE = False
-      logger.info("Whisper not available - lyric analysis disabled")
+  # edmg_ai_service.asr is a fail-closed compatibility shim.
+  raise RuntimeError("Local ASR is disabled by the NVIDIA-only profile.")
   ```
   ```toml
-  # pyproject.toml clarifies alternatives
-  asr = [
-    "faster-whisper>=1.1.0,<2.0",  # Primary: faster-whisper
-  ]
-  # Note: whisper package is optional, imported if present
+  # ASR is provided by NVIDIA Riva through the riva extra.
+  riva = ["nvidia-riva-client==2.19.0"]
   ```
-- **Impact**: Clear dependency contract ✅
+- **Impact**: Clear NVIDIA-only ASR contract ✅
 
 ---
 

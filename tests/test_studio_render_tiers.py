@@ -77,7 +77,7 @@ def test_auto_model_skips_sd35_on_midrange_cuda(tmp_path, monkeypatch):
 
     preflight = studio_app._internal_render_preflight_data(
         proj.id,
-        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto"},
     )
 
     assert preflight["mode"] == "diffusion"
@@ -109,7 +109,7 @@ def test_internal_preflight_defaults_to_keyframes_on_midrange_cuda(tmp_path, mon
 
     preflight = studio_app._internal_render_preflight_data(
         proj.id,
-        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+        {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto"},
     )
 
     assert preflight["mode"] == "diffusion"
@@ -122,7 +122,6 @@ def test_auto_model_reports_sd35_vram_guard_when_no_lighter_model_installed(tmp_
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
-    monkeypatch.setattr(studio_app, "_hosted_stability_ready", lambda _payload: False)
     monkeypatch.setattr(studio_app, "_hardware_profile", lambda: {
         "backend": "cuda",
         "device": "cuda",
@@ -144,7 +143,7 @@ def test_auto_model_reports_sd35_vram_guard_when_no_lighter_model_installed(tmp_
     with pytest.raises(UserFacingError):
         studio_app._internal_render_preflight_data(
             proj.id,
-            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto"},
         )
 
 
@@ -152,7 +151,6 @@ def test_explicit_sd35_on_midrange_cuda_rejects_proxy_fallback(tmp_path, monkeyp
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)
-    monkeypatch.setattr(studio_app, "_hosted_stability_ready", lambda _payload: False)
     monkeypatch.setattr(studio_app, "_hardware_profile", lambda: {
         "backend": "cuda",
         "device": "cuda",
@@ -179,7 +177,6 @@ def test_explicit_sd35_on_midrange_cuda_rejects_proxy_fallback(tmp_path, monkeyp
                 "fps_render": 2,
                 "fps_output": 24,
                 "model_id": "hf_sd35_medium_internal",
-                "allow_proxy_fallback": False,
             },
         )
 
@@ -206,11 +203,11 @@ def test_internal_preflight_rejects_cpu_proxy(tmp_path, monkeypatch):
     with pytest.raises(UserFacingError):
         studio_app._internal_render_preflight_data(
             proj.id,
-            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False, "render_tier": "quality"},
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "render_tier": "quality"},
         )
 
 
-def test_run_pipeline_rejects_cpu_local_fallback(tmp_path, monkeypatch):
+def test_run_pipeline_rejects_cpu_internal_cuda_render(tmp_path, monkeypatch):
     store, jobs, proj = _make_project(tmp_path)
     monkeypatch.setattr(studio_app, "store", store)
     monkeypatch.setattr(studio_app, "jobs", jobs)

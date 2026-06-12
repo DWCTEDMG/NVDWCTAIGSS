@@ -19,13 +19,13 @@ import (
 )
 
 const (
-	AppName         = "EDMG Studio"
+	AppName         = "EDMG NVIDIA Workshop"
 	StudioRelDir    = "studio/edmg-studio"
 	BootstrapFile   = "bootstrap.json"
 	PackageJSON     = "package.json"
 	BackendRelDir   = "electron-resources/backend"
 	FFmpegRelDir    = "electron-resources/bin"
-	BootstrapRelDir = "EDMG Studio"
+	BootstrapRelDir = "EDMG NVIDIA Workshop"
 )
 
 var (
@@ -74,8 +74,6 @@ type AISettings struct {
 	Mode                string `json:"mode,omitempty"`
 	Provider            string `json:"provider,omitempty"`
 	AIBaseURL           string `json:"aiBaseUrl,omitempty"`
-	OllamaURL           string `json:"ollamaUrl,omitempty"`
-	OllamaModel         string `json:"ollamaModel,omitempty"`
 	OpenAICompatBaseURL string `json:"openaiCompatBaseUrl,omitempty"`
 	OpenAICompatModel   string `json:"openaiCompatModel,omitempty"`
 }
@@ -103,7 +101,6 @@ type StoragePaths struct {
 	ExternalDir      string `json:"externalDir"`
 	ElectronUserData string `json:"electronUserData"`
 	SessionData      string `json:"sessionData"`
-	OllamaModelsDir  string `json:"ollamaModelsDir"`
 }
 
 type BootstrapReport struct {
@@ -273,7 +270,7 @@ func CollectDoctorReport(repoRoot string) (DoctorReport, error) {
 
 	warnings := make([]string, 0, 6)
 	if len(bootstrap.OutsideStudioHome) > 0 {
-		warnings = append(warnings, fmt.Sprintf("storage roots escape Studio Home: %s", strings.Join(bootstrap.OutsideStudioHome, ", ")))
+		warnings = append(warnings, fmt.Sprintf("storage roots escape Workshop Home: %s", strings.Join(bootstrap.OutsideStudioHome, ", ")))
 	}
 	if !release.BundleManifestOK {
 		warnings = append(warnings, "backend bundle manifest missing or unreadable")
@@ -658,7 +655,6 @@ func DefaultStoragePaths(studioHome string) StoragePaths {
 		ExternalDir:      filepath.Join(studioHome, defaultStorageRelativePaths["externalDir"]),
 		ElectronUserData: electronUserData,
 		SessionData:      filepath.Join(electronUserData, "session"),
-		OllamaModelsDir:  filepath.Join(studioHome, defaultStorageRelativePaths["modelsDir"], "ollama"),
 	}
 }
 
@@ -684,7 +680,6 @@ func ResolveStoragePaths(fallbackHome string, cfg BootstrapConfig) StoragePaths 
 	if override := cleanPath(cfg.StorageSettings.ExternalDir); override != "" {
 		paths.ExternalDir = override
 	}
-	paths.OllamaModelsDir = filepath.Join(paths.ModelsDir, "ollama")
 	return paths
 }
 
@@ -900,7 +895,6 @@ func BuildManagedBackendEnv(cfg BootstrapConfig, paths StoragePaths, host string
 		"EDMG_STUDIO_CACHE_DIR":          paths.CacheRoot,
 		"EDMG_STUDIO_LOGS_DIR":           paths.LogsDir,
 		"EDMG_STUDIO_EXTERNAL_DIR":       paths.ExternalDir,
-		"OLLAMA_MODELS":                  paths.OllamaModelsDir,
 		"PIP_CACHE_DIR":                  filepath.Join(paths.CacheRoot, "pip"),
 		"XDG_CACHE_HOME":                 filepath.Join(paths.CacheRoot, "xdg"),
 		"HF_HOME":                        filepath.Join(paths.CacheRoot, "huggingface"),
@@ -918,8 +912,6 @@ func BuildManagedBackendEnv(cfg BootstrapConfig, paths StoragePaths, host string
 		"EDMG_AI_MODE":                   cfg.AISettings.Mode,
 		"EDMG_AI_PROVIDER":               cfg.AISettings.Provider,
 		"EDMG_AI_BASE_URL":               cfg.AISettings.AIBaseURL,
-		"EDMG_AI_OLLAMA_URL":             cfg.AISettings.OllamaURL,
-		"EDMG_AI_OLLAMA_MODEL":           cfg.AISettings.OllamaModel,
 		"EDMG_AI_OPENAI_COMPAT_BASE_URL": cfg.AISettings.OpenAICompatBaseURL,
 		"EDMG_AI_OPENAI_COMPAT_MODEL":    cfg.AISettings.OpenAICompatModel,
 	}
@@ -970,13 +962,13 @@ func releaseProofPointers(repoRoot string) []ReleaseProofPointer {
 			Name:    "packaged-upgrade-proof",
 			Command: "pnpm run validate:packaged-upgrade-proof",
 			DocPath: doc,
-			Note:    "Verifies migration from the older C:\\-style layout into Studio-managed roots.",
+			Note:    "Verifies migration from the older C:\\-style layout into Workshop-managed roots.",
 		},
 		{
-			Name:    "packaged-zero-state-setup",
-			Command: "pnpm run validate:packaged-zero-state-setup",
+			Name:    "packaged-nvidia-setup",
+			Command: "pnpm run validate:packaged-nvidia-setup",
 			DocPath: doc,
-			Note:    "Verifies Studio-managed Ollama and portable 7-Zip setup on a fresh root.",
+			Note:    "Verifies NVIDIA Workshop setup on a fresh root.",
 		},
 	}
 }
@@ -998,7 +990,7 @@ func supportBundleFileName(ts time.Time) string {
 
 func buildSupportBundleReadme(summary SupportBundleSummary) string {
 	var b strings.Builder
-	b.WriteString("EDMG Studio support bundle\n")
+	b.WriteString("EDMG NVIDIA Workshop support bundle\n")
 	b.WriteString("=========================\n\n")
 	b.WriteString("This archive was exported by edmgctl.\n\n")
 	b.WriteString("Contents:\n")
@@ -1164,7 +1156,7 @@ func pythonToolStatus() ToolStatus {
 		return status
 	}
 	if maj != 3 || min < supportedPythonMin[1] || min >= supportedPythonMaxExclusive[1] {
-		status.Note = fmt.Sprintf("Studio release builds support Python >= %d.%d and < %d.%d", supportedPythonMin[0], supportedPythonMin[1], supportedPythonMaxExclusive[0], supportedPythonMaxExclusive[1])
+		status.Note = fmt.Sprintf("Workshop release builds support Python >= %d.%d and < %d.%d", supportedPythonMin[0], supportedPythonMin[1], supportedPythonMaxExclusive[0], supportedPythonMaxExclusive[1])
 	}
 	return status
 }
@@ -1397,9 +1389,9 @@ func pnpmCommandName() string {
 
 func packagedAppName() string {
 	if runtime.GOOS == "windows" {
-		return "EDMG Studio.exe"
+		return "EDMG NVIDIA Workshop.exe"
 	}
-	return "EDMG Studio"
+	return "EDMG NVIDIA Workshop"
 }
 
 func firstExisting(candidates ...string) string {

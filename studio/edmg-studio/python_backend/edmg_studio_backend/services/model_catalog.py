@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Built-in curated model catalog for EDMG Studio.
+# Built-in curated model catalog for EDMG NVIDIA Workshop.
 # NOTE: We intentionally do NOT bundle large weights in the installer.
 # The catalog drives the GUI "Model Manager" which downloads models on-demand.
 

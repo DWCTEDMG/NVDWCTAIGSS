@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add two additive systems to EDMG Studio without removing or replacing any current render path:
+Add two additive systems to EDMG NVIDIA Workshop without reintroducing retired non-NVIDIA render paths:
 
 - `Visual DNA`: persistent per-project creative memory
 - `Render Conductor`: advisory orchestration that recommends the best engine mix per scene
@@ -142,16 +142,18 @@ Primary API:
   - selects an engine per scene
   - emits a step graph
   - computes rough time/cost/risk estimates
-  - records fallback branches
+  - records only NVIDIA-engine reroute branches
 
 ### Current Engine Families
 
 - `internal`
 - `comfyui_still`
 - `comfyui_motion`
-- `hosted_video`
-- `proxy`
 - `deforum_export`
+
+`hosted_video` and `proxy` can still be parsed from older payloads for
+compatibility, but the NVIDIA Workshop profile filters them out before planning
+and never selects them for execution.
 
 ### Current Heuristics
 

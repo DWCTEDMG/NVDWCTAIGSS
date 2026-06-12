@@ -1,19 +1,18 @@
-# EDMG Studio (v1.1.0)
+# EDMG NVIDIA Workshop Control Surface (v1.1.0)
 
-Legacy Electron/React client and Python backend for the NVIDIA-first EDMG
-Studio runtime. The primary desktop shell now lives in `../nvidia-kit/` and is
-launched through `../../deployment/nvidia/start_nvidia_runtime_local.ps1`.
+React control surface and Python backend for EDMG NVIDIA Workshop. The primary
+desktop shell lives in `../nvidia-kit/` and is launched through
+`../../deployment/nvidia/start_nvidia_runtime_local.ps1`.
 
 - **Omniverse Kit** shell + **OpenUSD/RTX** workflow in `studio/nvidia-kit`
-- Legacy **Electron** shell + **React** UI retained for migration/dev support
+- **React** UI retained as the Workshop control surface and dev client
 - Local **FastAPI** backend for projects, assets, planning, rendering, and outputs
 - Bundled **EDMG Director** MCP sidecar for ChatGPT connector workflows and Studio-native directing handoff
 - Integrates with:
   - **NVIDIA NIM** for planning through the OpenAI-compatible `/v1` API
   - **NVIDIA Riva**, **Triton**, **Audio2Face/ACE**, **Cosmos**, and **Omniverse Kit** service profiles
   - **OpenUSD/RTX render jobs** as the primary production handoff
-  - **Studio internal renderer** and **ComfyUI** as secondary render lanes
-  - In-process **AI providers** as fallbacks when NIM is unavailable
+  - **Workshop internal renderer** and **ComfyUI** as secondary render lanes
   - Optional external **AI service** over HTTP when you want to separate that workload
   - **OpenClaw** only as an optional operator/automation shell around Studio, not as a required runtime dependency
   - **EDMG Core** (enhanced-deforum-music-generator) for Deforum template/export (optional but recommended)
@@ -67,7 +66,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 This starts or reuses the backend, checks NVIDIA diagnostics, and launches the
 Kit app through `studio/nvidia-kit/tools/launch_edmg_kit.ps1`.
 
-### Legacy Electron UI
+### React control surface
 ```bash
 corepack enable
 pnpm install
@@ -94,22 +93,22 @@ pnpm backend:use external http://HOST:PORT
 - Linux desktop artifacts are built as `AppImage` via `pnpm run dist:linux`
 - Use `pnpm run check:release-metadata` after staging if you want a direct version-propagation check
 
-## NVIDIA Runtime Setup (legacy client)
+## NVIDIA Runtime Setup
 
-The legacy Electron client still includes **NVIDIA Runtime Setup** (Sidebar → **Setup**) used during migration. The primary install/run path is the NVIDIA Kit launcher and diagnostics flow:
+The React control surface includes **NVIDIA Runtime Setup** (Sidebar -> **Setup**). The primary install/run path is the NVIDIA Kit launcher and diagnostics flow:
 
 - Uses an assisted Windows installer, so you can choose the **app install directory** instead of being forced into the default `C:\` path
-- Lets you choose a **Studio Home** folder before large downloads, so project data, NVIDIA session data, legacy UI data, portable tools, and caches can live on `D:\...`
+- Lets you choose a **Workshop Home** folder before large downloads, so project data, NVIDIA session data, UI data, portable tools, and caches can live on `D:\...`
 - Checks **NVIDIA NIM**, **Riva**, **Triton**, and **Omniverse/Audio2Face** service readiness
 - Supports local or hosted **NVIDIA NIM/OpenAI-compatible** servers through Studio Settings
 - Uses `nvidia/llama-3.3-nemotron-super-49b-v1.5` as the default NIM planning model
 - Installs the **backend runtime bundle** that powers the internal renderer
-- Keeps **Ollama** and **ComfyUI** as fallback/secondary lanes
+- Keeps **ComfyUI** as a secondary NVIDIA-GPU workflow lane
 - Verifies **FFmpeg** for MP4 assembly, preferring the Studio-bundled binary when present
 
 This keeps the runtime UX like a DAW/game installer: click buttons, no terminal required.
 
-On Linux, use the NVIDIA backend/service deployment paths first. The legacy AppImage remains available only for React client compatibility work.
+On Linux, use the NVIDIA backend/service deployment paths first. The AppImage remains available only for React control-surface compatibility work.
 
 OpenClaw is not part of the required Studio install path. If you use it, treat it as an optional operator shell layered around Studio for automation or monitoring rather than as a dependency of the app itself.
 
@@ -121,7 +120,7 @@ Release/operator runbook:
 
 Install/storage split:
 - **Install directory**: where the packaged app itself is installed
-- **Studio Home**: where projects, caches, NVIDIA runtime data, legacy UI session data, portable tools, and large runtime payloads live
+- **Workshop Home**: where projects, caches, NVIDIA runtime data, UI session data, portable tools, and large runtime payloads live
 
 ## Ports
 - Studio backend: **7863**
@@ -147,8 +146,6 @@ For local Studio use, the native Director page does not require ChatGPT. If you 
 - `EDMG_STUDIO_DATA_DIR` (default: `./data`)
 - `EDMG_AI_MODE` (default: `local`)
 - `EDMG_AI_PROVIDER` (default: `openai_compat`)
-- `EDMG_AI_OLLAMA_URL` (default: `http://127.0.0.1:11434`)
-- `EDMG_AI_OLLAMA_MODEL` (default: `qwen3:8b`)
 - `EDMG_AI_OPENAI_COMPAT_BASE_URL` (default: `http://127.0.0.1:8001/v1`)
 - `EDMG_AI_OPENAI_COMPAT_MODEL` (default: `nvidia/llama-3.3-nemotron-super-49b-v1.5`)
 - `EDMG_AI_OPENAI_COMPAT_API_KEY` (optional)
@@ -166,8 +163,6 @@ For local Studio use, the native Director page does not require ChatGPT. If you 
 - `EDMG_MODEL_STORAGE_MODE` (`local_cache` keeps local files and mirrors them to S3; `cloud_only` stores supported single-file models in S3 and restores them on demand)
 - `EDMG_S3_ENDPOINT_URL` (optional S3-compatible endpoint)
 
-If you need a lighter local planner for weaker CPUs or low-memory systems, set `EDMG_AI_OLLAMA_MODEL=qwen3:4b`.
-
 If your NIM/OpenAI-compatible gateway exposes a different model alias, override
 `EDMG_AI_OPENAI_COMPAT_MODEL` to match that server.
 
@@ -176,24 +171,21 @@ S3-hosted model entries can use `source: "s3"` with either `s3_uri: "s3://bucket
 ## Recommended local model stack
 
 - Planner default: NVIDIA NIM `nvidia/llama-3.3-nemotron-super-49b-v1.5`
-- Local fallback planner: `qwen3:8b`
-- Low-resource fallback planner: `qwen3:4b`
 - Broad still-image default: SDXL Base 1.0
 - Fast still-image option: SD3.5 Large Turbo
 - Reference still guidance: SD3.5 ControlNet Blur, Canny, and Depth
 - Primary HF video backend: Wan2.2 TI2V 5B
-- Short image-to-video fallback: SVD XT Img2Vid
+- Short image-to-video option: SVD XT Img2Vid
 
 ## Hardware tiers
 
-- Low-spec fallback: `qwen3:4b` + SDXL Base 1.0
 - Mid-range: NVIDIA NIM + SDXL Base 1.0 + SD3.5 Large Turbo + SD3.5 Blur/Canny
 - High-end: NVIDIA NIM + RTX/OpenUSD Kit render jobs + SD3.5 Blur/Canny/Depth + Wan2.2 TI2V 5B
 
 If `EDMG_STUDIO_HOME` is set, Studio uses it as the root for:
 - backend project data (`<studio-home>/data`)
 - models (`<studio-home>/models`)
-- legacy Electron user/session data (`<studio-home>/electron`)
+- UI user/session data (`<studio-home>/electron`)
 - caches and temporary files (`<studio-home>/cache`)
 - logs (`<studio-home>/logs`)
 - external tools (`<studio-home>/external`)
@@ -216,7 +208,7 @@ EDMG Core integration:
 
 ## Default rendering path
 
-Studio's default movie path is **AI Storyboard Movie**: NIM creates the story pass, Studio writes prompt and audio-reactive motion tracks, the internal renderer produces a frame sequence, and FFmpeg assembles/muxes the final MP4. If no diffusion model is available, the same command falls back to proxy motion so the project still produces a usable timed movie.
+The Workshop default movie path is **AI Storyboard Movie**: NIM creates the story pass, the backend writes prompt and audio-reactive motion tracks, the internal renderer produces a CUDA frame sequence, and FFmpeg assembles/muxes the final MP4. If no CUDA diffusion model is available, the command fails closed with a setup error instead of routing through proxy or CPU fallback.
 
 The NVIDIA Kit/OpenUSD/RTX handoff remains the default path for inspectable 3D stage work and RTX render jobs. Use ComfyUI only when you explicitly want its optional still or motion workflows.
 

@@ -1,35 +1,18 @@
 # `edmgctl`
 
-`edmgctl` is the first Go support-plane addition for EDMG Studio.
+`edmgctl` is the support-plane CLI for EDMG NVIDIA Workshop.
 
-It does not replace any Python ML/audio logic or the Electron/React UI. It
-wraps the existing Studio release and diagnostics surface with a small,
-cross-platform CLI that can:
-
-- inspect repo/tool/bootstrap state
-- report supervisor state inside the doctor surface
-- validate Studio-managed storage roots
-- inspect packaged release artifacts
-- export a single support bundle zip for release/debug handoff
-- run the existing release build and release proof commands
-
-## Why this is the first Go insertion point
-
-This repo already has working Python and TypeScript product code. The
-lowest-risk place for Go is around operations and tooling:
-
-- no rewrite of the audio or ML path
-- no rewrite of the UI
-- no new runtime dependency inside the core Studio app
-- immediate value for diagnostics, release checks, and support workflows
+It does not replace the Python backend or Electron/React UI. It wraps the
+Workshop diagnostics, release, supervisor, and support-bundle surfaces with a
+small cross-platform CLI.
 
 ## Commands
 
 From `studio/edmg-studio/tools/edmgctl/`:
 
 ```powershell
-$env:GOCACHE="$PWD\\.gocache"
-$env:GOMODCACHE="$PWD\\.gomodcache"
+$env:GOCACHE="$PWD\.gocache"
+$env:GOMODCACHE="$PWD\.gomodcache"
 go run ./cmd/edmgctl doctor
 go run ./cmd/edmgctl bootstrap show
 go run ./cmd/edmgctl release status
@@ -38,88 +21,11 @@ go run ./cmd/edmgctl support export --out .\edmg-support.zip
 go run ./cmd/edmgctl supervisor start --port 0 --wait --timeout 90s
 go run ./cmd/edmgctl supervisor status
 go run ./cmd/edmgctl supervisor stop
-go run ./cmd/edmgctl release verify-manifest --manifest .\edmg-artifacts.json
 ```
 
-Machine-readable output:
+It reads the user bootstrap config from
+`%APPDATA%\EDMG NVIDIA Workshop\bootstrap.json` on Windows and starts managed
+backend processes with Workshop storage roots plus NVIDIA profile environment.
 
-```powershell
-$env:GOCACHE="$PWD\\.gocache"
-$env:GOMODCACHE="$PWD\\.gomodcache"
-go run ./cmd/edmgctl doctor --json
-go run ./cmd/edmgctl artifact manifest --out .\edmg-artifacts.json
-```
-
-Release wrappers:
-
-```powershell
-$env:GOCACHE="$PWD\\.gocache"
-$env:GOMODCACHE="$PWD\\.gomodcache"
-go run ./cmd/edmgctl release build
-go run ./cmd/edmgctl release validate
-go run ./cmd/edmgctl release verify-manifest --manifest .\edmg-artifacts.json
-```
-
-## Build
-
-```powershell
-cd studio/edmg-studio/tools/edmgctl
-$env:GOCACHE="$PWD\\.gocache"
-$env:GOMODCACHE="$PWD\\.gomodcache"
-go build -o .\dist\edmgctl.exe ./cmd/edmgctl
-```
-
-Then run:
-
-```powershell
-.\dist\edmgctl.exe doctor
-```
-
-## Integration points
-
-`edmgctl` intentionally integrates with the existing repo instead of replacing
-it.
-
-It reads:
-
-- `studio/edmg-studio/package.json`
-- `studio/edmg-studio/electron-resources/backend/backend-bundle-manifest.json`
-- the user bootstrap config at `%APPDATA%\EDMG Studio\bootstrap.json` on Windows
-
-It executes:
-
-- `pnpm run dist:win`
-- `pnpm run validate:release`
-
-It also inventories:
-
-- bundled backend executable
-- bundled FFmpeg
-- unpacked packaged app
-- Windows installer artifact
-
-It can also supervise one packaged backend process for support and proof work:
-
-- start the packaged backend with the same Studio-managed storage roots
-- ping `/health`
-- stop the managed backend
-
-It can also export one portable support bundle zip containing:
-
-- `doctor.json`
-- bootstrap report and raw bootstrap config when present
-- supervisor status and raw supervisor state when present
-- the current artifact manifest with hashes
-- release-proof pointers and a small bundle README
-
-So the current Python backend, Electron main process, React UI, and packaging
-scripts remain the source of truth. Go is only the orchestration/diagnostic
-surface.
-
-## Cross-platform notes
-
-- `doctor`, `bootstrap show`, and `release status` are cross-platform.
-- `release build` is still Windows-first because the underlying product release
-  flow is Windows-first.
-- `release validate` delegates to the existing Studio scripts and behaves the
-  same way those scripts behave on the current host.
+Ollama paths and environment variables are intentionally not part of this
+support surface.

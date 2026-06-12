@@ -1,44 +1,20 @@
-# Linux Packaging Notes
+# Linux Packaging
 
-EDMG Studio already ships Linux-aware runtime branches in the Electron shell, Setup Wizard, desktop artifact helpers, and packaged smoke validation. The Linux packaged target is the Electron `AppImage`.
-
-## Build on a Linux host
-
-```bash
-cd studio/edmg-studio
-corepack enable
-pnpm install
-pnpm run validate:release:linux
-```
-
-That flow:
-
-- runs the frontend typecheck and UI tests
-- stages the desktop app bundle
-- validates the Electron bridge and packaged smoke path
-- builds the Linux `AppImage`
-
-If you only need the artifact build:
+The Linux desktop target is the `EDMG NVIDIA Workshop` AppImage. Build from the
+single NVIDIA profile:
 
 ```bash
-cd studio/edmg-studio
 pnpm run dist:linux
 ```
 
-## Runtime expectations
+Use `deployment/nvidia/start_nvidia_runtime_local.ps1` for the local runtime
+when developing on Windows, or configure the same environment variables on the
+Linux host before launching the packaged app:
 
-- FFmpeg can come from the packaged bundle or `EDMG_FFMPEG_PATH`
-- Ollama is expected to be installed system-wide or provided via `EDMG_OLLAMA_PATH`
-- ComfyUI is optional and should run as a separate Linux service when used
-- the Windows-only managed 7-Zip and ComfyUI Portable installers do not apply on Linux
+- `EDMG_AI_MODE=nvidia_nim`
+- `EDMG_NVIDIA_NIM_URL`
+- `EDMG_NVIDIA_NIM_API_KEY` or `NVIDIA_API_KEY`
+- CUDA-capable model and render service paths
 
-## First-run notes
-
-1. Mark the AppImage executable if needed: `chmod +x EDMG-Studio*.AppImage`
-2. Launch the app.
-3. Open `Setup`.
-4. Choose a `Studio Home` on the storage volume you want for models, cache, logs, and external tools.
-
-## Validation scope
-
-`validate:release:linux` intentionally skips the Windows-only packaged customer-flow, upgrade-proof, and zero-state managed-installer proofs. Those remain covered by the Windows release path.
+The Linux package does not depend on Ollama and does not enable CPU, MPS,
+DirectML, or hosted Stability fallbacks.

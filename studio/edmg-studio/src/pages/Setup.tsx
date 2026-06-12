@@ -46,12 +46,12 @@ function joinStoragePath(basePath: string, segment: string, platformKind: Deskto
 
 function getStorageFieldConfigs(platformKind: DesktopPlatformKind): StorageFieldConfig[] {
   const homePlaceholder = platformKind === "windows"
-    ? "D:\\EDMG-Studio"
+    ? "D:\\EDMG-NVIDIA-Workshop"
     : platformKind === "mac"
-      ? "/Users/tyler/EDMG-Studio"
-      : "/home/tyler/EDMG-Studio";
+      ? "/Users/tyler/EDMG-NVIDIA-Workshop"
+      : "/home/tyler/EDMG-NVIDIA-Workshop";
   return [
-    { key: "studioHome", label: "Studio home", placeholder: homePlaceholder },
+    { key: "studioHome", label: "Workshop home", placeholder: homePlaceholder },
     { key: "dataDir", label: "Project data", placeholder: joinStoragePath(homePlaceholder, "data", platformKind) },
     { key: "modelsDir", label: "Models", placeholder: joinStoragePath(homePlaceholder, "models", platformKind) },
     { key: "cacheRoot", label: "Shared cache", placeholder: joinStoragePath(homePlaceholder, "cache", platformKind) },
@@ -255,7 +255,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   async function applyStorageSettings() {
     const target = (storageDraft.studioHome || "").trim();
     if (!target) {
-      setErr("Pick a Studio Home folder first.");
+      setErr("Pick a Workshop Home folder first.");
       return;
     }
     if (!window.edmg?.setStorageSettings && !window.edmg?.setStudioHome) {
@@ -290,8 +290,8 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
         externalDir: String(result.externalDir || payload.externalDir || ""),
       });
       const confirmMsg = result?.migrationPlanned
-        ? `Storage layout saved.\n\n${result?.migrationSummary || "Existing Studio data will be moved into the new locations on restart."}\n\nRestart EDMG Studio now?`
-        : "Storage layout saved. Restart EDMG Studio now so new downloads, projects, models, caches, and logs start using those folders?";
+        ? `Storage layout saved.\n\n${result?.migrationSummary || "Existing Workshop data will be moved into the new locations on restart."}\n\nRestart EDMG NVIDIA Workshop now?`
+        : "Storage layout saved. Restart EDMG NVIDIA Workshop now so new downloads, projects, models, caches, and logs start using those folders?";
       if (window.confirm(confirmMsg)) {
         await window.edmg?.relaunch?.();
       }
@@ -358,7 +358,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     <div>
       <h2>NVIDIA Runtime Setup</h2>
       <div className="small" style={{ marginTop: 6 }}>
-        NVIDIA Kit is the primary Studio shell. This page checks NIM planning, OpenUSD/RTX handoff readiness, and backend dependencies while the remaining React client is phased out.
+        NVIDIA Kit is the Workshop shell. This page checks NIM planning, OpenUSD/RTX handoff readiness, and backend dependencies for the unified NVIDIA runtime.
       </div>
 
       {err && (
@@ -378,7 +378,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
-            Set this before installing runtimes or model packs if you want Studio projects, model downloads, caches, logs, and external tools to stay under one root instead of filling the default system drive.
+            Set this before installing runtimes or model packs if you want Workshop projects, model downloads, caches, logs, and external tools to stay under one root instead of filling the default system drive.
           </div>
           {storageCustomLabels.length ? (
             <div className="small" style={{ marginTop: 8, opacity: 0.84 }}>
@@ -404,7 +404,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
                 className="secondary"
                 onClick={() => setStorageDraft(deriveStorageLayout(storageDraft.studioHome || studioPaths?.studioHome || ""))}
               >
-                Use Studio Home Defaults
+                Use Workshop Home Defaults
               </button>
               <button disabled={busy === "storage_settings"} onClick={applyStorageSettings}>
                 {busy === "storage_settings" ? "Saving…" : "Save & Restart"}
@@ -419,7 +419,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             </div>
             {studioPaths ? (
               <div className="small" style={{ display: "grid", gap: 4, opacity: 0.88 }}>
-                <div>Studio home: <code>{studioPaths.studioHome}</code></div>
+                <div>Workshop home: <code>{studioPaths.studioHome}</code></div>
                 <div>Project data: <code>{studioPaths.dataDir}</code></div>
                 <div>Models: <code>{studioPaths.modelsDir}</code></div>
                 <div>Shared cache: <code>{studioPaths.cacheRoot}</code></div>
@@ -428,7 +428,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
                 <div>Legacy UI data: <code>{studioPaths.electronUserData}</code></div>
                 {studioPaths?.pendingMigration?.source?.studioHome ? (
                   <div style={{ color: "#ffd78c" }}>
-                    Pending migration: <code>{studioPaths.pendingMigration.source.studioHome}</code> to <code>{studioPaths.pendingMigration.target?.studioHome}</code>. Restart Studio to run it.
+                    Pending migration: <code>{studioPaths.pendingMigration.source.studioHome}</code> to <code>{studioPaths.pendingMigration.target?.studioHome}</code>. Restart the Workshop to run it.
                   </div>
                 ) : null}
                 {studioPaths?.lastMigration ? (
@@ -501,7 +501,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
     <Badge ok={backendBundleOk} label={backendBundleOk ? "OK" : "Missing"} />
   </div>
   <div className="small" style={{ marginTop: 6 }}>
-    Installs the backend audio, ASR, and internal-render Python dependencies into the Studio backend environment.
+    Installs the backend audio, ASR, and internal-render Python dependencies into the Workshop backend environment.
   </div>
   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
     <button
@@ -530,7 +530,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
   </div>
   <div className="small" style={{ marginTop: 6 }}>
     {isWindows
-      ? "Required to extract some .7z archives (BCJ2), including some ComfyUI Portable releases. Studio now keeps the portable CLI under your External tools root."
+      ? "Required to extract some .7z archives (BCJ2), including some ComfyUI Portable releases. Workshop now keeps the portable CLI under your External tools root."
       : "Only needed for the Windows ComfyUI Portable workflow. Linux and macOS users can skip this and install ComfyUI manually."}
   </div>
   {isWindows ? (
@@ -614,16 +614,16 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             NVIDIA/OpenUSD is the primary production handoff. EDMG can also talk to ComfyUI at <code>{status?.comfyui?.url ?? "http://127.0.0.1:8188"}</code> when you want alternate still or motion workflows.
           </div>
           <div className="small" style={{ marginTop: 10, opacity: 0.92 }}>
-            To make ComfyUI actually show up inside Studio, four things have to line up in order:
+            To make ComfyUI show up inside the Workshop as a secondary engine, four things have to line up in order:
           </div>
           <ol className="small" style={{ marginTop: 8, paddingLeft: 18, display: "grid", gap: 6, opacity: 0.9 }}>
-            <li>Setup must install or point Studio at a live ComfyUI server.</li>
+            <li>Setup must install or point the Workshop at a live ComfyUI server.</li>
             <li>Models must include a checkpoint or workflow family that uses the <code>ComfyUI</code> engine rather than the internal engine.</li>
             <li>Render or Timeline only exposes ComfyUI-specific paths when that ComfyUI model is selected for the job.</li>
             <li>If nothing changes in Render, the usual cause is that ComfyUI is not running, the selected model is still an internal model, or the required workflow or ControlNet assets are not installed yet.</li>
           </ol>
           <div className="small" style={{ marginTop: 8, opacity: 0.9 }}>
-            In other words, installing ComfyUI does not replace the NVIDIA Studio path. It adds an alternate engine lane that becomes available when the active render model is ComfyUI-backed.
+            In other words, installing ComfyUI does not replace the NVIDIA Workshop path. It adds an alternate engine lane that becomes available when the active render model is ComfyUI-backed.
           </div>
           {!isWindows ? (
             <div className="small" style={{ marginTop: 8, opacity: 0.88 }}>
@@ -673,7 +673,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           </div>
           {!ffOk && (
             <div className="small" style={{ marginTop: 10 }}>
-              Fix: {status?.ffmpeg?.hint ?? "Packaged EDMG Studio should include bundled FFmpeg. If this is a dev checkout, install FFmpeg and add it to PATH, or set EDMG_FFMPEG_PATH to the ffmpeg executable."}
+              Fix: {status?.ffmpeg?.hint ?? "Packaged EDMG NVIDIA Workshop should include bundled FFmpeg. If this is a dev checkout, install FFmpeg and add it to PATH, or set EDMG_FFMPEG_PATH to the ffmpeg executable."}
             </div>
           )}
         </div>
@@ -684,7 +684,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             <Badge ok={edmgOk} label={edmgOk ? "Ready" : "Optional"} />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
-            Studio backend installs now target EDMG Core as part of the same product surface. Use this to repair or reinstall Core if the current backend environment is missing it.
+            Workshop backend installs now target EDMG Core as part of the same product surface. Use this to repair or reinstall Core if the current backend environment is missing it.
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
@@ -704,7 +704,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
           <div className="small" style={{ marginTop: 10, opacity: 0.9 }}>
             {edmgOk
               ? `Installed version: ${status?.edmg?.version || "unknown"}`
-              : (status?.edmg?.hint || "Studio can run without EDMG Core, but richer analysis and full Deforum exports stay limited until it is installed.")}
+              : (status?.edmg?.hint || "The Workshop can run without EDMG Core, but richer analysis and full Deforum exports stay limited until it is installed.")}
           </div>
           {edmgVerifyResult ? (
             <div className="small" style={{ marginTop: 10, opacity: 0.88, whiteSpace: "pre-wrap" }}>
@@ -724,7 +724,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
             />
           </div>
           <div className="small" style={{ marginTop: 6 }}>
-            EDMG does not bundle large weights in the installer. Pick a pack to download recommended models (GUI-driven).
+            EDMG NVIDIA Workshop does not bundle large weights in the installer. Pick a pack to download recommended models.
           </div>
 
           <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -783,7 +783,7 @@ export default function Setup({ onNavigate }: { onNavigate?: (p: any) => void })
         <div className="card">
           <div style={{ fontWeight: 800 }}>Ready check</div>
           <div className="small" style={{ marginTop: 6 }}>
-            When the backend runtime bundle, NVIDIA profile, NVIDIA/NIM AI path, and FFmpeg are all OK, EDMG Studio is ready for the NVIDIA workflow. ComfyUI and EDMG Core remain secondary support lanes.
+            When the backend runtime bundle, NVIDIA profile, NVIDIA/NIM AI path, and FFmpeg are all OK, EDMG NVIDIA Workshop is ready for the NVIDIA workflow. ComfyUI and EDMG Core remain secondary support lanes.
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
             <button

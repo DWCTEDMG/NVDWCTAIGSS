@@ -297,7 +297,7 @@ export function createBackendRuntime({
 
       if (!testMode) {
         dialog.showErrorBox(
-          "EDMG Studio backend missing",
+          "EDMG NVIDIA Workshop backend missing",
           `Could not find packaged backend:\n${spec.command}`
         );
       }
@@ -335,7 +335,7 @@ export function createBackendRuntime({
 
       if (!testMode) {
         dialog.showErrorBox(
-          "EDMG Studio backend failed to start",
+          "EDMG NVIDIA Workshop backend failed to start",
           String(error?.message ?? error)
         );
       }
@@ -361,7 +361,7 @@ export function createBackendRuntime({
 
         if (!testMode) {
           dialog.showErrorBox(
-            "EDMG Studio backend failed to start",
+            "EDMG NVIDIA Workshop backend failed to start",
             `${error?.message ?? error}`
           );
         }

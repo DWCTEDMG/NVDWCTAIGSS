@@ -1,6 +1,6 @@
 [package]
 title = "EDMG Timeline"
-description = "Audio timeline and beat/section map panel for EDMG NVIDIA Studio."
+description = "Audio timeline and beat/section map panel for EDMG NVIDIA Workshop."
 version = "0.1.0"
 category = "EDMG"
 

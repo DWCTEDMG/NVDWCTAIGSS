@@ -380,8 +380,6 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
     render_mode: internalRenderMode,
     render_tier: internalRenderTier,
     device_preference: internalDevicePreference,
-    allow_hosted_fallback: false,
-    allow_proxy_fallback: false,
     resume_existing_frames: internalResumeExisting,
   });
 
@@ -731,8 +729,6 @@ export default function Render({ onNavigate, backendUrl: backendUrlProp }: Rende
         model_id: internalModelId,
         apply_storyboard: true,
         overwrite_timeline: true,
-        allow_hosted_fallback: false,
-        allow_proxy_fallback: false,
         fps_output: internalFpsOut,
         fps_render: internalFpsRender,
         keyframe_interval_s: internalKeyInterval,

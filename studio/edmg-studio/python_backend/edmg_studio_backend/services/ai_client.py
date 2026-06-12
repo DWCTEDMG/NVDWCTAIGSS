@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -11,7 +10,6 @@ import requests
 from .nvidia_riva import (
     RivaTranscriptionError,
     riva_asr_enabled,
-    riva_fallback_enabled,
     transcribe_with_riva,
 )
 
@@ -121,42 +119,16 @@ class LocalAiDirectorClient:
         return resp.model_dump()
 
     def transcribe(self, audio_path: str, model_size: str = "turbo") -> dict[str, Any]:
-        riva_error: str | None = None
-        nvidia_mode = str(os.getenv("EDMG_NVIDIA_MODE", "0") or "").strip().lower() in {"1", "true", "yes", "on"}
-        if nvidia_mode and not riva_asr_enabled():
+        if not riva_asr_enabled():
             return {
                 "text": None,
-                "error": "NVIDIA mode requires NVIDIA Riva ASR. Set EDMG_NVIDIA_RIVA_ASR=1 and configure EDMG_NVIDIA_RIVA_URL.",
+                "error": "NVIDIA Workshop requires NVIDIA Riva ASR. Set EDMG_NVIDIA_RIVA_ASR=1 and configure EDMG_NVIDIA_RIVA_URL.",
                 "source": "nvidia_riva",
             }
-        if riva_asr_enabled():
-            try:
-                return transcribe_with_riva(audio_path)
-            except RivaTranscriptionError as exc:
-                riva_error = str(exc)
-                if not riva_fallback_enabled():
-                    return {"text": None, "error": riva_error, "source": "nvidia_riva"}
-
         try:
-            self._ensure_import_path()
-            from edmg_ai_service.asr import transcribe_detailed
-        except Exception as e:
-            note = f"transcription not available: {e}"
-            if riva_error:
-                note = f"NVIDIA Riva unavailable, fallback failed: {riva_error}; {note}"
-            return {"text": None, "note": note}
-
-        try:
-            result = transcribe_detailed(audio_path, model_size=model_size)
-        except Exception as e:
-            error_text = str(e)
-            if riva_error:
-                error_text = f"NVIDIA Riva unavailable, fallback failed: {riva_error}; {error_text}"
-            return {"text": None, "error": error_text}
-        if riva_error and isinstance(result, dict):
-            result = dict(result)
-            result["nvidia_riva"] = {"fallback_from": "nvidia_riva", "error": riva_error}
-        return result
+            return transcribe_with_riva(audio_path)
+        except RivaTranscriptionError as exc:
+            return {"text": None, "error": str(exc), "source": "nvidia_riva"}
 
     def audio_features(self, audio_path: str) -> dict[str, Any]:
         try:

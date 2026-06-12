@@ -10,7 +10,7 @@ def generate_lightning_bundle(output_dir: str, host: str = "0.0.0.0", port: int 
     (out / "startup.sh").write_text(
         f"""#!/usr/bin/env bash
 set -e
-echo "Starting EDMG Studio backend on {host}:{port}"
+echo "Starting EDMG NVIDIA Workshop backend on {host}:{port}"
 python -m edmg_studio_backend serve --host {host} --port {port}
 """.strip() + "\n",
         encoding="utf-8",

@@ -1,6 +1,6 @@
 # NVIDIA Official Options Map
 
-This is the practical map for an NVIDIA-first EDMG Studio branch. It is not a
+This is the practical map for EDMG NVIDIA Workshop. It is not a
 promise to use every NVIDIA product at once. It separates the official NVIDIA
 pieces that fit this repo from the pieces that should remain optional service
 profiles because they require specific GPUs, licenses, gated images, or cloud
@@ -15,8 +15,8 @@ and viewport:
   profiles, sample USD projects, and lightweight local validation tools.
 - Local or remote GPU service stack: NIM, Riva, NeMo, Audio2Face/ACE, Cosmos,
   Triton, TensorRT, and render workers.
-- Existing Electron app: compatibility client only while remaining panels move
-  into Kit extensions or backend-served NVIDIA tools.
+- React control surface: compatibility/control client only while remaining
+  panels move into Kit extensions or backend-served NVIDIA tools.
 
 The package should not embed model weights, accepted license artifacts, or
 private registry credentials.
@@ -25,7 +25,7 @@ private registry credentials.
 
 | Lane | NVIDIA option | Repo role | Packaging decision |
 | --- | --- | --- | --- |
-| Desktop shell and viewport | Omniverse Kit SDK | Build the NVIDIA Studio desktop app, USD stage editor, RTX preview, and extension UI. | Package in the Windows app if redistribution terms and selected Kit release allow it. |
+| Desktop shell and viewport | Omniverse Kit SDK | Build the NVIDIA Workshop desktop app, USD stage editor, RTX preview, and extension UI. | Package in the Windows app if redistribution terms and selected Kit release allow it. |
 | Durable scene format | OpenUSD and OpenUSD Exchange SDK | Store scene, camera, lighting, render variants, timeline markers, and generated plan state. | Package schemas, templates, validators, and sample stages. |
 | Web/remote viewing | Omniverse Web SDK and Kit App Streaming | Stream a Kit app to browser clients or remote operators. | Keep as optional deployment profile, not required for desktop MVP. |
 | LLM planning | NVIDIA NIM for LLMs | Serve the AI Director through OpenAI-compatible `/v1` endpoints where possible. | Configure as local WSL2/Linux container or remote endpoint. Do not package model weights. |
@@ -67,7 +67,7 @@ Official should mean:
 - do not scrape keys or bake credentials into the repo;
 - document product-specific license and access requirements before enabling a
   profile by default;
-- keep fallbacks for users without the required NVIDIA hardware or entitlements.
+- fail closed with clear setup guidance when required NVIDIA hardware or entitlements are missing.
 
 Official should not mean bundling every NVIDIA service into one installer. That
 would make the Windows app huge, fragile, license-sensitive, and hard to update.
@@ -77,7 +77,7 @@ would make the Windows app huge, fragile, license-sensitive, and hard to update.
 The packaged Windows app can still exist. The right boundary is:
 
 ```text
-EDMG NVIDIA Studio for Windows
+EDMG NVIDIA Workshop for Windows
 |- Omniverse Kit runtime or launcher-managed Kit dependency
 |- EDMG Kit app configuration
 |- EDMG Kit extensions
@@ -94,12 +94,11 @@ GPU service fleet.
 
 Build profiles in this order:
 
-1. `nvidia-nim-planner`: point the existing planner at an OpenAI-compatible NIM
+1. `nvidia-nim-planner`: point the planner at an OpenAI-compatible NIM
    endpoint and expose masked status in the app.
 2. `nvidia-usd-export`: normalize generated scene plans into USD metadata and
    validate sample stages.
-3. `nvidia-riva-speech`: add ASR/TTS adapter behind the existing transcription
-   contract.
+3. `nvidia-riva-speech`: add ASR/TTS adapter behind the transcription contract.
 4. `nvidia-kit-preview`: open the sample USD stage in a minimal Kit app.
 5. `nvidia-audio2face`: generate character animation from voice/emotion assets.
 6. `nvidia-render-worker`: submit RTX render jobs from the Kit app or API.

@@ -42,7 +42,7 @@ class LyricsConfig:
 class AIConfig:
     """AI provider configuration for prompt generation."""
     enabled: bool = False
-    provider: str = "openai"  # NVIDIA NIM / OpenAI-compatible
+    provider: str = "nvidia_nim"  # NVIDIA NIM / OpenAI-compatible
     model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
     base_url: str = "http://127.0.0.1:8001"
     api_key_env: str = "EDMG_AI_OPENAI_COMPAT_API_KEY"

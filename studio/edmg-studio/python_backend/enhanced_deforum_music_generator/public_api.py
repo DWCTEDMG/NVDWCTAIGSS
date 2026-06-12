@@ -9,6 +9,7 @@ It deliberately avoids importing the full standalone implementation at import ti
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -136,9 +137,18 @@ class DeforumMusicGenerator:
                 if bool(user_settings.get("ai_use_provider")):
                     from .core.ai_providers import AIProviderConfig, build_ai_provider
                     cfg = AIProviderConfig(
-                        provider=str(user_settings.get("ai_provider") or "openai"),
-                        model=str(user_settings.get("ai_model") or "gpt-4o-mini"),
-                        base_url=user_settings.get("ai_base_url") or None,
+                        provider=str(user_settings.get("ai_provider") or "nvidia_nim"),
+                        model=str(
+                            user_settings.get("ai_model")
+                            or os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL")
+                            or "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+                        ),
+                        base_url=(
+                            user_settings.get("ai_base_url")
+                            or os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL")
+                            or os.getenv("EDMG_NVIDIA_NIM_URL")
+                            or "http://127.0.0.1:8001/v1"
+                        ),
                         api_key=user_settings.get("ai_api_key") or None,
                     )
                     provider = build_ai_provider(cfg)

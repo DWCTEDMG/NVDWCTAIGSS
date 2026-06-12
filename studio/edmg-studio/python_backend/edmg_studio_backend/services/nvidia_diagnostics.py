@@ -355,7 +355,6 @@ def nvidia_diagnostics() -> dict[str, Any]:
             "asr_enabled": bool(riva.get("asr_enabled")),
             "language_code": riva.get("language_code") or "en-US",
             "model": riva.get("model") or "",
-            "fallback_enabled": bool(riva.get("fallback_enabled")),
             "probe": {
                 **(_tcp_probe(riva_url, timeout_s=3.0) if riva_url else {"configured": False, "skipped": True}),
                 "protocol": "grpc",

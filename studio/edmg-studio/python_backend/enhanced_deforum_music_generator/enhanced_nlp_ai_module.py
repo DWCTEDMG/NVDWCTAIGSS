@@ -4,7 +4,7 @@ Enhanced NLP + AI Integration Module for Deforum Music Generator
 
 This module augments a baseline AudioAnalyzer (from your existing
 `enhanced_deforum_music_generator2.py`) with transformer-driven NLP
-and optional Claude-powered prompt generation while preserving
+and optional NVIDIA-compatible prompt generation while preserving
 backward compatibility with your current JSON outputs and UI.
 
 Highlights
@@ -14,7 +14,7 @@ Highlights
 - Named Entity Recognition (NER) for people/places/objects
 - Sentiment analysis + progression across lyric segments
 - Simple narrative structure inference via zero-shot labels
-- Optional Claude API prompt generation with transparent fallback
+- Optional NVIDIA NIM / OpenAI-compatible prompt generation
 
 Usage (inside enhanced_deforum_music_generator2.py)
 -----------------------------------------------------------------
@@ -29,7 +29,7 @@ from enhanced_nlp_ai_module import (
 EnhancedAudioAnalyzer = integrate_enhanced_nlp(AudioAnalyzer)
 
 # Use it when wiring the UI / CLI
-analyzer = EnhancedAudioAnalyzer(max_duration=MAX_AUDIO_DURATION, claude_api_key=os.getenv("ANTHROPIC_API_KEY"))
+analyzer = EnhancedAudioAnalyzer(max_duration=MAX_AUDIO_DURATION, ai_provider="nvidia_nim")
 
 # When running analysis
 analysis = analyzer.analyze(audio_path, enable_lyrics=True, enable_ai_prompts=True)
@@ -41,7 +41,7 @@ Dependencies (optional but recommended)
 - transformers:   pip install transformers torch
 - TextBlob:       pip install textblob  &&  python -m textblob.download_corpora
 - NLTK VADER:     pip install nltk     &&  python -c "import nltk; nltk.download('vader_lexicon')"
-- requests:       pip install requests  (for Claude HTTP API)
+- requests:       pip install requests  (for NVIDIA-compatible HTTP API)
 
 The module degrades gracefully if any dependency is missing.
 """
@@ -50,7 +50,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 import json
-import os
 import re
 
 # -------- Optional dependency detection (all soft) --------
@@ -425,32 +424,30 @@ class EnhancedNLPAnalyzer:
 
 
 # ---------------------------------------------------------------------------
-# AI Prompt Generator (Claude HTTP API)
+# AI Prompt Generator (NVIDIA NIM / OpenAI-compatible API)
 # ---------------------------------------------------------------------------
 class AIPromptGenerator:
-    """Generates cinematic prompts via Claude API with a deterministic fallback.
+    """Generates cinematic prompts via the NVIDIA-compatible provider.
 
-    The generator supports the NVIDIA/OpenAI-compatible provider with a deterministic fallback.
-    When unavailable, it synthesizes high-quality prompts locally using the
-    analysis data.
+    When the NVIDIA provider is unavailable, it synthesizes prompts locally
+    from the analysis data instead of routing to another hosted provider.
     """
 
     def __init__(
         self,
-        anthropic_api_key: Optional[str] = None,
-        model: str = "claude-3-5-sonnet-20240620",
-        provider: str = "openai",
+        model: str = "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        provider: str = "nvidia_nim",
         provider_config: Optional[Dict[str, Any]] = None,
     ):
-        self.api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY")
         self.model = model
         self.provider = provider
         self._provider = None
         self._provider_error = None
-        if provider != "claude" and _AI_PROVIDER_OK and build_ai_provider and AIProviderConfig:
+        if _AI_PROVIDER_OK and build_ai_provider and AIProviderConfig:
             try:
                 config_data = dict(provider_config or {})
                 config_data.setdefault("provider", provider)
+                config_data.setdefault("model", model)
                 self._provider = build_ai_provider(AIProviderConfig(**config_data))
             except Exception as exc:
                 self._provider_error = str(exc)
@@ -462,75 +459,12 @@ class AIPromptGenerator:
             prompts = self._provider.generate_prompts(prompt, num_prompts)
             if prompts:
                 return prompts
-        if self.provider in {"claude", "anthropic"} and self.api_key and _REQ_OK:
-            prompts = self._call_claude_http(analysis, lyrics, num_prompts)
-            if prompts:
-                return prompts
-        # Fallback
         return self._fallback_prompts(analysis, lyrics, num_prompts)
 
     # -------- internals --------
-    def _call_claude_http(self, analysis: Any, lyrics: LyricsAnalysis, num_prompts: int) -> List[str]:
-        url = "https://api.anthropic.com/v1/messages"
-        if not _REQ_OK or not requests:
-            return []
-        try:
-            payload = {
-                "model": self.model,
-                "max_tokens": 800,
-                "system": (
-                    "You are a film director AI that writes vivid, concise Stable Diffusion Deforum prompts. "
-                    "Respond ONLY with a JSON array of strings. Each string must be a single shot description, "
-                    "describing composition, lens, lighting, color palette, movement, and mood."
-                ),
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": self._compose_ai_request_text(analysis, lyrics, num_prompts),
-                            }
-                        ],
-                    }
-                ],
-            }
-            headers = {
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            }
-            resp = requests.post(url, headers=headers, data=json.dumps(payload), timeout=60)
-            resp.raise_for_status()
-            data = resp.json()
-            # Anthropics Messages API returns content as a list with text segments
-            text_chunks = []
-            for c in data.get("content", []):
-                if isinstance(c, dict) and c.get("type") == "text":
-                    text_chunks.append(c.get("text", ""))
-            combined = "\n".join(text_chunks).strip()
-            try:
-                arr = json.loads(combined)
-                if isinstance(arr, list):
-                    return [str(x) for x in arr][:num_prompts]
-            except Exception:
-                # Attempt to extract JSON array from mixed text
-                m = re.search(r"\[(?:.|\n)*\]", combined)
-                if m:
-                    try:
-                        arr = json.loads(m.group(0))
-                        if isinstance(arr, list):
-                            return [str(x) for x in arr][:num_prompts]
-                    except Exception:
-                        pass
-        except Exception:
-            # Network/API errors are silently swallowed; fallback takes over
-            return []
-        return []
-
     @staticmethod
     def _compose_ai_request_text(analysis: Any, lyrics: LyricsAnalysis, num_prompts: int) -> str:
-        # Pack salient features concisely. Claude prompt is intentionally compact.
+        # Pack salient features concisely for the NVIDIA-compatible planner.
         tempo = getattr(analysis, "tempo_bpm", 0.0)
         duration = getattr(analysis, "duration", 0.0)
         energy = getattr(analysis, "energy_segments", [])
@@ -598,8 +532,7 @@ def integrate_enhanced_nlp(BaseAnalyzerClass: Any):
     - analyze(audio_path, enable_lyrics: bool = False, **kwargs) -> AudioAnalysis
     Additional kwargs supported:
     - enable_ai_prompts: bool = False
-    - claude_api_key: Optional[str] = None  (also read from env ANTHROPIC_API_KEY)
-    - ai_provider: str = "claude"
+    - ai_provider: str = "nvidia_nim"
     - ai_provider_config: Optional[Dict[str, Any]] = None
     - theme_labels: Optional[List[str]]
     - spacy_model: str = "en_core_web_sm"
@@ -616,17 +549,15 @@ def integrate_enhanced_nlp(BaseAnalyzerClass: Any):
         def __init__(
             self,
             *args: Any,
-            claude_api_key: Optional[str] = None,
             spacy_model: str = "en_core_web_sm",
             theme_labels: Optional[List[str]] = None,
-            ai_provider: str = "claude",
+            ai_provider: str = "nvidia_nim",
             ai_provider_config: Optional[Dict[str, Any]] = None,
             **kwargs: Any,
         ) -> None:
             super().__init__(*args, **kwargs)
             self._nlp_analyzer = EnhancedNLPAnalyzer(spacy_model=spacy_model, theme_labels=theme_labels)
             self._ai_prompter = AIPromptGenerator(
-                anthropic_api_key=claude_api_key,
                 provider=ai_provider,
                 provider_config=ai_provider_config,
             )
@@ -679,13 +610,13 @@ if __name__ == "__main__":
     la = nlp.analyze_text(sample_text)
     print("\n[Enhanced NLP]", json.dumps(la.to_dict(), indent=2))
 
-    # Fallback AI prompt generation demo (no API key required)
+    # Local prompt generation demo (no API key required)
     class _Dummy:
         tempo_bpm = 122.0
         duration = 180.0
         energy_segments = [0.25, 0.4, 0.6, 0.8, 0.7]
         spectral_features = {"brightness": 0.62, "warmth": 0.55}
 
-    prompter = AIPromptGenerator(anthropic_api_key=None)
+    prompter = AIPromptGenerator()
     demo_prompts = prompter.generate(_Dummy(), la, num_prompts=4)
     print("\n[AI Prompts]", json.dumps(demo_prompts, indent=2))

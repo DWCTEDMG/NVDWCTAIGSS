@@ -16,7 +16,7 @@ lyrics:
   provider: "whisper"  # whisper, azure, google
   model: "base"  # tiny, base, small, medium, large
   language: null  # auto-detect
-  device: "auto"  # auto, cpu, cuda
+  device: "cuda"  # NVIDIA-only profile
   compute_type: "float16"
   beam_size: 5
   best_of: 5

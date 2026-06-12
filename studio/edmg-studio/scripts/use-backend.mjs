@@ -182,7 +182,7 @@ writeJson(runtimeDefaultsFile, updateRuntimeDefaultsJson(readJson(runtimeDefault
 
 const appData = process.env.APPDATA;
 if (appData) {
-  const bootstrap = path.join(appData, "EDMG Studio", "bootstrap.json");
+  const bootstrap = path.join(appData, "EDMG NVIDIA Workshop", "bootstrap.json");
   writeJson(bootstrap, updateBootstrapJson(readJson(bootstrap), config));
 }
 

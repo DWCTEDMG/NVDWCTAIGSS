@@ -26,9 +26,9 @@ pick_python_bin() {
 
 warn_if_unset() {
   local key="$1"
-  local fallback="$2"
+  local default_value="$2"
   if [[ -z "${!key:-}" ]]; then
-    echo "[warn] ${key} is unset. Backend will fall back to ${fallback}."
+    echo "[warn] ${key} is unset. Backend will use NVIDIA default ${default_value}."
   fi
 }
 
@@ -81,7 +81,6 @@ export EDMG_AI_OPENAI_COMPAT_BASE_URL="${EDMG_AI_OPENAI_COMPAT_BASE_URL:-${EDMG_
 export EDMG_AI_OPENAI_COMPAT_MODEL="${EDMG_AI_OPENAI_COMPAT_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
 export EDMG_NVIDIA_RIVA_URL="${EDMG_NVIDIA_RIVA_URL:-127.0.0.1:50051}"
 export EDMG_NVIDIA_RIVA_ASR="${EDMG_NVIDIA_RIVA_ASR:-1}"
-export EDMG_NVIDIA_RIVA_ASR_FALLBACK="${EDMG_NVIDIA_RIVA_ASR_FALLBACK:-0}"
 echo "[edmg] ai provider: ${EDMG_AI_PROVIDER}"
 echo "[edmg] comfyui url: ${EDMG_COMFYUI_URL:-http://127.0.0.1:8188}"
 

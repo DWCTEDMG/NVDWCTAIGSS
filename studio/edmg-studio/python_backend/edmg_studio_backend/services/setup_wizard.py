@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import re
 import os
 import platform
@@ -182,360 +181,11 @@ def _extract_zip_with_cancel(task: SetupTask, archive_path: Path, dest_dir: Path
             SetupTaskManager.set_progress(task, max(task.progress or 0.0, min(0.98, 0.8 + (index / total) * 0.18)))
 
 
-# ------------------------------ Disabled local planner ------------------------------
+# ------------------------------ Runtime helpers ------------------------------
 
 def _env_truthy(name: str) -> bool:
     value = str(os.environ.get(name, "")).strip().lower()
     return value in {"1", "true", "yes", "on"}
-
-def _ollama_base(url: str) -> str:
-    return (url or "http://127.0.0.1:11434").rstrip("/")
-
-
-def _disabled_local_models_dir(models_dir: Path) -> Path:
-    explicit = str(os.environ.get("EDMG_DISABLED_LOCAL_MODELS") or "").strip()
-    if explicit:
-        return Path(explicit).expanduser().resolve()
-    return (models_dir / "ollama").resolve()
-
-
-def _disabled_local_host_value(url: str) -> str:
-    parsed = urlparse(_ollama_base(url))
-    host = parsed.hostname or "127.0.0.1"
-    port = parsed.port or (443 if parsed.scheme == "https" else 11434)
-    return f"{host}:{port}"
-
-
-def managed_ollama_launch_script_path(external_dir: Path) -> Path:
-    script_name = "start_ollama_studio.bat" if platform.system() == "Windows" else "start_ollama_studio.sh"
-    return (external_dir.resolve() / "ollama" / script_name).resolve()
-
-
-def _find_ollama_exe(external_dir: Path | None = None) -> str:
-    raise RuntimeError("Managed local planner executables are disabled by the NVIDIA-only profile.")
-    env = os.environ.get("EDMG_OLLAMA_PATH")
-    if env and Path(env).exists():
-        return env
-
-    ignore_system = _env_truthy("EDMG_SETUP_IGNORE_SYSTEM_OLLAMA")
-    candidates: list[Path] = []
-    if external_dir is not None:
-        external_root = external_dir.expanduser().resolve()
-        if platform.system() == "Windows":
-            candidates.extend(
-                [
-                    external_root / "ollama" / "ollama.exe",
-                    external_root / "bin" / "ollama.exe",
-                ]
-            )
-        else:
-            candidates.extend(
-                [
-                    external_root / "ollama" / "ollama",
-                    external_root / "bin" / "ollama",
-                ]
-            )
-
-    if platform.system() == "Windows" and not ignore_system:
-        local_appdata = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
-        candidates.extend(
-            [
-                local_appdata / "Programs" / "Ollama" / "ollama.exe",
-                Path(r"C:\Program Files\Ollama\ollama.exe"),
-            ]
-        )
-
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-
-    if not ignore_system:
-        which = shutil.which("ollama") or shutil.which("ollama.exe")
-        if which:
-            return which
-
-    raise RuntimeError("Ollama executable not found. Install Ollama or set EDMG_OLLAMA_PATH.")
-
-
-def write_managed_ollama_launch_script(
-    external_dir: Path,
-    models_dir: Path,
-    ollama_url: str,
-    ollama_exe: str | None = None,
-) -> Path:
-    raise RuntimeError("Managed local planner launch scripts are disabled by the NVIDIA-only profile.")
-    script_dir = (external_dir / "ollama").resolve()
-    script_dir.mkdir(parents=True, exist_ok=True)
-    script_path = managed_ollama_launch_script_path(external_dir)
-    models_root = _disabled_local_models_dir(models_dir)
-    host_value = _disabled_local_host_value(ollama_url)
-    command = ollama_exe or "ollama"
-    if platform.system() == "Windows":
-        content = (
-            "@echo off\n"
-            "setlocal\n"
-            f"set \"EDMG_DISABLED_LOCAL_MODELS={models_root}\"\n"
-            f"set \"EDMG_DISABLED_LOCAL_HOST={host_value}\"\n"
-            f"\"{command}\" serve\n"
-        )
-    else:
-        escaped_command = str(command).replace('"', '\\"')
-        escaped_models_root = str(models_root).replace('"', '\\"')
-        content = (
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            f"export EDMG_DISABLED_LOCAL_MODELS=\"{escaped_models_root}\"\n"
-            f"export EDMG_DISABLED_LOCAL_HOST=\"{host_value}\"\n"
-            f"exec \"{escaped_command}\" serve\n"
-        )
-    script_path.write_text(content, encoding="utf-8")
-    if platform.system() != "Windows":
-        script_path.chmod(0o755)
-    return script_path
-
-
-def check_legacy_local_planner(ollama_url: str, model: str) -> dict[str, Any]:
-    base = _ollama_base(ollama_url)
-    return {
-        "ok": False,
-        "url": base,
-        "model": model,
-        "model_present": False,
-        "hint": "Legacy local planner checks are disabled by the NVIDIA-only profile.",
-        "error": "NVIDIA_ONLY_PROFILE",
-    }
-
-
-class OllamaManagedProcess:
-    def __init__(self):
-        self.proc: Optional[subprocess.Popen] = None
-        self.exe_path: Optional[str] = None
-        self.models_dir: Optional[Path] = None
-        self.url: Optional[str] = None
-        self.script_path: Optional[Path] = None
-
-    def running(self) -> bool:
-        return self.proc is not None and self.proc.poll() is None
-
-    def start(self, task: SetupTask, external_dir: Path, models_dir: Path, ollama_url: str) -> None:
-        raise RuntimeError("Managed local planner startup is disabled by the NVIDIA-only profile.")
-        base = _ollama_base(ollama_url)
-        if check_legacy_local_planner(base, "").get("ok"):
-            SetupTaskManager.log(task, f"Ollama is already reachable at {base}.")
-            return
-
-        exe = _find_ollama_exe(external_dir)
-        models_root = _disabled_local_models_dir(models_dir)
-        models_root.mkdir(parents=True, exist_ok=True)
-        external_dir.mkdir(parents=True, exist_ok=True)
-        script_path = write_managed_ollama_launch_script(external_dir, models_dir, base, exe)
-
-        if self.running():
-            SetupTaskManager.log(task, f"Studio-managed Ollama is already running with models at {self.models_dir}.")
-            return
-
-        env = os.environ.copy()
-        env["EDMG_DISABLED_LOCAL_MODELS"] = str(models_root)
-        env["EDMG_DISABLED_LOCAL_HOST"] = _disabled_local_host_value(base)
-
-        creationflags = 0
-        if os.name == "nt":
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
-        SetupTaskManager.log(task, f"Starting Studio-managed Ollama with models in {models_root}…")
-        self.proc = subprocess.Popen(
-            [exe, "serve"],
-            cwd=str(external_dir.resolve()),
-            env=env,
-            creationflags=creationflags,
-        )
-        self.exe_path = exe
-        self.models_dir = models_root
-        self.url = base
-        self.script_path = script_path
-
-        try:
-            for _ in range(160):
-                SetupTaskManager.check_canceled(task, "Managed Ollama startup canceled.")
-                if check_legacy_local_planner(base, "").get("ok"):
-                    SetupTaskManager.log(task, f"Ollama is running. Studio models path: {models_root}")
-                    return
-                if self.proc.poll() is not None:
-                    break
-                time.sleep(0.25)
-        except SetupTaskCanceled:
-            self.stop()
-            raise
-
-        if check_legacy_local_planner(base, "").get("ok"):
-            SetupTaskManager.log(task, f"Ollama is running. Studio models path: {models_root}")
-            return
-
-        raise RuntimeError(
-            f"Ollama did not become ready at {base}. Try running {script_path} manually or finish the Ollama install first."
-        )
-
-    def stop(self) -> None:
-        if self.proc and self.running():
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
-
-
-def download_and_install_legacy_local_planner(
-    task: SetupTask,
-    dest_dir: Path,
-    external_dir: Path | None = None,
-    models_dir: Path | None = None,
-    ollama_url: str | None = None,
-) -> None:
-    """Install Ollama silently into the Studio-managed external-tools root."""
-    raise RuntimeError("Managed local planner install is disabled by the NVIDIA-only profile.")
-
-    if platform.system().lower() != "windows":
-        raise RuntimeError("Managed Ollama install is only implemented for Windows.")
-    if external_dir is None:
-        raise RuntimeError("Managed Ollama install requires a Studio external tools directory.")
-
-    dest_dir = dest_dir.expanduser().resolve()
-    external_dir = external_dir.expanduser().resolve()
-    install_dir = (external_dir / "ollama").resolve()
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    install_dir.mkdir(parents=True, exist_ok=True)
-
-    version = str(os.environ.get("EDMG_OLLAMA_VERSION", "")).strip()
-    release_url = (
-        f"https://api.github.com/repos/ollama/ollama/releases/tags/{version}"
-        if version
-        else "https://api.github.com/repos/ollama/ollama/releases/latest"
-    )
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "EDMG-Studio",
-    }
-    SetupTaskManager.check_canceled(task, "Managed Ollama install canceled.")
-    SetupTaskManager.log(task, "Resolving official Ollama standalone archive…")
-    release = requests.get(release_url, headers=headers, timeout=60)
-    release.raise_for_status()
-    release_data = release.json()
-    assets = release_data.get("assets") or []
-
-    requested_asset = str(os.environ.get("EDMG_OLLAMA_ASSET", "")).strip().lower()
-    machine = platform.machine().lower()
-    preferred_names = []
-    if requested_asset:
-        preferred_names.append(requested_asset)
-    if "arm" in machine:
-        preferred_names.append("ollama-windows-arm64.zip")
-    else:
-        preferred_names.append("ollama-windows-amd64.zip")
-
-    asset = None
-    for preferred_name in preferred_names:
-        asset = next((entry for entry in assets if str(entry.get("name", "")).lower() == preferred_name), None)
-        if asset:
-            break
-    if asset is None:
-        raise RuntimeError(f"Could not locate a supported Ollama standalone zip in release assets: {preferred_names}")
-
-    asset_name = str(asset.get("name") or "ollama-windows.zip")
-    asset_url = str(asset.get("browser_download_url") or "").strip()
-    if not asset_url:
-        raise RuntimeError("Selected Ollama release asset is missing a download URL.")
-
-    archive_path = dest_dir / asset_name
-    SetupTaskManager.log(task, f"Downloading {asset_name}…")
-    try:
-        with requests.get(asset_url, headers=headers, stream=True, timeout=60) as response:
-            response.raise_for_status()
-            total = int(response.headers.get("content-length") or 0)
-            got = 0
-            with open(archive_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    SetupTaskManager.check_canceled(task, "Managed Ollama install canceled.")
-                    if not chunk:
-                        continue
-                    f.write(chunk)
-                    got += len(chunk)
-                    if total:
-                        SetupTaskManager.set_progress(task, min(0.8, got / total))
-
-        SetupTaskManager.check_canceled(task, "Managed Ollama install canceled.")
-        SetupTaskManager.log(task, f"Extracting {asset_name} into {install_dir}…")
-        _extract_zip_with_cancel(task, archive_path, install_dir)
-    except SetupTaskCanceled:
-        try:
-            archive_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        raise
-    SetupTaskManager.set_progress(task, 0.9)
-
-    exe = _find_ollama_exe(external_dir)
-    if models_dir is not None:
-        script_path = write_managed_ollama_launch_script(
-            external_dir,
-            models_dir,
-            ollama_url or "http://127.0.0.1:11434",
-            exe,
-        )
-        models_root = _disabled_local_models_dir(models_dir)
-        SetupTaskManager.log(
-            task,
-            f"Ollama is installed at {exe}. Studio-managed models live under {models_root}. Helper script: {script_path}"
-        )
-    else:
-        SetupTaskManager.log(task, f"Ollama is installed at {exe}.")
-    SetupTaskManager.set_progress(task, 1.0)
-
-
-def pull_legacy_local_planner_model(task: SetupTask, ollama_url: str, model: str) -> None:
-    base = _ollama_base(ollama_url)
-    if not model:
-        raise RuntimeError("No model specified")
-    raise RuntimeError("Legacy local planner model pulls are disabled by the NVIDIA-only profile.")
-
-    SetupTaskManager.log(task, f"Pulling model {model}…")
-    # Ollama supports streaming progress updates by default.
-    # We parse JSON lines and surface the latest status.
-    with requests.post(
-        "disabled://legacy-local-planner",
-        json={"model": model, "stream": True},
-        stream=True,
-        timeout=60 * 60,
-    ) as r:
-        r.raise_for_status()
-        last = ""
-        for line in r.iter_lines(decode_unicode=True):
-            SetupTaskManager.check_canceled(task, f"Model pull canceled for {model}.")
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            status = obj.get("status") or ""
-            digest = obj.get("digest")
-            total = obj.get("total")
-            completed = obj.get("completed")
-
-            msg = status
-            if digest:
-                msg += f" ({str(digest)[:12]})"
-            if total and completed:
-                try:
-                    p = float(completed) / float(total)
-                    SetupTaskManager.set_progress(task, max(0.0, min(0.99, p)))
-                except Exception:
-                    pass
-
-            if msg and msg != last:
-                SetupTaskManager.log(task, msg)
-                last = msg
-
-    SetupTaskManager.set_progress(task, 1.0)
-    SetupTaskManager.log(task, f"Model {model} is ready.")
 
 
 # ------------------------------ ComfyUI Portable ------------------------------
@@ -885,7 +535,7 @@ class ComfyPortableProcess:
 
 
 def check_ffmpeg(ffmpeg_path: str) -> dict[str, Any]:
-    hint = "Packaged EDMG Studio should include bundled FFmpeg. If this is a dev checkout, install FFmpeg and add it to PATH, or set EDMG_FFMPEG_PATH to the ffmpeg executable."
+    hint = "Packaged EDMG NVIDIA Workshop should include bundled FFmpeg. If this is a dev checkout, install FFmpeg and add it to PATH, or set EDMG_FFMPEG_PATH to the ffmpeg executable."
     try:
         r = subprocess.run([ffmpeg_path, "-version"], capture_output=True, text=True, timeout=3)
         ok = r.returncode == 0
@@ -909,9 +559,6 @@ BACKEND_BUNDLE_MODULES: dict[str, dict[str, str]] = {
         "librosa": "librosa",
         "soundfile": "soundfile",
     },
-    "asr": {
-        "faster-whisper": "faster_whisper",
-    },
     "internal": {
         "diffusers": "diffusers",
         "transformers": "transformers",
@@ -922,8 +569,8 @@ BACKEND_BUNDLE_MODULES: dict[str, dict[str, str]] = {
 }
 
 BACKEND_BUNDLE_ALIASES: dict[str, tuple[str, ...]] = {
-    "full": ("audio", "asr", "internal"),
-    "studio_bundle": ("audio", "asr", "internal"),
+    "full": ("audio", "internal"),
+    "studio_bundle": ("audio", "internal"),
 }
 
 
@@ -935,14 +582,23 @@ def _bundle_module_map(bundle: str) -> dict[str, str]:
     keys = BACKEND_BUNDLE_ALIASES.get(bundle, (bundle,))
     modules: dict[str, str] = {}
     for key in keys:
-        if key == "directml" and platform.system() != "Windows":
-            continue
         modules.update(BACKEND_BUNDLE_MODULES.get(key, {}))
     return modules
 
 
 def check_backend_bundle(bundle: str = "studio_bundle") -> dict[str, Any]:
     modules = _bundle_module_map(bundle)
+    if getattr(sys, "frozen", False):
+        return {
+            "ok": True,
+            "bundle": bundle,
+            "python": sys.executable,
+            "backend_root": str(_backend_root()),
+            "missing": [],
+            "checked_modules": sorted(modules),
+            "frozen": True,
+            "hint": None,
+        }
     missing = sorted(
         package_name
         for package_name, module_name in modules.items()

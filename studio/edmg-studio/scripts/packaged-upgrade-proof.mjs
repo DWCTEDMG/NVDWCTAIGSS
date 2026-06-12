@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
+const DEFAULT_REQUEST_TIMEOUT_MS = Number(process.env.EDMG_STUDIO_PROOF_REQUEST_TIMEOUT_MS || (10 * 60 * 1000));
 
 function log(message) {
   console.log(`[packaged-upgrade-proof] ${message}`);
@@ -17,8 +18,12 @@ function log(message) {
 function resolvePackagedApp() {
   const envPath = process.env.EDMG_STUDIO_PACKAGED_APP;
   if (envPath && fs.existsSync(envPath)) return envPath;
-  const candidate = path.join(root, "dist", "win-unpacked", process.platform === "win32" ? "EDMG Studio.exe" : "EDMG Studio");
-  return fs.existsSync(candidate) ? candidate : "";
+  const exeName = process.platform === "win32" ? "EDMG NVIDIA Workshop.exe" : "EDMG NVIDIA Workshop";
+  const candidates = [
+    path.join(root, "dist", "win-unpacked", exeName),
+    path.join(root, "release", "desktop-smoke-dist", "win-unpacked", exeName),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || "";
 }
 
 function chooseHomeRoot() {
@@ -52,7 +57,7 @@ function buildPathSet(studioHome) {
 function resolveBootstrapPaths() {
   const appDataDir = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
   const localAppDataDir = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-  const bootstrapDir = path.join(appDataDir, "EDMG Studio");
+  const bootstrapDir = path.join(appDataDir, "EDMG NVIDIA Workshop");
   return {
     appDataDir,
     localAppDataDir,
@@ -92,9 +97,9 @@ async function allocatePort() {
   return address.port;
 }
 
-async function stopExistingPackagedProcesses() {
+async function stopExistingPackagedProcesses(appExe) {
   if (process.platform !== "win32") return;
-  const appDir = path.join(root, "dist", "win-unpacked").replace(/'/g, "''");
+  const appDir = path.dirname(appExe || path.join(root, "dist", "win-unpacked")).replace(/'/g, "''");
   const command = `$ErrorActionPreference='SilentlyContinue'; $appDir='${appDir}'; Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($appDir, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`;
   await new Promise((resolve, reject) => {
     const child = spawn("powershell", ["-NoProfile", "-Command", command], { stdio: "ignore" });
@@ -104,7 +109,7 @@ async function stopExistingPackagedProcesses() {
   await new Promise((resolve) => setTimeout(resolve, 1500));
 }
 
-async function waitForHealth(baseUrl, timeoutMs = 120000) {
+async function waitForHealth(baseUrl, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -186,7 +191,7 @@ async function main() {
   const appExe = resolvePackagedApp();
   assert.ok(appExe, "Packaged app not found. Run pnpm run dist:win first or set EDMG_STUDIO_PACKAGED_APP.");
 
-  await stopExistingPackagedProcesses();
+  await stopExistingPackagedProcesses(appExe);
 
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "_");
   const homeRoot = chooseHomeRoot();
@@ -239,7 +244,7 @@ async function main() {
     const bootstrapAfter = JSON.parse(await fsp.readFile(bootstrapPath, "utf8"));
     const migration = bootstrapAfter?.lastMigration ?? null;
 
-    assert.equal(config?.studio_home, targetHome, "Packaged backend should resolve to the target Studio home after migration");
+    assert.equal(config?.studio_home, targetHome, "Packaged backend should resolve to the target Workshop home after migration");
     assert.equal(config?.data_dir, target.dataDir, "Packaged backend should resolve to the migrated data dir");
     assert.equal(Boolean(bootstrapAfter?.pendingMigration), false, "Pending migration should be cleared after launch");
     assert.equal(Boolean(migration?.ok), true, "Last migration summary should report success");
@@ -286,7 +291,7 @@ async function main() {
     console.log(JSON.stringify(summary, null, 2));
   } finally {
     await killProcessTree(child);
-    await stopExistingPackagedProcesses();
+    await stopExistingPackagedProcesses(appExe);
     await restoreBootstrap(bootstrapPath, bootstrapBackup);
   }
 }

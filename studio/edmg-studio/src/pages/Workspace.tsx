@@ -50,7 +50,7 @@ const ANALYSIS_FALLBACK_PREFIXES = [
 const NO_TRANSCRIPT_SUMMARY =
   "No transcript is available for this track yet. Studio is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.";
 const NO_SPEECH_AFTER_VAD_SUMMARY =
-  "No speech detected after VAD. Studio is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.";
+  "No speech detected after VAD. Workshop is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.";
 const TRANSCRIPTION_FAILED_SUMMARY =
   "Transcription failed. Studio is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.";
 
@@ -80,10 +80,10 @@ function analysisNoTranscriptStatusText(analysis: any) {
   if (note) {
     return note.toLowerCase().startsWith("no speech detected after vad")
       ? NO_SPEECH_AFTER_VAD_SUMMARY
-      : `${note}${/[.!?]$/.test(note) ? "" : "."} Studio is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.`;
+      : `${note}${/[.!?]$/.test(note) ? "" : "."} Workshop is still able to build audio-reactive sections and a first creative direction from rhythm, energy, and spectral movement.`;
   }
   const durationAfterVad = Number(analysis?.transcript?.duration_after_vad_s || 0);
-  if (Number.isFinite(durationAfterVad) && durationAfterVad <= 0 && analysis?.transcript?.source === "faster_whisper") {
+  if (Number.isFinite(durationAfterVad) && durationAfterVad <= 0 && Number(analysis?.transcript?.segment_count || 0) === 0) {
     return NO_SPEECH_AFTER_VAD_SUMMARY;
   }
   if (analysis?.transcript?.error) return TRANSCRIPTION_FAILED_SUMMARY;
@@ -452,7 +452,7 @@ export default function Workspace({ onNavigate, backendUrl: backendUrlProp }: Pa
     ? "Transcript ready"
     : analysisReady
       ? String(analysis?.transcript?.note || "").trim().toLowerCase().startsWith("no speech detected after vad")
-        || (Number(analysis?.transcript?.duration_after_vad_s || 0) <= 0 && analysis?.transcript?.source === "faster_whisper")
+        || (Number(analysis?.transcript?.duration_after_vad_s || 0) <= 0 && Number(analysis?.transcript?.segment_count || 0) === 0)
         ? "No speech after VAD"
         : "Audio-only analysis"
       : "Waiting";

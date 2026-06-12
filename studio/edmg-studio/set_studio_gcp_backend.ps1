@@ -165,7 +165,7 @@ $runtime["backend"] = [ordered]@{
 Write-JsonObject $runtimePath $runtime
 Write-Step "Updated runtime-defaults.json"
 
-$bootstrapPath = Join-Path $env:APPDATA "EDMG Studio\bootstrap.json"
+$bootstrapPath = Join-Path $env:APPDATA "EDMG NVIDIA Workshop\bootstrap.json"
 $bootstrap = Read-JsonObject $bootstrapPath
 $bootstrap["backendSettings"] = [ordered]@{
   mode = "external"
@@ -187,11 +187,11 @@ try {
 }
 
 Write-Host ""
-Write-Host "Configured EDMG Studio for the external GCP backend:" -ForegroundColor Green
+Write-Host "Configured EDMG NVIDIA Workshop for the external GCP backend:" -ForegroundColor Green
 Write-Host "  $BackendUrl"
 Write-Host ""
 Write-Host "Desktop app:" -ForegroundColor Green
-Write-Host "  Close EDMG Studio completely, then reopen it."
+Write-Host "  Close EDMG NVIDIA Workshop completely, then reopen it."
 Write-Host ""
 Write-Host "Dev app:" -ForegroundColor Green
 Write-Host "  cd `"$studioDir`""
@@ -204,14 +204,14 @@ if ($LaunchDev) {
 
 if ($LaunchPackaged) {
   $exeCandidates = @(
-    (Join-Path $env:LOCALAPPDATA "Programs\EDMG Studio\EDMG Studio.exe"),
-    (Join-Path $env:PROGRAMFILES "EDMG Studio\EDMG Studio.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "EDMG Studio\EDMG Studio.exe")
+    (Join-Path $env:LOCALAPPDATA "Programs\EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe"),
+    (Join-Path $env:PROGRAMFILES "EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "EDMG NVIDIA Workshop\EDMG NVIDIA Workshop.exe")
   ) | Where-Object { $_ -and (Test-Path $_) }
   if ($exeCandidates.Count -gt 0) {
-    Write-Step "Launching packaged EDMG Studio: $($exeCandidates[0])"
+    Write-Step "Launching packaged EDMG NVIDIA Workshop: $($exeCandidates[0])"
     Start-Process $exeCandidates[0]
   } else {
-    Write-Warn "Packaged EDMG Studio exe not found. Launch it manually."
+    Write-Warn "Packaged EDMG NVIDIA Workshop exe not found. Launch it manually."
   }
 }

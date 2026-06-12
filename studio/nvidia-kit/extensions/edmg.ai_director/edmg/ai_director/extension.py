@@ -129,7 +129,7 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             return
         try:
             self._project_model = ui.SimpleStringModel(_setting("/edmg/nvidia/project_id", ""))
-            self._project_name_model = ui.SimpleStringModel("Hush Now NVIDIA Studio")
+            self._project_name_model = ui.SimpleStringModel("Hush Now NVIDIA Workshop")
             self._audio_path_model = ui.SimpleStringModel(_setting("/edmg/nvidia/audio_path", ""))
             self._title_model = ui.SimpleStringModel("EDMG NVIDIA Scene Plan")
             self._duration_model = ui.SimpleStringModel("60")
@@ -141,10 +141,10 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._render_height_model = ui.SimpleStringModel("1080")
             self._service_model = ui.SimpleStringModel("cosmos")
             self._service_payload_model = ui.SimpleStringModel(default_optional_service_payload_text("cosmos"))
-            self._window = ui.Window("EDMG NVIDIA Studio", width=640, height=860)
+            self._window = ui.Window("EDMG NVIDIA Workshop", width=640, height=860)
             with self._window.frame:
                 with ui.VStack(spacing=8):
-                    ui.Label("EDMG NVIDIA Studio")
+                    ui.Label("EDMG NVIDIA Workshop")
                     self._status_label = ui.Label("Checking backend...")
                     self._setup_label = ui.Label("Setup check not run.")
                     with ui.HStack(spacing=6):
@@ -355,7 +355,7 @@ class EdmgAiDirectorExtension(omni.ext.IExt):  # type: ignore[name-defined]
             self._set_service_summary(f"NVIDIA services unavailable: {exc}")
 
     def _create_project(self) -> None:
-        name = self._project_name() or _model_string(self._title_model).strip() or "Untitled NVIDIA Studio Project"
+        name = self._project_name() or _model_string(self._title_model).strip() or "Untitled NVIDIA Workshop Project"
         try:
             response = self._backend.create_project(name)
             summary = summarize_project_response(response)

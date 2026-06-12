@@ -1,4 +1,4 @@
-# Compose override for the NVIDIA-first EDMG Studio lane.
+# Compose override for the EDMG NVIDIA Workshop lane.
 #
 # Usage from the repository root:
 #   docker compose -f docker-compose.starlift.yml -f deployment/nvidia/docker-compose.nvidia.yml up --build

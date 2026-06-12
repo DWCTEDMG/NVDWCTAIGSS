@@ -1,9 +1,8 @@
-# EDMG NVIDIA Kit App
+# EDMG NVIDIA Workshop Kit App
 
-This directory contains the starter Omniverse Kit version of EDMG Studio.
+This directory contains the Omniverse Kit shell for EDMG NVIDIA Workshop.
 
-Treat this as the replacement shell for the old Electron-first desktop app. The
-Kit app defines the NVIDIA product boundary:
+The Kit app defines the NVIDIA product boundary:
 
 1. declares a Windows-launchable Kit app shape.
 2. opens a starter OpenUSD stage.
@@ -12,7 +11,7 @@ Kit app defines the NVIDIA product boundary:
 5. writes normalized scene-plan metadata back to the project.
 6. renders or previews a simple RTX scene.
 
-Current starter layout:
+Current layout:
 
 ```text
 studio/nvidia-kit/
@@ -26,10 +25,9 @@ studio/nvidia-kit/
 `- tools/
 ```
 
-The app is still a starter, but the main user-facing extensions now do useful
-work:
+The main user-facing extensions are:
 
-- `edmg.ai_director` opens the EDMG NVIDIA Studio workflow panel. From that
+- `edmg.ai_director` opens the EDMG NVIDIA Workshop workflow panel. From that
   panel you can refresh setup readiness, create or load a Studio project, upload
   a local audio file, run project audio analysis or Riva transcription, generate
   the NVIDIA storyboard/scene plan, export the persisted production USDA, open
@@ -59,7 +57,7 @@ decision is documented in
 local handoff builds are thin by default and resolve an installed Kit SDK.
 `deployment/nvidia/stage_nvidia_kit_app.ps1` stages this Kit app, its EDMG
 extensions, tools, deployment helpers, a generated launch script, and a manifest
-into `dist/nvidia-kit-app/`.
+into `dist/nvidia-workshop-app/`.
 
 ## Starter Sample
 
@@ -131,7 +129,7 @@ powershell -NoProfile -ExecutionPolicy Bypass `
   -Clean
 ```
 
-The staged `Start-EDMG-NVIDIA-Kit.ps1` can launch the bundle against that SDK.
+The staged `Start-EDMG-NVIDIA-Workshop.ps1` can launch the bundle against that SDK.
 Only use `-PackageMode internal-fat` or legacy `-IncludeKitSdk` when the
 selected Kit SDK can be copied into the bundle for the intended internal
 audience.
@@ -190,7 +188,7 @@ To exercise the generated NVIDIA planner path instead of a static
 python studio/nvidia-kit/tools/smoke_ai_director_backend.py `
   --backend-url http://127.0.0.1:8000 `
   --generate `
-  --title "EDMG NVIDIA Kit Smoke" `
+  --title "EDMG NVIDIA Workshop Smoke" `
   --duration-s 60 `
   --bpm 128 `
   --output-usda studio/nvidia-kit/sample_projects/audio_reactive_stage/generated_from_nim.usda

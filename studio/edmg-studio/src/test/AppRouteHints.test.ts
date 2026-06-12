@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { getPageLoadingDetails, getPagesToPreload } from "../pageRouting";
 
 describe("App route hints", () => {
-  it("describes Studio Forge with page-specific loading copy", () => {
+  it("describes Workshop Forge with page-specific loading copy", () => {
     const loading = getPageLoadingDetails("studioForge");
 
-    expect(loading.label).toBe("Studio Forge");
+    expect(loading.label).toBe("Workshop Forge");
     expect(loading.detail).toMatch(/runtime preview cards/i);
   });
 
@@ -19,7 +19,7 @@ describe("App route hints", () => {
     ]);
   });
 
-  it("preloads setup and render-adjacent pages for Studio Forge", () => {
+  it("preloads setup and render-adjacent pages for Workshop Forge", () => {
     expect(getPagesToPreload("studioForge")).toEqual([
       "setup",
       "models",

@@ -844,7 +844,7 @@ function HandoffPanel(props: {
               <h3>Planner Sync</h3>
               <p>
                 Import the review board preview as a planner payload and optionally refresh
-                the Studio timeline immediately.
+                the Workshop timeline immediately.
               </p>
             </div>
             <button

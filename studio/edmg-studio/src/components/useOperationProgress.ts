@@ -20,6 +20,8 @@ const IDLE_STATE: OperationProgressState = {
 export function useOperationProgress() {
   const [progress, setProgress] = useState<OperationProgressState>(IDLE_STATE);
   const timerRef = useRef<number | null>(null);
+  const resetTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -28,7 +30,31 @@ export function useOperationProgress() {
     }
   }, []);
 
-  useEffect(() => stopTimer, [stopTimer]);
+  const stopResetTimer = useCallback(() => {
+    if (resetTimerRef.current != null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+  }, []);
+
+  const safeSetProgress = useCallback(
+    (next: OperationProgressState | ((current: OperationProgressState) => OperationProgressState)) => {
+      if (mountedRef.current) setProgress(next);
+    },
+    [],
+  );
+
+  useEffect(
+    () => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+        stopTimer();
+        stopResetTimer();
+      };
+    },
+    [stopTimer, stopResetTimer],
+  );
 
   const runOperation = useCallback(
     async <T,>(
@@ -41,7 +67,8 @@ export function useOperationProgress() {
       work: () => Promise<T>,
     ) => {
       stopTimer();
-      setProgress({
+      stopResetTimer();
+      safeSetProgress({
         active: true,
         value: 12,
         label: args.label,
@@ -50,7 +77,7 @@ export function useOperationProgress() {
       });
 
       timerRef.current = window.setInterval(() => {
-        setProgress((current) =>
+        safeSetProgress((current) =>
           current.active
             ? {
                 ...current,
@@ -63,21 +90,22 @@ export function useOperationProgress() {
       try {
         const result = await work();
         stopTimer();
-        setProgress({
+        safeSetProgress({
           active: false,
           value: 100,
           label: args.label,
           detail: args.successDetail || "Complete.",
           tone: args.successTone || "success",
         });
-        window.setTimeout(() => {
-          setProgress((current) => (current.value === 100 ? IDLE_STATE : current));
+        resetTimerRef.current = window.setTimeout(() => {
+          resetTimerRef.current = null;
+          safeSetProgress((current) => (current.value === 100 ? IDLE_STATE : current));
         }, 1400);
         return result;
       } catch (error) {
         stopTimer();
         const message = error instanceof Error ? error.message : String(error);
-        setProgress({
+        safeSetProgress({
           active: false,
           value: 100,
           label: args.label,
@@ -87,8 +115,14 @@ export function useOperationProgress() {
         throw error;
       }
     },
-    [stopTimer],
+    [safeSetProgress, stopResetTimer, stopTimer],
   );
 
-  return { progress, runOperation, clearProgress: () => setProgress(IDLE_STATE) };
+  const clearProgress = useCallback(() => {
+    stopTimer();
+    stopResetTimer();
+    safeSetProgress(IDLE_STATE);
+  }, [safeSetProgress, stopResetTimer, stopTimer]);
+
+  return { progress, runOperation, clearProgress };
 }

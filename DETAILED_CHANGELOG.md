@@ -276,9 +276,6 @@ audio = [
   "librosa>=0.10.2",           # Could jump to 1.0.0
   "soundfile>=0.12.0",         # Could jump to 1.0.0
 ]
-asr = [
-  "faster-whisper>=1.1.0",     # Could jump to 2.0.0
-]
 
 # After: Major versions capped
 [project.optional-dependencies]
@@ -286,8 +283,8 @@ audio = [
   "librosa>=0.10.2,<0.11",     # ✅ Pinned to 0.x
   "soundfile>=0.12.0,<0.13",   # ✅ Pinned to 0.12.x
 ]
-asr = [
-  "faster-whisper>=1.1.0,<2.0", # ✅ Pinned to 1.x
+riva = [
+  "nvidia-riva-client==2.19.0", # NVIDIA-only ASR
 ]
 core = [
   "numpy>=1.23.0,<2.0",        # ✅ Pinned to 1.x
@@ -298,7 +295,7 @@ core = [
 
 **Dependencies Pinned**: ~30 packages including:
 - librosa, soundfile (audio)
-- faster-whisper (ASR)
+- NVIDIA Riva client (ASR)
 - numpy, torch, transformers
 - pillow, pydantic, requests
 
@@ -339,11 +336,11 @@ core = [
   "librosa>=0.10.2,<0.11",  # Same pins as audio
   "soundfile>=0.12.0,<0.13",
 ]
-asr = [
-  "faster-whisper>=1.1.0,<2.0",
+riva = [
+  "nvidia-riva-client==2.19.0",
 ]
 full = [
-  # Includes: core + audio + asr
+  # Includes: core + audio + NVIDIA services
 ]
 ```
 

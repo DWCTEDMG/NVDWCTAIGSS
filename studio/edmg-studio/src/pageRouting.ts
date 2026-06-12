@@ -32,7 +32,7 @@ const PAGE_LABELS: Record<Page, string> = {
   directorLab: "EDMG Director",
   plannerLab: "AI Planner Lab",
   reactiveLab: "Reactive Lab",
-  studioForge: "Studio Forge",
+  studioForge: "Workshop Forge",
 };
 
 const PAGE_LOADING_DETAILS: Record<Page, string> = {

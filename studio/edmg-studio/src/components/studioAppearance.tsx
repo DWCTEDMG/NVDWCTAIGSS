@@ -14,7 +14,7 @@ export const STUDIO_THEME_OPTIONS: StudioThemeOption[] = [
   {
     id: "studio",
     label: "Studio",
-    description: "Current EDMG Studio look with teal glass and warm highlights.",
+    description: "Current EDMG NVIDIA Workshop look with teal glass and warm highlights.",
   },
   {
     id: "ember",

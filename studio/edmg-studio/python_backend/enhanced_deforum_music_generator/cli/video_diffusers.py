@@ -92,8 +92,6 @@ def _run(args: argparse.Namespace) -> int:
     device = args.device
     if device != "cuda":
         raise RuntimeError("The NVIDIA-only profile requires --device cuda.")
-    if args.cpu_offload:
-        raise RuntimeError("CPU offload is disabled by the NVIDIA-only profile.")
 
     family = args.family if args.family != "auto" else _infer_family(args.model_id)
     prompt = args.prompt
@@ -109,10 +107,7 @@ def _run(args: argparse.Namespace) -> int:
         vae_dtype = _parse_dtype(args.vae_dtype)
         vae = AutoencoderKLWan.from_pretrained(args.model_id, subfolder="vae", torch_dtype=vae_dtype)
         pipe = WanPipeline.from_pretrained(args.model_id, vae=vae, torch_dtype=dtype)
-        if args.cpu_offload:
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to(device)
+        pipe.to(device)
 
         result = pipe(
             prompt=prompt,
@@ -148,10 +143,7 @@ def _run(args: argparse.Namespace) -> int:
                 ) from e
             pipe = PipeCls.from_pretrained(args.model_id, torch_dtype=dtype)
 
-        if args.cpu_offload:
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to(device)
+        pipe.to(device)
 
         kwargs = dict(
             prompt=prompt,
@@ -179,10 +171,7 @@ def _run(args: argparse.Namespace) -> int:
 
             pipe = PipeCls.from_pretrained(args.model_id, torch_dtype=dtype)
 
-        if args.cpu_offload:
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to(device)
+        pipe.to(device)
 
         kwargs = dict(
             prompt=prompt,
@@ -209,10 +198,7 @@ def _run(args: argparse.Namespace) -> int:
         from diffusers import StableVideoDiffusionPipeline
 
         pipe = StableVideoDiffusionPipeline.from_pretrained(args.model_id, torch_dtype=dtype)
-        if args.cpu_offload:
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to(device)
+        pipe.to(device)
 
         result = pipe(
             image=image,
@@ -242,14 +228,9 @@ def _run(args: argparse.Namespace) -> int:
                 args.upsampler_id, vae=pipe.vae, torch_dtype=dtype
             )
 
-        if args.cpu_offload:
-            pipe.enable_model_cpu_offload()
-            if pipe_upsample is not None:
-                pipe_upsample.enable_model_cpu_offload()
-        else:
-            pipe.to(device)
-            if pipe_upsample is not None:
-                pipe_upsample.to(device)
+        pipe.to(device)
+        if pipe_upsample is not None:
+            pipe_upsample.to(device)
 
         # LTX expects video-like compression for conditions; compress the single image into a 1-frame video.
         cond_video = load_video(export_to_video([image]))
@@ -299,7 +280,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--dtype", default="bfloat16", help="float16|bfloat16|float32")
     p.add_argument("--device", default="cuda", choices=["cuda"], help="CUDA device for the NVIDIA-only profile.")
-    p.add_argument("--cpu-offload", action="store_true", help="Disabled by the NVIDIA-only profile.")
     p.add_argument(
         "--vae-dtype",
         default="float32",

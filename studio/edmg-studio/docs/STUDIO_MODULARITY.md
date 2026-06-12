@@ -2,12 +2,12 @@
 
 ## Goal
 
-Make EDMG Studio more personal and modular without changing the core application shape:
+Make EDMG NVIDIA Workshop more personal and modular without changing the core application shape:
 
 - keep top-level tabs stable
 - let users customize the panels inside pages
 - allow theme selection and future theme packs
-- evolve Studio Forge into the builder and preview surface for these capabilities
+- evolve Workshop Forge into the builder and preview surface for these capabilities
 - keep Unreal Engine optional if it is added later
 
 This plan is additive only. It does not replace:
@@ -28,7 +28,7 @@ This plan is additive only. It does not replace:
 3. Layout state is user-scoped UI state, not project content.
 4. Themes are frontend-only token sets.
 5. Runtime integrations remain optional providers or bridges.
-6. Studio Forge should preview and advise before it executes.
+6. Workshop Forge should preview and advise before it executes.
 
 ## Current Progress
 
@@ -38,8 +38,8 @@ The current frontend implementation already includes:
 - local per-page layout persistence
 - shared layout customization controls
 - local layout profile slots (`Personal`, `Focus`, `Technical`, `Presentation`)
-- modular rollout on `Dashboard`, `Projects`, `Settings`, `Models`, `Studio Forge`, `Outputs`, `Render Queue`, `Cloud`, `AI Planner Lab`, `Reactive Lab`, and `EDMG Director`
-- phase-2 progress already landed for named layout profiles and Studio Forge layout/preview surfaces
+- modular rollout on `Dashboard`, `Projects`, `Settings`, `Models`, `Workshop Forge`, `Outputs`, `Render Queue`, `Cloud`, `AI Planner Lab`, `Reactive Lab`, and `EDMG Director`
+- phase-2 progress already landed for named layout profiles and Workshop Forge layout/preview surfaces
 
 These changes are frontend-only. They do not alter backend contracts, Setup Wizard flow,
 model installs, render defaults, desktop backend spawning, or packaging behavior.
@@ -68,7 +68,7 @@ type StudioPageLayoutState = {
 };
 ```
 
-Phase 1 uses local frontend persistence. A later phase can move this into desktop-managed user settings under Studio Home if cross-machine or multi-window sync becomes important.
+Phase 1 uses local frontend persistence. A later phase can move this into desktop-managed user settings under Workshop Home if cross-machine or multi-window sync becomes important.
 
 ## Theme Model
 
@@ -89,9 +89,9 @@ Future extensions:
 - custom user theme JSON
 - per-theme background treatments
 
-## Studio Forge Role
+## Workshop Forge Role
 
-Studio Forge should evolve into the read-only builder shell for modular Studio behavior:
+Workshop Forge should evolve into the read-only builder shell for modular Workshop behavior:
 
 - runtime capability inspection
 - theme preview
@@ -100,7 +100,7 @@ Studio Forge should evolve into the read-only builder shell for modular Studio b
 - patch/export preview
 - optional bridge preview for external runtimes
 
-Studio Forge should not bypass the canonical Workspace, Render, Models, or Setup flows.
+Workshop Forge should not bypass the canonical Workspace, Render, Models, or Setup flows.
 
 ## Unreal Engine Direction
 
@@ -111,7 +111,7 @@ Recommended shapes:
 - export target for shot and scene metadata
 - render handoff target
 - control bridge over files, HTTP, WebSocket, OSC, or Remote Control
-- optional provider surfaced by Studio Forge previews
+- optional provider surfaced by Workshop Forge previews
 
 Not recommended:
 
@@ -143,13 +143,13 @@ exists, but the roadmap below remains the intended direction.
 - expand modular layouts to more operational pages
 - add named layout profiles
 - add density and font choices
-- add Studio Forge layout/theme previews
+- add Workshop Forge layout/theme previews
 
 ### Phase 3
 
 - desktop-managed persistence for appearance/layout state
 - optional import/export of themes and layouts
-- preview-only Unreal bridge validation in Studio Forge
+- preview-only Unreal bridge validation in Workshop Forge
 
 ## Current Implementation Boundary
 

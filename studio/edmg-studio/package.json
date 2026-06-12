@@ -1,8 +1,8 @@
 {
-  "name": "edmg-studio",
+  "name": "edmg-nvidia-workshop",
   "version": "1.1.0",
   "private": true,
-  "description": "EDMG Studio desktop app",
+  "description": "EDMG NVIDIA Workshop desktop app",
   "author": "Dwct",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
@@ -31,9 +31,9 @@
     "validate:packaged-desktop-smoke": "node scripts/packaged-desktop-smoke.mjs",
     "validate:packaged-customer-flow": "node scripts/packaged-customer-flow.mjs",
     "validate:packaged-upgrade-proof": "node scripts/packaged-upgrade-proof.mjs",
-    "validate:packaged-zero-state-setup": "node scripts/packaged-zero-state-setup-proof.mjs",
+    "validate:packaged-nvidia-setup": "node scripts/packaged-nvidia-setup-proof.mjs",
     "validate:desktop": "pnpm run check:tooling && pnpm run typecheck && pnpm run test:ui && pnpm run build && pnpm run prepare:release-bundle && pnpm run release:stage-desktop && pnpm run check:release-metadata && pnpm run validate:electron-bridge && pnpm run validate:desktop-integration && pnpm run validate:packaged-desktop-smoke",
-    "validate:release": "pnpm run validate:desktop && pnpm run dist:win && pnpm run validate:packaged-customer-flow && pnpm run validate:packaged-upgrade-proof && pnpm run validate:packaged-zero-state-setup",
+    "validate:release": "pnpm run validate:desktop && pnpm run dist:win && pnpm run validate:packaged-customer-flow && pnpm run validate:packaged-upgrade-proof && pnpm run validate:packaged-nvidia-setup",
     "validate:release:linux": "pnpm run validate:desktop && pnpm run dist:linux",
     "build:electron": "pnpm run build && pnpm run prepare:release-bundle && pnpm run release:stage-desktop && pnpm run check:release-metadata && node scripts/run-electron-builder.mjs --dir -c.directories.app=release/staged-app",
     "dist:win": "pnpm run build && pnpm run prepare:release-bundle && pnpm run release:stage-desktop && pnpm run check:release-metadata && node scripts/run-electron-builder.mjs -w --x64 -c.directories.app=release/staged-app",
@@ -74,8 +74,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.dwct.edmgstudio",
-    "productName": "EDMG Studio",
+    "appId": "com.dwct.edmgnvidiaworkshop",
+    "productName": "EDMG NVIDIA Workshop",
     "icon": "electron-resources/app-icon.png",
     "directories": {
       "output": "dist",
@@ -102,7 +102,7 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "${name} Setup ${version}.${ext}"
+      "artifactName": "EDMG NVIDIA Workshop Setup ${version}.${ext}"
     },
     "linux": {
       "target": [

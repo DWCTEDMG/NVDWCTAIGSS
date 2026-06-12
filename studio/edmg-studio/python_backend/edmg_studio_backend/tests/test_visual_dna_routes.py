@@ -103,8 +103,6 @@ def test_reactive_apply_and_conductor_plan_routes_use_visual_dna(tmp_path, monke
                 "internal": {"available": True, "quality_score": 0.9, "speed_score": 0.55},
                 "comfyui_still": {"available": True, "quality_score": 0.85, "speed_score": 0.45},
                 "comfyui_motion": {"available": True, "quality_score": 0.82, "speed_score": 0.6},
-                "hosted_video": {"available": False, "quality_score": 0.78, "speed_score": 0.8},
-                "proxy": {"available": True, "quality_score": 0.38, "speed_score": 0.95},
                 "deforum_export": {"available": False, "quality_score": 0.7, "speed_score": 0.45},
             },
             "diagnostics": ["stubbed-environment"],

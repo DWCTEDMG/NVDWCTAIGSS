@@ -172,7 +172,7 @@ const installRenderMocks = () => {
         ],
       },
     },
-    "POST /v1/projects/p1/render/internal/preflight": { ok: true, mode: "proxy" },
+    "POST /v1/projects/p1/render/internal/preflight": { ok: true, mode: "internal" },
     "/v1/projects/p1/jobs": { jobs: [] },
   });
 };

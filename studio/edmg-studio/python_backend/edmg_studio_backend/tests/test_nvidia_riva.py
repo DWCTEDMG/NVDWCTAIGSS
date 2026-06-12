@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import types
-
 import pytest
 from fastapi import HTTPException
 
@@ -92,30 +90,21 @@ def test_local_ai_director_prefers_enabled_riva(monkeypatch, tmp_path):
     assert result["source"] == "nvidia_riva"
 
 
-def test_local_ai_director_falls_back_when_enabled_riva_fails(monkeypatch, tmp_path):
+def test_local_ai_director_fails_closed_when_enabled_riva_fails(monkeypatch, tmp_path):
     audio_path = tmp_path / "audio.wav"
     audio_path.write_bytes(b"fake-wav")
     monkeypatch.setattr(ai_client_module, "riva_asr_enabled", lambda: True)
-    monkeypatch.setattr(ai_client_module, "riva_fallback_enabled", lambda: True)
 
     def fail_riva(_path):
         raise ai_client_module.RivaTranscriptionError("riva offline")
 
     monkeypatch.setattr(ai_client_module, "transcribe_with_riva", fail_riva)
-    fake_asr = types.SimpleNamespace(
-        transcribe_detailed=lambda _audio_path, model_size="turbo": {
-            "text": "fallback whisper",
-            "source": "faster_whisper",
-            "model_size": model_size,
-        }
-    )
-    monkeypatch.setitem(__import__("sys").modules, "edmg_ai_service.asr", fake_asr)
 
     result = LocalAiDirectorClient().transcribe(str(audio_path), model_size="small")
 
-    assert result["text"] == "fallback whisper"
-    assert result["source"] == "faster_whisper"
-    assert result["nvidia_riva"]["error"] == "riva offline"
+    assert result["text"] is None
+    assert result["source"] == "nvidia_riva"
+    assert result["error"] == "riva offline"
 
 
 def test_project_riva_transcribe_route_persists_transcript(monkeypatch, tmp_path):

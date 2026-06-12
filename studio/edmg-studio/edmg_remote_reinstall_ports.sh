@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# EDMG Studio reinstall/bootstrap for a Vast.ai PyTorch instance.
+# EDMG NVIDIA Workshop reinstall/bootstrap for a Vast.ai PyTorch instance.
 # Supports arbitrary exposed container ports through BACKEND_PORT and UI_PORT.
 
 REPO_URL="${REPO_URL:-https://github.com/HIMOI890/DWCTGenerativeSoundStudio.git}"
@@ -9,7 +9,7 @@ REPO_BRANCH="${REPO_BRANCH:-codex/Unified}"
 REPO_DIR="${REPO_DIR:-/workspace/src/DWCTGenerativeSoundStudio}"
 STUDIO_DIR="$REPO_DIR/studio/edmg-studio"
 BACKEND_DIR="$STUDIO_DIR/python_backend"
-STUDIO_HOME="${EDMG_STUDIO_HOME:-/workspace/studio-home}"
+STUDIO_HOME="${EDMG_STUDIO_HOME:-/workspace/edmg-nvidia-workshop}"
 LOG_DIR="$STUDIO_HOME/logs"
 MODELS_DIR="$STUDIO_HOME/models"
 CACHE_DIR="$STUDIO_HOME/cache"
@@ -54,8 +54,7 @@ export EDMG_NVIDIA_PROFILE=omniverse
 export EDMG_NVIDIA_NIM_URL=$NVIDIA_NIM_URL
 export EDMG_NVIDIA_RIVA_URL=$NVIDIA_RIVA_URL
 export EDMG_NVIDIA_RIVA_ASR=1
-export EDMG_NVIDIA_RIVA_ASR_FALLBACK=0
-export EDMG_AI_MODE=local
+export EDMG_AI_MODE=nvidia_nim
 export EDMG_AI_PROVIDER=openai_compat
 export EDMG_AI_OPENAI_COMPAT_BASE_URL=$NVIDIA_NIM_BASE_URL
 export EDMG_AI_OPENAI_COMPAT_MODEL=$NVIDIA_NIM_MODEL
@@ -123,7 +122,7 @@ cat > /workspace/bin/dwct-start-backend <<DWCTBACKENDEOF
 #!/usr/bin/env bash
 set -euo pipefail
 source /etc/profile.d/dwct-edmg.sh
-export EDMG_AI_MODE=local
+export EDMG_AI_MODE=nvidia_nim
 export EDMG_AI_PROVIDER=openai_compat
 export EDMG_AI_OPENAI_COMPAT_BASE_URL=$NVIDIA_NIM_BASE_URL
 export EDMG_AI_OPENAI_COMPAT_MODEL=$NVIDIA_NIM_MODEL

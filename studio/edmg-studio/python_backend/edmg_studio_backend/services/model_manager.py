@@ -114,7 +114,7 @@ def _ensure_managed_dir(path: Path, *, label: str) -> Path:
             return candidate
         raise UserFacingError(
             f"Studio {label} path is invalid: {candidate}",
-            hint="Restart EDMG Studio so it can repair the storage junctions, then retry.",
+            hint="Restart EDMG NVIDIA Workshop so it can repair the storage junctions, then retry.",
             code="INVALID_STORAGE_PATH",
         ) from exc
 
@@ -448,13 +448,6 @@ class ModelManager:
             )
 
         source = (entry.get("source") or "").lower()
-        if source in {"ollama", "legacy_ollama"}:
-            raise UserFacingError(
-                "Legacy local planner installs are disabled in the NVIDIA-only profile.",
-                hint="Use the configured NVIDIA NIM planner service instead.",
-                code="NVIDIA_ONLY_PROFILE",
-                status_code=400,
-            )
         if source in ("hf", "civitai", "local", "s3"):
             name = f"Install: {entry.get('name')}"
             return self.tasks.start(name, self._install_file_model, entry)
@@ -527,7 +520,7 @@ class ModelManager:
             if not mid:
                 continue
             src = (e.get("source") or "").lower()
-            if src in {"ollama", "legacy_ollama"}:
+            if src not in {"hf", "civitai", "local", "s3"}:
                 out[mid] = False
                 continue
 

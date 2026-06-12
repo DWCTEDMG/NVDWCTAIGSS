@@ -1,6 +1,6 @@
 # EDMG Director
 
-`edmg-director` is a ChatGPT Apps SDK package for reviewing EDMG Studio planning output inside ChatGPT and applying approved variants back into the Studio timeline.
+`edmg-director` is a ChatGPT Apps SDK package for reviewing EDMG NVIDIA Workshop planning output inside ChatGPT and applying approved variants back into the Workshop timeline.
 
 It is shaped as an `interactive-decoupled` app:
 
@@ -31,7 +31,7 @@ It is shaped as an `interactive-decoupled` app:
 ## Tools
 
 - `search`
-  Find EDMG Studio projects by name or ID.
+  Find EDMG NVIDIA Workshop projects by name or ID.
 - `fetch`
   Load compact project context: analysis summary, plan count, and timeline summary.
 - `analyze_project_audio`
@@ -39,7 +39,7 @@ It is shaped as an `interactive-decoupled` app:
 - `generate_plan_preview`
   Call EDMG `/plan`, then render the React review board in ChatGPT.
 - `apply_plan_variant`
-  App-only tool used by the widget to apply a selected variant to the Studio timeline.
+  App-only tool used by the widget to apply a selected variant to the Workshop timeline.
 - `import_planner_lab_payload`
   Import planner-style `analysis`, `plan`, and `settings` payloads into a Studio project and optionally apply the resulting timeline.
 - `apply_reactive_handoff`
@@ -48,7 +48,7 @@ It is shaped as an `interactive-decoupled` app:
 ## Environment
 
 - `EDMG_BASE_URL`
-  Base URL for the EDMG Studio backend. Defaults to `http://127.0.0.1:7863`.
+  Base URL for the EDMG NVIDIA Workshop backend. Defaults to `http://127.0.0.1:7863`.
 - `PORT`
   Local port for this MCP app server. Defaults to `3001`.
 - `HOST`

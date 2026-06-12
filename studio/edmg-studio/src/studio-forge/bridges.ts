@@ -22,7 +22,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
       marker_fields: ["label", "frame", "time_seconds"],
     },
     limitations:
-      "Preview only. Studio Forge does not write Unreal project files or require an Unreal plugin in this phase.",
+      "Preview only. Workshop Forge does not write Unreal project files or require an Unreal plugin in this phase.",
     requiredCapabilities: ["backend"],
     optionalCapabilities: ["nvidiaKit", "edmgCore"],
     destructive: false,
@@ -50,7 +50,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
       assembly_mode: "ffmpeg_back_in_studio",
     },
     limitations:
-      "Preview only. No Unreal render job is launched from Studio Forge, and NVIDIA/OpenUSD remains the default runtime.",
+      "Preview only. No Unreal render job is launched from Workshop Forge, and NVIDIA/OpenUSD remains the default runtime.",
     requiredCapabilities: ["backend", "nvidiaKit", "ffmpeg"],
     optionalCapabilities: ["nvidiaOmniverse", "edmgCore"],
     destructive: false,
@@ -80,7 +80,7 @@ export const STUDIO_FORGE_BRIDGES: StudioForgeBridge[] = [
       section_payload_fields: ["section_id", "energy", "continuity_priority"],
     },
     limitations:
-      "Preview only. Studio Forge does not open live control sockets or bind directly to Unreal in the current phase.",
+      "Preview only. Workshop Forge does not open live control sockets or bind directly to Unreal in the current phase.",
     requiredCapabilities: ["backend"],
     optionalCapabilities: ["nvidiaRiva", "ffmpeg"],
     destructive: false,

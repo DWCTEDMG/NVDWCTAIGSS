@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Studio-local support installer for the vendored EDMG Core packages.
 
-This script is intentionally internal to EDMG Studio. It is used by Studio's
+This script is intentionally internal to EDMG NVIDIA Workshop. It is used by the Workshop's
 setup/repair flow to install or repair the vendored EDMG engine packages inside
 the backend environment without relying on the retired root-level legacy
 installers.

@@ -99,7 +99,6 @@ function Set-NvidiaRuntimeDefaults {
 
   Set-DefaultEnv "EDMG_NVIDIA_RIVA_URL" "127.0.0.1:50051"
   Set-DefaultEnv "EDMG_NVIDIA_RIVA_ASR" "1"
-  [Environment]::SetEnvironmentVariable("EDMG_NVIDIA_RIVA_ASR_FALLBACK", "0", "Process")
 }
 
 function Use-NvidiaPlannerApiKeyAliases {

@@ -7,7 +7,7 @@ def test_resolve_comfy_still_selection_handles_missing_catalog_entry(monkeypatch
     monkeypatch.setattr(
         backend_app,
         "_resolve_comfy_checkpoint_name",
-        lambda preferred, allow_auto_fallback: ("v1-5-pruned-emaonly.safetensors", "sd_xl_base_1.0.safetensors"),
+        lambda preferred, allow_auto_selection: ("v1-5-pruned-emaonly.safetensors", "sd_xl_base_1.0.safetensors"),
     )
 
     selection = backend_app._resolve_comfy_still_selection(
@@ -28,7 +28,7 @@ def test_resolve_comfy_motion_selection_handles_missing_catalog_entry(monkeypatc
     monkeypatch.setattr(
         backend_app,
         "_resolve_comfy_checkpoint_name",
-        lambda preferred, allow_auto_fallback: ("v1-5-pruned-emaonly.safetensors", "sd_xl_base_1.0.safetensors"),
+        lambda preferred, allow_auto_selection: ("v1-5-pruned-emaonly.safetensors", "sd_xl_base_1.0.safetensors"),
     )
 
     selection = backend_app._resolve_comfy_motion_selection(

@@ -81,9 +81,9 @@ def test_kit_panel_builds_workflow_summaries():
     storyboard_summary = panel.summarize_storyboard_movie_response(
         {
             "mode": "storyboard_movie",
-            "render_mode": "proxy",
+            "render_mode": "internal",
             "job": {"id": "movie-job-1", "payload": {"fps_output": 24, "width": 1920, "height": 1080}},
-            "preflight": {"mode": "proxy", "duration_s": 30},
+            "preflight": {"mode": "internal", "duration_s": 30},
             "storyboard": {"scene_count": 4, "duration_s": 30},
         }
     )
@@ -97,8 +97,6 @@ def test_kit_panel_builds_workflow_summaries():
     assert "outputs/nvidia/render_jobs/job.json" in render_summary
     assert storyboard_payload["apply_storyboard"] is True
     assert storyboard_payload["overwrite_timeline"] is True
-    assert storyboard_payload["allow_hosted_fallback"] is False
-    assert storyboard_payload["allow_proxy_fallback"] is False
     assert storyboard_payload["fps_output"] == 60
     assert storyboard_payload["width"] == 1920
     assert storyboard_payload["height"] == 256
@@ -316,9 +314,9 @@ def test_kit_ai_director_runs_guided_project_audio_render_flow():
             return {
                 "ok": True,
                 "mode": "storyboard_movie",
-                "render_mode": "proxy",
+                "render_mode": "internal",
                 "job": {"id": "movie-job-1", "payload": payload},
-                "preflight": {"mode": "proxy", "duration_s": 14},
+                "preflight": {"mode": "internal", "duration_s": 14},
                 "storyboard": {"scene_count": 2, "duration_s": 14, "audio_reactive": True},
             }
 
@@ -364,8 +362,6 @@ def test_kit_ai_director_runs_guided_project_audio_render_flow():
             "render_mode": "auto",
             "apply_storyboard": True,
             "overwrite_timeline": True,
-            "allow_hosted_fallback": False,
-            "allow_proxy_fallback": False,
             "fps_output": 24,
             "width": 1920,
             "height": 1080,

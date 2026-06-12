@@ -64,14 +64,14 @@ func runDoctor(args []string) error {
 		return printJSON(report)
 	}
 
-	fmt.Printf("EDMG Studio Doctor\n")
+	fmt.Printf("EDMG NVIDIA Workshop Doctor\n")
 	fmt.Printf("Repo: %s\n", report.RepoRoot)
-	fmt.Printf("Studio: %s\n", report.StudioDir)
+	fmt.Printf("Workshop: %s\n", report.StudioDir)
 	fmt.Printf("Package: %s %s\n", report.Package.Name, report.Package.Version)
 	fmt.Printf("Platform: %s\n", report.Platform)
 	fmt.Printf("Git: %s (%s)\n", cleanState(report.Git.Clean), report.Git.Head)
 	fmt.Printf("Bootstrap: %s\n", boolWord(report.Bootstrap.Exists))
-	fmt.Printf("Studio Home: %s\n", report.Bootstrap.Resolved.StudioHome)
+	fmt.Printf("Workshop Home: %s\n", report.Bootstrap.Resolved.StudioHome)
 	fmt.Printf("Supervisor known: %s\n", boolWord(report.Supervisor.Known))
 	fmt.Printf("Supervisor healthy: %s\n", boolWord(report.Supervisor.Healthy))
 	if report.Supervisor.State != nil {
@@ -96,7 +96,7 @@ func runDoctor(args []string) error {
 		fmt.Printf("  path: %s\n", artifact.Path)
 	}
 	if len(report.Bootstrap.OutsideStudioHome) > 0 {
-		fmt.Printf("Outside Studio Home: %s\n", strings.Join(report.Bootstrap.OutsideStudioHome, ", "))
+		fmt.Printf("Outside Workshop Home: %s\n", strings.Join(report.Bootstrap.OutsideStudioHome, ", "))
 	}
 	if len(report.Warnings) > 0 {
 		fmt.Println("Warnings:")
@@ -132,20 +132,19 @@ func runBootstrapShow(args []string) error {
 
 	fmt.Printf("Bootstrap path: %s\n", report.Path)
 	fmt.Printf("Exists: %s\n", boolWord(report.Exists))
-	fmt.Printf("Studio Home: %s\n", report.Resolved.StudioHome)
+	fmt.Printf("Workshop Home: %s\n", report.Resolved.StudioHome)
 	fmt.Printf("Data: %s\n", report.Resolved.DataDir)
 	fmt.Printf("Models: %s\n", report.Resolved.ModelsDir)
 	fmt.Printf("Cache: %s\n", report.Resolved.CacheRoot)
 	fmt.Printf("Logs: %s\n", report.Resolved.LogsDir)
 	fmt.Printf("External: %s\n", report.Resolved.ExternalDir)
-	fmt.Printf("Ollama models: %s\n", report.Resolved.OllamaModelsDir)
 	fmt.Printf("AI provider: %s / %s\n", fallback(report.Config.AISettings.Mode, "unset"), fallback(report.Config.AISettings.Provider, "unset"))
 	fmt.Printf("Pending migration: %s\n", boolWord(report.PendingMigration))
 	if report.LastMigrationOK != nil {
 		fmt.Printf("Last migration ok: %t\n", *report.LastMigrationOK)
 	}
 	if len(report.OutsideStudioHome) > 0 {
-		fmt.Printf("Outside Studio Home: %s\n", strings.Join(report.OutsideStudioHome, ", "))
+		fmt.Printf("Outside Workshop Home: %s\n", strings.Join(report.OutsideStudioHome, ", "))
 	}
 	return nil
 }
@@ -355,7 +354,7 @@ func runSupervisorStatus(args []string) error {
 	if status.State != nil {
 		fmt.Printf("Backend url: %s\n", status.State.BaseURL)
 		fmt.Printf("PID: %d\n", status.State.PID)
-		fmt.Printf("Studio Home: %s\n", status.State.StudioHome)
+		fmt.Printf("Workshop Home: %s\n", status.State.StudioHome)
 		if status.State.LogPath != "" {
 			fmt.Printf("Log: %s\n", status.State.LogPath)
 		}
@@ -410,7 +409,7 @@ func runReleaseStatus(args []string) error {
 		return printJSON(status)
 	}
 
-	fmt.Printf("Studio: %s\n", status.StudioDir)
+	fmt.Printf("Workshop: %s\n", status.StudioDir)
 	fmt.Printf("Package: %s %s\n", status.Package.Name, status.Package.Version)
 	fmt.Printf("Windows release host: %s\n", boolWord(status.WindowsReleaseHost))
 	fmt.Printf("Backend manifest: %s\n", presentWord(status.BundleManifestOK))
@@ -513,11 +512,11 @@ func usage() {
 
 Commands:
   doctor                 Summarize repo, toolchain, bootstrap, and release state
-  bootstrap show         Print bootstrap config and resolved Studio-managed roots
+  bootstrap show         Print bootstrap config and resolved Workshop-managed roots
   artifact list          List release artifacts with size and optional hashes
   artifact manifest      Emit a JSON manifest for release artifacts
   support export         Package doctor/bootstrap/release data into one zip
-  supervisor start       Start the packaged backend with Studio-managed env
+  supervisor start       Start the packaged backend with Workshop-managed env
   supervisor status      Inspect the managed backend process and /health
   supervisor stop        Stop the managed backend process
   release status         Inspect bundled artifacts and packaged outputs

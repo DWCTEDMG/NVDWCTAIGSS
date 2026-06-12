@@ -11,14 +11,11 @@ import (
 )
 
 func TestDefaultStoragePaths(t *testing.T) {
-	home := filepath.Join("D:\\", "EDMG-Studio")
+	home := filepath.Join("D:\\", "EDMG-NVIDIA-Workshop")
 	paths := DefaultStoragePaths(home)
 
 	if paths.DataDir != filepath.Join(home, "data") {
 		t.Fatalf("expected data dir under studio home, got %s", paths.DataDir)
-	}
-	if paths.OllamaModelsDir != filepath.Join(home, "models", "ollama") {
-		t.Fatalf("expected Ollama models dir under models root, got %s", paths.OllamaModelsDir)
 	}
 	if paths.ElectronUserData != filepath.Join(home, "electron") {
 		t.Fatalf("expected electron user data under studio home, got %s", paths.ElectronUserData)
@@ -26,7 +23,7 @@ func TestDefaultStoragePaths(t *testing.T) {
 }
 
 func TestResolveStoragePathsWithOverrides(t *testing.T) {
-	home := filepath.Join("D:\\", "EDMG-Studio")
+	home := filepath.Join("D:\\", "EDMG-NVIDIA-Workshop")
 	cfg := BootstrapConfig{
 		StudioHome: home,
 		StorageSettings: StorageOverrides{
@@ -72,13 +69,13 @@ func TestNewArtifactStatusWithHash(t *testing.T) {
 }
 
 func TestBuildManagedBackendEnvIncludesCoreKeys(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "studio-home")
+	home := filepath.Join(t.TempDir(), "workshop-home")
 	cfg := BootstrapConfig{
 		AISettings: AISettings{
-			Mode:        "local",
-			Provider:    "ollama",
-			OllamaURL:   "http://127.0.0.1:11434",
-			OllamaModel: "qwen3:8b",
+			Mode:                "nvidia_nim",
+			Provider:            "nvidia_nim",
+			OpenAICompatBaseURL: "https://integrate.api.nvidia.com/v1",
+			OpenAICompatModel:   "meta/llama-3.1-70b-instruct",
 		},
 	}
 	paths := DefaultStoragePaths(home)
@@ -94,7 +91,9 @@ func TestBuildManagedBackendEnvIncludesCoreKeys(t *testing.T) {
 		"EDMG_STUDIO_EXTERNAL_DIR=" + paths.ExternalDir,
 		"EDMG_STUDIO_BACKEND_HOST=127.0.0.1",
 		"EDMG_STUDIO_BACKEND_PORT=5999",
-		"EDMG_AI_PROVIDER=ollama",
+		"EDMG_AI_MODE=nvidia_nim",
+		"EDMG_AI_PROVIDER=nvidia_nim",
+		"EDMG_AI_OPENAI_COMPAT_BASE_URL=https://integrate.api.nvidia.com/v1",
 		"EDMG_FFMPEG_PATH=" + filepath.Join(home, "ffmpeg.exe"),
 	} {
 		if !strings.Contains(joined, expected) {
@@ -150,7 +149,7 @@ func TestReleaseProofPointersIncludeCoreProofs(t *testing.T) {
 		"pnpm run validate:release",
 		"pnpm run validate:packaged-customer-flow",
 		"pnpm run validate:packaged-upgrade-proof",
-		"pnpm run validate:packaged-zero-state-setup",
+		"pnpm run validate:packaged-nvidia-setup",
 	} {
 		if !strings.Contains(commands, expected) {
 			t.Fatalf("expected release proofs to contain %q", expected)

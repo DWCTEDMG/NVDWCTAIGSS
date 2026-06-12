@@ -21,8 +21,12 @@ function log(message) {
 function resolvePackagedApp() {
   const envPath = process.env.EDMG_STUDIO_PACKAGED_APP;
   if (envPath && fs.existsSync(envPath)) return envPath;
-  const candidate = path.join(root, "dist", "win-unpacked", process.platform === "win32" ? "EDMG Studio.exe" : "EDMG Studio");
-  return fs.existsSync(candidate) ? candidate : "";
+  const exeName = process.platform === "win32" ? "EDMG NVIDIA Workshop.exe" : "EDMG NVIDIA Workshop";
+  const candidates = [
+    path.join(root, "dist", "win-unpacked", exeName),
+    path.join(root, "release", "desktop-smoke-dist", "win-unpacked", exeName),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) || "";
 }
 
 function resolveAudioFixture() {
@@ -97,7 +101,7 @@ function chooseHomeRoot() {
 function resolveBootstrapPaths() {
   const appDataDir = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
   const localAppDataDir = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-  const bootstrapDir = path.join(appDataDir, "EDMG Studio");
+  const bootstrapDir = path.join(appDataDir, "EDMG NVIDIA Workshop");
   return {
     appDataDir,
     localAppDataDir,
@@ -137,9 +141,9 @@ async function allocatePort() {
   return address.port;
 }
 
-async function stopExistingPackagedProcesses() {
+async function stopExistingPackagedProcesses(appExe) {
   if (process.platform !== "win32") return;
-  const appDir = path.join(root, "dist", "win-unpacked").replace(/'/g, "''");
+  const appDir = path.dirname(appExe || path.join(root, "dist", "win-unpacked")).replace(/'/g, "''");
   const command = `$ErrorActionPreference='SilentlyContinue'; $appDir='${appDir}'; Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($appDir, [System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`;
   await new Promise((resolve, reject) => {
     const child = spawn("powershell", ["-NoProfile", "-Command", command], { stdio: "ignore" });
@@ -149,7 +153,7 @@ async function stopExistingPackagedProcesses() {
   await new Promise((resolve) => setTimeout(resolve, 1500));
 }
 
-async function waitForHealth(baseUrl, timeoutMs = 120000) {
+async function waitForHealth(baseUrl, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -200,6 +204,10 @@ async function requestJsonViaNode(url, init, timeoutMs) {
             }
           }
           if ((response.statusCode || 500) >= 400) {
+            if (init.allowError) {
+              resolve({ ok: false, statusCode: response.statusCode, payload, text });
+              return;
+            }
             reject(new Error(`${init.method || "GET"} ${url} failed: ${response.statusCode} ${text}`));
             return;
           }
@@ -247,6 +255,9 @@ async function requestJson(url, init = {}) {
     }
   }
   if (!response.ok) {
+    if (init.allowError) {
+      return { ok: false, statusCode: response.status, payload, text };
+    }
     throw new Error(`${init.method || "GET"} ${url} failed: ${response.status} ${text}`);
   }
   return payload;
@@ -291,7 +302,7 @@ async function main() {
     Math.ceil(audioBytes / (1024 * 1024)) * 5000,
   );
 
-  await stopExistingPackagedProcesses();
+  await stopExistingPackagedProcesses(appExe);
 
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "").replace("T", "_");
   const homeRoot = chooseHomeRoot();
@@ -346,30 +357,43 @@ async function main() {
       max_scenes: 4,
     });
     const apply = await postJson(`${baseUrl}/v1/projects/${projectId}/timeline/apply_plan`, { variant_index: 0, overwrite: true });
-    const validate = await requestJson(`${baseUrl}/v1/projects/${projectId}/pipeline/validate?variant_index=0&preset=fast&mode=auto&engine=auto`);
-    const run = await requestJson(`${baseUrl}/v1/projects/${projectId}/pipeline/run?variant_index=0&preset=fast&mode=auto&engine=auto`, { method: "POST" });
-    const targetJobId = run?.job?.id || run?.assemble_job?.id;
-    assert.ok(targetJobId, `Pipeline run did not return a target job payload: ${JSON.stringify(run)}`);
+    const validate = await requestJson(
+      `${baseUrl}/v1/projects/${projectId}/pipeline/validate?variant_index=0&preset=fast&mode=auto&engine=auto`,
+      { allowError: true },
+    );
+    const failClosedCode = validate?.payload?.error?.code || validate?.error?.code || "";
+    const validateFailedClosed = validate?.ok === false && failClosedCode === "NVIDIA_RENDER_MODEL_REQUIRED";
+    let run = null;
+    let targetJobId = "";
+    if (!validateFailedClosed) {
+      run = await requestJson(`${baseUrl}/v1/projects/${projectId}/pipeline/run?variant_index=0&preset=fast&mode=auto&engine=auto`, { method: "POST" });
+      targetJobId = run?.job?.id || run?.assemble_job?.id;
+      assert.ok(targetJobId, `Pipeline run did not return a target job payload: ${JSON.stringify(run)}`);
+    }
 
     let job = null;
     const tickHistory = [];
-    const tickDeadline = Date.now() + 6 * 60 * 1000;
-    while (Date.now() < tickDeadline) {
-      const tick = await requestJson(`${baseUrl}/v1/jobs/tick`, { method: "POST" });
-      if (tick?.job) {
-        tickHistory.push({ id: tick.job.id, status: tick.job.status, type: tick.job.type });
-        if (tick.job.id === targetJobId) {
-          job = tick.job;
-          if (["succeeded", "failed", "canceled"].includes(String(job.status))) break;
+    if (targetJobId) {
+      const tickDeadline = Date.now() + 6 * 60 * 1000;
+      while (Date.now() < tickDeadline) {
+        const tick = await requestJson(`${baseUrl}/v1/jobs/tick`, { method: "POST" });
+        if (tick?.job) {
+          tickHistory.push({ id: tick.job.id, status: tick.job.status, type: tick.job.type });
+          if (tick.job.id === targetJobId) {
+            job = tick.job;
+            if (["succeeded", "failed", "canceled"].includes(String(job.status))) break;
+          }
         }
+        await new Promise((resolve) => setTimeout(resolve, 750));
       }
-      await new Promise((resolve) => setTimeout(resolve, 750));
     }
     const jobs = await requestJson(`${baseUrl}/v1/projects/${projectId}/jobs`);
-    if (!job && Array.isArray(jobs?.jobs)) {
+    if (targetJobId && !job && Array.isArray(jobs?.jobs)) {
       job = jobs.jobs.find((entry) => entry.id === targetJobId) || null;
     }
-    assert.ok(job, `Did not observe the packaged target job ${targetJobId} in tick responses or job list`);
+    if (targetJobId) {
+      assert.ok(job, `Did not observe the packaged target job ${targetJobId} in tick responses or job list`);
+    }
     const outputs = await requestJson(`${baseUrl}/v1/projects/${projectId}/outputs`);
     const comfyOk = Boolean(status?.comfyui?.ok);
     const usesInternalPipeline = Boolean(run?.job?.id);
@@ -377,9 +401,8 @@ async function main() {
     const expectedModelsDir = path.join(studioHome, "models");
     const expectedExternalDir = path.join(studioHome, "external");
     const expectedLogsDir = path.join(studioHome, "logs");
-    const expectedOllamaModelsDir = path.join(expectedModelsDir, "ollama");
     const summary = {
-      ok: job.status === "succeeded",
+      ok: validateFailedClosed || job?.status === "succeeded",
       studioHome,
       appDataDir,
       localAppDataDir,
@@ -391,17 +414,14 @@ async function main() {
         studioHome: config?.studio_home ?? null,
         dataDir: config?.data_dir ?? null,
         modelsDir: config?.models_dir ?? null,
-        ollamaModelsDir: config?.ollama_models_dir ?? null,
         logsDir: config?.logs_dir ?? null,
         externalDir: config?.external_dir ?? null,
         expectedDataDir,
         expectedModelsDir,
-        expectedOllamaModelsDir,
         expectedLogsDir,
         expectedExternalDir,
         dataDirExists: fs.existsSync(expectedDataDir),
         modelsDirExists: fs.existsSync(expectedModelsDir),
-        ollamaModelsDirExists: fs.existsSync(expectedOllamaModelsDir),
         logsDirExists: fs.existsSync(expectedLogsDir),
         externalDirExists: fs.existsSync(expectedExternalDir),
       },
@@ -413,10 +433,6 @@ async function main() {
         edmgRepoRoot: status?.edmg?.repo_root ?? null,
         sevenZipOk: status?.sevenzip?.ok,
         sevenZipPath: status?.sevenzip?.path ?? null,
-        ollamaOk: status?.ollama?.ok,
-        ollamaManagedModelsDir: status?.ollama?.managed_models_dir ?? null,
-        ollamaManagedLaunchScript: status?.ollama?.managed_launch_script ?? null,
-        ollamaLaunchAvailable: status?.ollama?.launch_available ?? null,
         comfyOk: status?.comfyui?.ok,
       },
       projectId,
@@ -425,6 +441,10 @@ async function main() {
       variantCount: Array.isArray(plan?.variants) ? plan.variants.length : 0,
       trackCount: Array.isArray(apply?.timeline?.tracks) ? apply.timeline.tracks.length : 0,
       validate: {
+        ok: validate?.ok !== false,
+        failClosed: validateFailedClosed,
+        errorCode: failClosedCode || null,
+        errorMessage: validate?.payload?.error?.message || validate?.error?.message || null,
         mode: validate?.recommended?.mode,
         engine: validate?.recommended?.engine,
         modelId: validate?.recommended?.model_id,
@@ -432,7 +452,7 @@ async function main() {
         diagnostics: Array.isArray(validate?.recommended?.diagnostics) ? validate.recommended.diagnostics : [],
       },
       run: {
-        pathType: usesInternalPipeline ? "internal_or_proxy" : "queued_comfy_pipeline",
+        pathType: usesInternalPipeline ? "internal_nvidia_pipeline" : "queued_comfy_pipeline",
         renderMode: run?.render_mode,
         selectedMode: run?.selected?.mode,
         selectedEngine: run?.selected?.engine,
@@ -442,10 +462,10 @@ async function main() {
         assembleJobId: run?.assemble_job?.id ?? null,
       },
       job: {
-        id: job.id,
-        status: job.status,
-        type: job.type,
-        error: job.error || null,
+        id: job?.id || null,
+        status: job?.status || null,
+        type: job?.type || null,
+        error: job?.error || null,
       },
       outputs: {
         videoCount: Array.isArray(outputs?.videos) ? outputs.videos.length : 0,
@@ -466,37 +486,40 @@ async function main() {
     assert.equal(summary.setupStatus.backendBundleOk, true, "Packaged backend bundle should be available");
     assert.equal(summary.setupStatus.ffmpegOk, true, "Bundled FFmpeg should be available");
     assert.equal(summary.setupStatus.edmgAvailable, true, "Bundled EDMG Core should be available");
-    assert.equal(summary.paths.studioHome, studioHome, "Packaged config should report the requested Studio home");
-    assert.equal(summary.paths.dataDir, expectedDataDir, "Packaged config data_dir should live under Studio home");
-    assert.equal(summary.paths.modelsDir, expectedModelsDir, "Packaged config models_dir should live under Studio home");
-    assert.equal(summary.paths.ollamaModelsDir, expectedOllamaModelsDir, "Packaged config ollama_models_dir should live under Studio models");
-    assert.equal(summary.paths.logsDir, expectedLogsDir, "Packaged config logs_dir should live under Studio home");
-    assert.equal(summary.paths.externalDir, expectedExternalDir, "Packaged config external_dir should live under Studio home");
-    assert.equal(summary.setupStatus.ollamaManagedModelsDir, expectedOllamaModelsDir, "Setup status should expose the managed Ollama models root");
-    assert.equal(summary.paths.dataDirExists, true, "Packaged run should create the Studio data root");
-    assert.equal(summary.paths.modelsDirExists, true, "Packaged run should create the Studio models root");
-    assert.equal(summary.paths.ollamaModelsDirExists, true, "Packaged run should create the Studio Ollama models root");
-    assert.equal(summary.paths.logsDirExists, true, "Packaged run should create the Studio logs root");
-    assert.equal(summary.paths.externalDirExists, true, "Packaged run should create the Studio external root");
+    assert.equal(summary.paths.studioHome, studioHome, "Packaged config should report the requested Workshop home");
+    assert.equal(summary.paths.dataDir, expectedDataDir, "Packaged config data_dir should live under Workshop home");
+    assert.equal(summary.paths.modelsDir, expectedModelsDir, "Packaged config models_dir should live under Workshop home");
+    assert.equal(summary.paths.logsDir, expectedLogsDir, "Packaged config logs_dir should live under Workshop home");
+    assert.equal(summary.paths.externalDir, expectedExternalDir, "Packaged config external_dir should live under Workshop home");
+    assert.equal(summary.paths.dataDirExists, true, "Packaged run should create the Workshop data root");
+    assert.equal(summary.paths.modelsDirExists, true, "Packaged run should create the Workshop models root");
+    assert.equal(summary.paths.logsDirExists, true, "Packaged run should create the Workshop logs root");
+    assert.equal(summary.paths.externalDirExists, true, "Packaged run should create the Workshop external root");
     assert.equal(summary.variantCount > 0, true, "Expected at least one planned variant");
     assert.equal(summary.trackCount > 0, true, "Expected timeline tracks after apply");
-    assert.equal(summary.job.status, "succeeded", "Packaged render job should succeed");
-    assert.equal(summary.outputs.videoCount > 0, true, "Expected rendered videos in outputs");
-    if (!comfyOk) {
-      assert.equal(["proxy", "internal"].includes(String(summary.validate.mode)), true, `Expected internal fallback recommendation when ComfyUI is unavailable, got ${summary.validate.mode}`);
+    if (summary.validate.failClosed) {
+      assert.equal(summary.validate.errorCode, "NVIDIA_RENDER_MODEL_REQUIRED", "Packaged pipeline should fail closed when no NVIDIA render model is installed");
+      assert.equal(summary.job.status, null, "Fail-closed validation should not enqueue a render job");
+      assert.equal(summary.outputs.videoCount, 0, "Fail-closed validation should not produce fallback videos");
+    } else if (!comfyOk) {
+      assert.equal(summary.job.status, "succeeded", "Packaged NVIDIA render job should succeed when a CUDA internal model is installed");
+      assert.equal(summary.outputs.videoCount > 0, true, "Expected rendered videos in outputs");
+      assert.equal(String(summary.validate.mode), "internal", `Expected NVIDIA internal recommendation when ComfyUI is unavailable, got ${summary.validate.mode}`);
       if (summary.run.renderMode) {
-        assert.equal(["proxy", "internal"].includes(String(summary.run.renderMode)), true, `Expected internal/proxy packaged render mode, got ${summary.run.renderMode}`);
+        assert.equal(String(summary.run.renderMode), "internal", `Expected NVIDIA internal packaged render mode, got ${summary.run.renderMode}`);
       }
       if (summary.outputs.latestMode) {
-        assert.equal(["proxy", "internal"].includes(String(summary.outputs.latestMode)), true, `Expected latest packaged fallback mode, got ${summary.outputs.latestMode}`);
+        assert.equal(String(summary.outputs.latestMode), "internal", `Expected latest packaged NVIDIA mode, got ${summary.outputs.latestMode}`);
       }
     } else {
+      assert.equal(summary.job.status, "succeeded", "Packaged ComfyUI render job should succeed when ComfyUI is available");
+      assert.equal(summary.outputs.videoCount > 0, true, "Expected rendered videos in outputs");
       assert.equal(["stills", "motion"].includes(String(summary.validate.mode)), true, `Expected stills/motion recommendation when ComfyUI is available, got ${summary.validate.mode}`);
       assert.equal(Boolean(summary.run.assembleJobId), true, "ComfyUI path should return an assemble job id");
     }
   } finally {
     await killProcessTree(child);
-    await stopExistingPackagedProcesses();
+    await stopExistingPackagedProcesses(appExe);
     await restoreBootstrap(bootstrapPath, bootstrapBackup);
   }
 }

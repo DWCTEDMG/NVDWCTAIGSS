@@ -9,7 +9,7 @@ from .app import app
 def main() -> None:
     p = argparse.ArgumentParser(
         prog="edmg-studio-backend",
-        description="EDMG Studio backend server.",
+        description="EDMG NVIDIA Workshop backend server.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 

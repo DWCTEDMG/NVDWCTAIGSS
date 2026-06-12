@@ -1,6 +1,6 @@
 [package]
 title = "EDMG USD Schema"
-description = "OpenUSD metadata helpers and schema boundary for EDMG NVIDIA Studio."
+description = "OpenUSD metadata helpers and schema boundary for EDMG NVIDIA Workshop."
 version = "0.1.0"
 category = "EDMG"
 

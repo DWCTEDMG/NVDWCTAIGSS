@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -18,11 +17,9 @@ from .deforum_prompt_timeline import resolve_prompt_frame
 from .deforum_schedule import coerce_schedule_pairs, evaluate_schedule
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image
 except Exception:  # pragma: no cover
     Image = None  # type: ignore
-    ImageDraw = None  # type: ignore
-    ImageFont = None  # type: ignore
 
 from .compositor import apply_timeline_layers
 from .ffmpeg import assemble_image_sequence, interpolate_video_fps, mux_audio
@@ -128,79 +125,6 @@ def _timeline_render_fingerprint(timeline: dict[str, Any] | None) -> Any:
             continue
         cleaned[k] = v
     return cleaned
-
-
-def _build_proxy_work_tag(
-    *,
-    variant_index: int,
-    scenes: list[dict[str, Any]],
-    timeline: dict[str, Any] | None,
-    settings: "InternalVideoSettings",
-) -> str:
-    payload = {
-        "variant_index": int(variant_index),
-        "fps_render": int(settings.fps_render),
-        "fps_output": int(settings.fps_output),
-        "width": int(settings.width),
-        "height": int(settings.height),
-        "keyframe_interval_s": float(settings.keyframe_interval_s),
-        "interpolation_engine": str(settings.interpolation_engine),
-        "render_tier": str(settings.render_tier),
-        "device_preference": str(settings.device_preference),
-        "scene_digest": _json_digest(scenes or []),
-        "timeline_digest": _json_digest(_timeline_render_fingerprint(timeline)),
-        "mode": "proxy",
-    }
-    raw = repr(sorted(payload.items())).encode("utf-8", errors="ignore")
-    sig = hashlib.sha1(raw).hexdigest()[:10]
-    return (
-        f"proxy_v{int(variant_index):02d}_"
-        f"{int(settings.width)}x{int(settings.height)}_{int(settings.fps_render)}rf_{int(settings.fps_output)}of_{sig}"
-    )
-
-
-def describe_proxy_render_cache(
-    *,
-    project_dir: Path,
-    variant_index: int,
-    scenes: list[dict[str, Any]],
-    timeline: dict[str, Any] | None,
-    settings: "InternalVideoSettings",
-    total_frames: int,
-) -> dict[str, Any]:
-    work_tag = _build_proxy_work_tag(
-        variant_index=variant_index,
-        scenes=scenes,
-        timeline=timeline,
-        settings=settings,
-    )
-    out_frames = project_dir / "outputs" / "frames_proxy" / work_tag
-    raw_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_raw.mp4"
-    interp_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_interp.mp4"
-    final_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}.mp4"
-    meta_json = project_dir / "outputs" / "videos" / f"{work_tag}.render.json"
-    frame_count = 0
-    if out_frames.exists():
-        try:
-            frame_count = len(list(out_frames.glob("frame_*.png")))
-        except Exception:
-            frame_count = 0
-    return {
-        "work_tag": work_tag,
-        "frames_dir": str(out_frames),
-        "render_meta_path": str(meta_json),
-        "raw_mp4": str(raw_mp4),
-        "interp_mp4": str(interp_mp4),
-        "final_mp4": str(final_mp4),
-        "frames_present": frame_count,
-        "frames_expected": int(total_frames),
-        "frames_complete": bool(frame_count >= int(total_frames)),
-        "raw_exists": raw_mp4.exists(),
-        "interp_exists": interp_mp4.exists(),
-        "final_exists": final_mp4.exists(),
-        "render_meta_exists": meta_json.exists(),
-    }
-
 
 def _build_work_tag(
     *,
@@ -504,18 +428,7 @@ def _try_load_diffusers(model_dir: Path, device: str, *, role: str = "video") ->
     return pipes
 
 
-def _try_load_directml(model_dir: Path, *, role: str = "video") -> _Pipes:
-    raise UserFacingError(
-        "DirectML rendering is disabled by the NVIDIA-only profile.",
-        hint="Use the NVIDIA CUDA runtime profile.",
-        code="NVIDIA_ONLY_PROFILE",
-        status_code=400,
-    )
-
-
 def _try_load_pipelines(model_dir: Path, device: str, *, role: str = "video") -> _Pipes:
-    if device == "directml":
-        return _try_load_directml(model_dir, role=role)
     return _try_load_diffusers(model_dir, device=device, role=role)
 
 
@@ -524,7 +437,7 @@ def _device_auto(preference: str = "auto") -> str:
     if pref not in {"auto", "cuda"}:
         raise UserFacingError(
             "Only NVIDIA CUDA device execution is supported by this profile.",
-            hint="Use device_preference='auto' or 'cuda'. CPU, MPS, and DirectML execution are disabled.",
+            hint="Use device_preference='auto' or 'cuda'.",
             code="NVIDIA_ONLY_PROFILE",
             status_code=400,
         )
@@ -558,7 +471,7 @@ def _encode_prompt(pipes: _Pipes, prompt: str) -> Any:
     SDXL / SD3 path: returns the prompt string (we rely on pipeline internal encoding).
     """
     prompt = str(prompt or "").strip() or "cinematic"
-    if pipes.family != "sd15" or pipes.backend == "directml":
+    if pipes.family != "sd15":
         # Keep it simple & robust for SDXL: use native pipeline encoding.
         return prompt
 
@@ -633,14 +546,12 @@ def _generate_txt2img(
     cfg: float,
     seed: int,
 ) -> "Image.Image":
-    g = None
-    if pipes.device != "directml":
-        import torch  # type: ignore
+    import torch  # type: ignore
 
-        g = torch.Generator(device=pipes.device if pipes.device != "mps" else "cpu")
-        g.manual_seed(int(seed))
+    g = torch.Generator(device=pipes.device)
+    g.manual_seed(int(seed))
 
-    if pipes.family != "sd15" or pipes.backend == "directml" or isinstance(prompt_embeds, str):
+    if pipes.family != "sd15" or isinstance(prompt_embeds, str):
         prompt = str(prompt_embeds or "").strip() or "cinematic"
         negative = str(negative_embeds or "").strip()
         kwargs = dict(
@@ -683,14 +594,12 @@ def _generate_img2img(
     seed: int,
     strength: float,
 ) -> "Image.Image":
-    g = None
-    if pipes.device != "directml":
-        import torch  # type: ignore
+    import torch  # type: ignore
 
-        g = torch.Generator(device=pipes.device if pipes.device != "mps" else "cpu")
-        g.manual_seed(int(seed))
+    g = torch.Generator(device=pipes.device)
+    g.manual_seed(int(seed))
 
-    if pipes.family != "sd15" or pipes.backend == "directml" or isinstance(prompt_embeds, str):
+    if pipes.family != "sd15" or isinstance(prompt_embeds, str):
         prompt = str(prompt_embeds or "").strip() or "cinematic"
         negative = str(negative_embeds or "").strip()
         kwargs = dict(
@@ -746,12 +655,10 @@ def _generate_inpaint(
             status_code=400,
         )
 
-    g = None
-    if pipes.device != "directml":
-        import torch  # type: ignore
+    import torch  # type: ignore
 
-        g = torch.Generator(device=pipes.device if pipes.device != "mps" else "cpu")
-        g.manual_seed(int(seed))
+    g = torch.Generator(device=pipes.device)
+    g.manual_seed(int(seed))
 
     kwargs = dict(
         prompt=str(prompt or "").strip() or "cinematic",
@@ -797,8 +704,7 @@ def _load_controlnet_model(model_dir: Path, family: str, device: str) -> Any:
 
     torch_dtype = torch.float16 if device in ("cuda", "rocm") else torch.float32
     controlnet = ControlNetModel.from_pretrained(str(model_dir), torch_dtype=torch_dtype)
-    if device != "directml":
-        controlnet = controlnet.to(device)
+    controlnet = controlnet.to(device)
     _ControlNetCache.set(cache_key, controlnet)
     return controlnet
 
@@ -852,8 +758,7 @@ def _build_controlnet_pipeline(
             pipeline.enable_xformers_memory_efficient_attention()
         except Exception:
             pass
-    if pipes.device != "directml":
-        pipeline = pipeline.to(pipes.device)
+    pipeline = pipeline.to(pipes.device)
     return pipeline
 
 
@@ -1160,12 +1065,10 @@ def render_internal_still_image(
                 scales = [float(unit.get("strength", 0.8)) for unit in units]
                 starts = [float(unit.get("start_percent", 0.0)) for unit in units]
                 ends = [float(unit.get("end_percent", 1.0)) for unit in units]
-                g = None
-                if device != "directml":
-                    import torch  # type: ignore
+                import torch  # type: ignore
 
-                    g = torch.Generator(device=device if device != "mps" else "cpu")
-                    g.manual_seed(seed)
+                g = torch.Generator(device=device)
+                g.manual_seed(seed)
                 kwargs = {
                     "prompt": str(prompt or "").strip() or "cinematic",
                     "negative_prompt": negative_prompt,
@@ -1178,8 +1081,7 @@ def render_internal_still_image(
                     "control_guidance_start": starts[0] if len(starts) == 1 else starts,
                     "control_guidance_end": ends[0] if len(ends) == 1 else ends,
                 }
-                if g is not None:
-                    kwargs["generator"] = g
+                kwargs["generator"] = g
                 image = pipeline(**kwargs).images[0]
             else:
                 image = _generate_txt2img(
@@ -2059,383 +1961,6 @@ def render_internal_video_variant(
     return final_mp4
 
 
-def _disabled_hosted_video_variant(
-    *,
-    ffmpeg_path: str,
-    project_dir: Path,
-    variant: dict[str, Any],
-    scenes: list[dict[str, Any]],
-    audio_path: Path | None,
-    settings: InternalVideoSettings,
-    _api_key: str,
-    hosted_settings: dict[str, Any],
-    timeline: dict[str, Any] | None = None,
-    log_fn=None,
-    progress_fn=None,
-    cancel_check_fn=None,
-    chunk_plan: dict[str, Any] | None = None,
-    checkpoint_fn=None,
-) -> Path:
-    _require_pillow()
-    raise RuntimeError("Hosted rendering is disabled by the NVIDIA-only profile.")
-
-    service = str(hosted_settings.get("service") or "sd3").strip().lower()
-    model = str(hosted_settings.get("model") or "sd3.5-large-turbo").strip().lower()
-    style_preset = str(hosted_settings.get("style_preset") or "none").strip().lower()
-    output_format = str(hosted_settings.get("output_format") or "png").strip().lower()
-    hosted_strength = float(hosted_settings.get("strength") or settings.temporal_strength or 0.55)
-    hosted_cfg_scale = float(hosted_settings.get("cfg_scale") or settings.cfg or 6.5)
-
-    out_w, out_h = settings.width, settings.height
-    fps_r = max(1, int(settings.fps_render))
-    fps_schedule = max(1, int(settings.fps_output))
-    duration_s = float(variant.get("duration_s") or _infer_duration(scenes))
-    total_frames = int(math.ceil(duration_s * fps_r))
-    deforum_context = _build_unified_deforum_context(
-        scenes=scenes,
-        timeline=timeline,
-        variant=variant,
-        settings=settings,
-        fps=fps_schedule,
-    )
-
-    provider_marker = Path(f"stability_platform/{service}/{model or 'default'}")
-    work_tag = _build_work_tag(
-        variant_index=int(variant.get("index", 0)),
-        variant=variant,
-        scenes=scenes,
-        timeline=timeline,
-        model_dir=provider_marker,
-        settings=settings,
-    )
-    out_frames = project_dir / "outputs" / "frames_internal" / work_tag
-    out_frames.mkdir(parents=True, exist_ok=True)
-
-    key_times = _scene_keyframe_times(scenes, settings.keyframe_interval_s)
-    total_units = max(1, len(key_times) + total_frames + 3)
-    cache_info = describe_internal_render_cache(
-        project_dir=project_dir,
-        variant_index=int(variant.get("index", 0)),
-        variant=variant,
-        scenes=scenes,
-        timeline=timeline,
-        model_dir=provider_marker,
-        settings=settings,
-        total_frames=total_frames,
-    )
-    raw_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_raw.mp4"
-    interp_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_interp.mp4"
-    final_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}.mp4"
-    meta_json = project_dir / "outputs" / "videos" / f"{work_tag}.render.json"
-    checkpoint_json = project_dir / "outputs" / "videos" / f"{work_tag}.checkpoint.json"
-    emit_checkpoint = _build_checkpoint_emitter(
-        checkpoint_json=checkpoint_json,
-        project_dir=project_dir,
-        work_tag=work_tag,
-        render_mode="hosted",
-        variant_index=int(variant.get("index", 0)),
-        total_frames=total_frames,
-        fps_render=fps_r,
-        chunk_plan=chunk_plan,
-        checkpoint_fn=checkpoint_fn,
-    )
-    if progress_fn:
-        progress_fn("preparing", 0, total_units, f"Preparing hosted Stability render via {service}")
-    emit_checkpoint(stage="preparing", status="running", force=True, message=f"Preparing hosted Stability render via {service}")
-
-    if log_fn:
-        log_fn(
-            f"Hosted Stability render cache tag={work_tag} service={service} model={model or 'default'} "
-            f"resume_existing_frames={'yes' if settings.resume_existing_frames else 'no'}"
-        )
-        log_fn(
-            f"Cache status frames={cache_info['frames_present']}/{cache_info['frames_expected']} "
-            f"raw={'yes' if cache_info['raw_exists'] else 'no'} "
-            f"interp={'yes' if cache_info['interp_exists'] else 'no'} "
-            f"final={'yes' if cache_info['final_exists'] else 'no'}"
-        )
-
-    if settings.resume_existing_frames and final_mp4.exists():
-        final_mtime = final_mp4.stat().st_mtime
-        audio_ok = (audio_path is None) or (not audio_path.exists()) or (final_mtime >= audio_path.stat().st_mtime)
-        if audio_ok:
-            emit_checkpoint(stage="complete", status="complete", force=True, final=True, message=f"Reusing completed hosted render {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists(), "final_exists": True})
-            if progress_fn:
-                progress_fn("complete", total_units, total_units, f"Reusing completed hosted render {final_mp4.name}")
-            if log_fn:
-                log_fn(f"Reusing completed hosted render {final_mp4.name}")
-            return final_mp4
-
-    key_imgs: dict[float, Image.Image] = {}
-    prev_key_img: Image.Image | None = None
-    supports_init = service in {"sd3", "ultra"}
-    for i, t in enumerate(key_times):
-        if cancel_check_fn:
-            cancel_check_fn()
-        schedule_frame = int(round(float(t) * float(fps_schedule)))
-        prompt = _prompt_text_for_frame(
-            frame_idx=schedule_frame,
-            scenes=scenes,
-            timeline=timeline,
-            deforum_context=deforum_context,
-            fps=fps_schedule,
-        ) or "cinematic"
-        negative_prompt = _negative_prompt_for_frame(frame_idx=schedule_frame, settings=settings, deforum_context=deforum_context)
-        seed = int(hash(f"hosted-key:{t}:{prompt}") & 0x7FFFFFFF)
-        if progress_fn:
-            progress_fn("keyframes", i, total_units, f"Generating hosted keyframe {i+1}/{len(key_times)}")
-        emit_checkpoint(stage="keyframes", status="running", message=f"Generating hosted keyframe {i+1}/{len(key_times)}")
-        if log_fn:
-            log_fn(f"Hosted keyframe {i+1}/{len(key_times)} t={t:.2f}s seed={seed} service={service} model={model or 'default'}")
-
-        key_result = client.generate_image(
-            prompt=prompt,
-            width=out_w,
-            height=out_h,
-            service=service,
-            model=model,
-            style_preset=style_preset,
-            negative_prompt=negative_prompt,
-            seed=seed,
-            init_image=(prev_key_img if supports_init and prev_key_img is not None and settings.temporal_mode != "off" else None),
-            strength=hosted_strength,
-            cfg_scale=hosted_cfg_scale,
-            output_format=output_format,
-        )
-        img = key_result.image
-        key_imgs[t] = img
-        prev_key_img = img
-        if progress_fn:
-            progress_fn("keyframes", i + 1, total_units, f"Ready hosted keyframe {i+1}/{len(key_times)}")
-        emit_checkpoint(stage="keyframes", status="running", message=f"Ready hosted keyframe {i+1}/{len(key_times)}")
-
-    def _save_frame(img: Image.Image, fi: int, t: float) -> Path:
-        if timeline:
-            img = apply_timeline_layers(img, project_dir=project_dir, timeline=timeline, t=t)
-        p = _frame_path(out_frames, fi)
-        img.save(p)
-        return p
-
-    for fi in range(total_frames):
-        if cancel_check_fn:
-            cancel_check_fn()
-        t = fi / fps_r
-        existing = _frame_path(out_frames, fi)
-        if settings.resume_existing_frames and existing.exists():
-            if progress_fn:
-                progress_fn("frames", len(key_times) + fi + 1, total_units, f"Reusing hosted frame {fi+1}/{total_frames}")
-            emit_checkpoint(stage="frames", status="running", message=f"Reusing hosted frame {fi+1}/{total_frames}", frame_event="reused", reused_delta=1)
-            continue
-
-        a, _b, _w = _key_times_bracket(key_times, t)
-        src = key_imgs[a]
-        zoom, pan_x, pan_y, rot = _camera_at_time(
-            t,
-            timeline=timeline,
-            fallback_interval_s=settings.keyframe_interval_s,
-            deforum_motion=deforum_context.motion,
-            fps=fps_schedule,
-        )
-        fr = _ken_burns_frame(src, out_w, out_h, zoom=zoom, pan_x=pan_x, pan_y=pan_y, rotation_deg=rot)
-        _save_frame(fr, fi, t)
-        if progress_fn:
-            progress_fn("frames", len(key_times) + fi + 1, total_units, f"Rendered hosted frame {fi+1}/{total_frames}")
-        emit_checkpoint(stage="frames", status="running", message=f"Rendered hosted frame {fi+1}/{total_frames}", frame_event="rendered", rendered_delta=1)
-        if log_fn and fi % max(1, fps_r * 3) == 0:
-            log_fn(f"Rendered hosted frame {fi+1}/{total_frames}")
-
-    if cancel_check_fn:
-        cancel_check_fn()
-
-    raw_mp4.parent.mkdir(parents=True, exist_ok=True)
-    if settings.resume_existing_frames and cache_info["frames_complete"] and raw_mp4.exists():
-        if progress_fn:
-            progress_fn("assembling", total_units - 2, total_units, f"Reusing hosted raw MP4 {raw_mp4.name}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Reusing hosted raw MP4 {raw_mp4.name}", extra_outputs={"raw_exists": True})
-        if log_fn:
-            log_fn(f"Reusing hosted raw MP4 {raw_mp4.name}")
-    else:
-        if progress_fn:
-            progress_fn("assembling", total_units - 2, total_units, "Assembling hosted raw MP4")
-        emit_checkpoint(stage="assembling", status="running", force=True, message="Assembling hosted raw MP4")
-        if log_fn:
-            log_fn("Assembling hosted raw MP4 from rendered frames")
-        assemble_image_sequence(
-            ffmpeg_path=ffmpeg_path,
-            frames_dir=out_frames,
-            out_mp4=raw_mp4,
-            fps=fps_r,
-            glob_pattern="frame_*.png",
-            audio_path=None,
-        )
-
-    if cancel_check_fn:
-        cancel_check_fn()
-
-    if int(settings.fps_output) == int(fps_r):
-        if not interp_mp4.exists() or interp_mp4.stat().st_mtime < raw_mp4.stat().st_mtime:
-            interp_mp4.write_bytes(raw_mp4.read_bytes())
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Keeping FPS at {int(settings.fps_output)}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Keeping FPS at {int(settings.fps_output)}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": True})
-    elif settings.resume_existing_frames and interp_mp4.exists() and raw_mp4.exists() and interp_mp4.stat().st_mtime >= raw_mp4.stat().st_mtime:
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Reusing hosted interpolated MP4 {interp_mp4.name}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Reusing hosted interpolated MP4 {interp_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": True})
-    else:
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Interpolating to {int(settings.fps_output)} fps")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Interpolating to {int(settings.fps_output)} fps", extra_outputs={"raw_exists": raw_mp4.exists()})
-        interpolate_video_fps(
-            ffmpeg_path=ffmpeg_path,
-            in_mp4=raw_mp4,
-            out_mp4=interp_mp4,
-            fps_out=int(settings.fps_output),
-            engine=settings.interpolation_engine,
-        )
-
-    if cancel_check_fn:
-        cancel_check_fn()
-
-    if settings.resume_existing_frames and final_mp4.exists():
-        final_mtime = final_mp4.stat().st_mtime
-        audio_ok = (audio_path is None) or (not audio_path.exists()) or (final_mtime >= audio_path.stat().st_mtime)
-        interp_ok = interp_mp4.exists() and final_mtime >= interp_mp4.stat().st_mtime
-    else:
-        audio_ok = False
-        interp_ok = False
-
-    if audio_ok and interp_ok:
-        if progress_fn:
-            progress_fn("muxing", total_units, total_units, f"Reusing hosted final video {final_mp4.name}")
-        emit_checkpoint(stage="muxing", status="running", force=True, message=f"Reusing hosted final video {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists(), "final_exists": True})
-    else:
-        if progress_fn:
-            progress_fn("muxing", total_units, total_units, "Muxing audio and finalizing hosted video")
-        emit_checkpoint(stage="muxing", status="running", force=True, message="Muxing audio and finalizing hosted video", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists()})
-        if audio_path and audio_path.exists():
-            mux_audio(ffmpeg_path=ffmpeg_path, video_mp4=interp_mp4, audio_path=audio_path, out_mp4=final_mp4)
-        else:
-            final_mp4.write_bytes(interp_mp4.read_bytes())
-
-    meta = {
-        "work_tag": work_tag,
-        "completed_at": __import__("time").time(),
-        "variant_index": int(variant.get("index", 0)),
-        "render_mode": "hosted",
-        "hosted_provider": {
-            "service": service,
-            "model": model,
-            "style_preset": style_preset,
-            "output_format": output_format,
-            "strength": hosted_strength,
-            "cfg_scale": hosted_cfg_scale,
-        },
-        "settings": {
-            "fps_render": int(settings.fps_render),
-            "fps_output": int(settings.fps_output),
-            "width": int(settings.width),
-            "height": int(settings.height),
-            "keyframe_interval_s": float(settings.keyframe_interval_s),
-            "interpolation_engine": str(settings.interpolation_engine),
-            "temporal_mode": "keyframes",
-            "resume_existing_frames": bool(settings.resume_existing_frames),
-            "model_id": str(settings.model_id),
-        },
-        "frames": {
-            "expected": int(total_frames),
-            "present": len(list(out_frames.glob("frame_*.png"))),
-            "dir": str(out_frames),
-        },
-        "outputs": {
-            "raw_mp4": str(raw_mp4),
-            "interp_mp4": str(interp_mp4),
-            "final_mp4": str(final_mp4),
-            "checkpoint_json": str(checkpoint_json),
-        },
-        "timeline_digest": _json_digest(_timeline_render_fingerprint(timeline)),
-        "scene_digest": _json_digest(scenes or []),
-    }
-    try:
-        meta_json.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-    emit_checkpoint(stage="complete", status="complete", force=True, final=True, message=f"Hosted render complete: {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists(), "final_exists": final_mp4.exists()})
-    if log_fn:
-        log_fn(f"Hosted render complete: {final_mp4.name}")
-    return final_mp4
-
-
-def _proxy_scene_at_time(scenes: list[dict[str, Any]], t: float) -> dict[str, Any] | None:
-    for sc in scenes or []:
-        try:
-            start = float(sc.get("start_s", 0.0) or 0.0)
-            end = float(sc.get("end_s", start) or start)
-        except Exception:
-            continue
-        if start <= t < max(start, end):
-            return sc
-    return (scenes or [None])[-1]
-
-
-def _proxy_palette(prompt: str) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]:
-    raw = hashlib.sha1((prompt or "proxy").encode("utf-8", errors="ignore")).digest()
-    a = (40 + raw[0] % 80, 40 + raw[1] % 80, 60 + raw[2] % 80)
-    b = (100 + raw[3] % 100, 80 + raw[4] % 100, 100 + raw[5] % 100)
-    c = (180 + raw[6] % 60, 160 + raw[7] % 60, 180 + raw[8] % 60)
-    return a, b, c
-
-
-def _wrap_text(text: str, width: int = 28) -> list[str]:
-    words = [w for w in re.split(r"\s+", (text or "").strip()) if w]
-    if not words:
-        return []
-    lines: list[str] = []
-    line = words[0]
-    for w in words[1:]:
-        if len(line) + 1 + len(w) <= width:
-            line += " " + w
-        else:
-            lines.append(line)
-            line = w
-    lines.append(line)
-    return lines[:4]
-
-
-def _build_proxy_base_frame(
-    *,
-    width: int,
-    height: int,
-    t: float,
-    duration_s: float,
-    scene: dict[str, Any] | None,
-) -> Image.Image:
-    _require_pillow()
-    scene = scene or {}
-    prompt = str(scene.get("prompt") or scene.get("name") or "EDMG Studio draft proxy")
-    a, b, c = _proxy_palette(prompt)
-    img = Image.new("RGB", (int(width), int(height)), color=a)
-    px = img.load()
-    for y in range(int(height)):
-        mix = y / max(1, int(height) - 1)
-        row = tuple(int(a[i] * (1.0 - mix) + b[i] * mix) for i in range(3))
-        for x in range(int(width)):
-            px[x, y] = row
-    draw = ImageDraw.Draw(img) if ImageDraw is not None else None
-    font = ImageFont.load_default() if ImageFont is not None else None
-    if draw is not None:
-        band_h = max(44, int(height * 0.16))
-        draw.rectangle([(0, height - band_h), (width, height)], fill=(10, 10, 14))
-        prog = 0.0 if duration_s <= 0 else max(0.0, min(1.0, t / duration_s))
-        draw.rectangle([(0, height - 8), (int(width * prog), height)], fill=c)
-        scene_label = str(scene.get("name") or scene.get("emotion") or "Draft proxy")
-        draw.text((18, 18), scene_label[:48], fill=(245, 245, 245), font=font)
-        draw.text((18, height - band_h + 10), f"t={t:05.2f}s / {duration_s:05.2f}s", fill=(240, 240, 240), font=font)
-        for idx, line in enumerate(_wrap_text(prompt, width=30)):
-            draw.text((18, 50 + idx * 18), line, fill=(255, 255, 255), font=font)
-    return img
-
-
 def render_internal_proxy_video_variant(
     *,
     ffmpeg_path: str,
@@ -2451,191 +1976,9 @@ def render_internal_proxy_video_variant(
     chunk_plan: dict[str, Any] | None = None,
     checkpoint_fn=None,
 ) -> Path:
-    """Render a local draft/proxy video with no diffusion dependency.
-
-    This keeps the EDMG Studio loop productive even when ComfyUI or internal SD
-    models are not installed yet. The proxy video visualizes pacing, scene prompt
-    changes, and timeline overlays/text/masks using only Pillow + FFmpeg.
-    """
-    _require_pillow()
-
-    out_w, out_h = settings.width, settings.height
-    fps_r = max(1, int(settings.fps_render))
-    fps_out = max(1, int(settings.fps_output))
-    duration_s = float(variant.get("duration_s") or _infer_duration(scenes))
-    total_frames = int(math.ceil(duration_s * fps_r))
-
-    work_tag = _build_proxy_work_tag(
-        variant_index=int(variant.get("index", 0)),
-        scenes=scenes,
-        timeline=timeline,
-        settings=settings,
+    raise RuntimeError(
+        "Proxy rendering is disabled by the NVIDIA-only profile. Use CUDA internal rendering or NVIDIA RTX/OpenUSD render jobs."
     )
-    out_frames = project_dir / "outputs" / "frames_proxy" / work_tag
-    out_frames.mkdir(parents=True, exist_ok=True)
-
-    cache_info = describe_proxy_render_cache(
-        project_dir=project_dir,
-        variant_index=int(variant.get("index", 0)),
-        scenes=scenes,
-        timeline=timeline,
-        settings=settings,
-        total_frames=total_frames,
-    )
-    total_units = max(1, total_frames + 3)
-    raw_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_raw.mp4"
-    interp_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}_interp.mp4"
-    final_mp4 = project_dir / "outputs" / "videos" / f"{work_tag}.mp4"
-    meta_json = project_dir / "outputs" / "videos" / f"{work_tag}.render.json"
-    checkpoint_json = project_dir / "outputs" / "videos" / f"{work_tag}.checkpoint.json"
-    emit_checkpoint = _build_checkpoint_emitter(
-        checkpoint_json=checkpoint_json,
-        project_dir=project_dir,
-        work_tag=work_tag,
-        render_mode="proxy",
-        variant_index=int(variant.get("index", 0)),
-        total_frames=total_frames,
-        fps_render=fps_r,
-        chunk_plan=chunk_plan,
-        checkpoint_fn=checkpoint_fn,
-    )
-
-    emit_checkpoint(stage="preparing", status="running", force=True, message="Preparing proxy render")
-
-    if settings.resume_existing_frames and final_mp4.exists():
-        final_mtime = final_mp4.stat().st_mtime
-        audio_ok = (audio_path is None) or (not audio_path.exists()) or (final_mtime >= audio_path.stat().st_mtime)
-        if audio_ok:
-            emit_checkpoint(stage="complete", status="complete", force=True, final=True, message=f"Reusing completed proxy render {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists(), "final_exists": True})
-            if progress_fn:
-                progress_fn("complete", total_units, total_units, f"Reusing completed proxy render {final_mp4.name}")
-            if log_fn:
-                log_fn(f"Reusing completed proxy render {final_mp4.name}")
-            return final_mp4
-
-    if log_fn:
-        log_fn(
-            f"Proxy render cache tag={work_tag} resume_existing_frames={'yes' if settings.resume_existing_frames else 'no'}"
-        )
-        log_fn(
-            f"Cache status frames={cache_info['frames_present']}/{cache_info['frames_expected']} "
-            f"raw={'yes' if cache_info['raw_exists'] else 'no'} "
-            f"interp={'yes' if cache_info['interp_exists'] else 'no'} "
-            f"final={'yes' if cache_info['final_exists'] else 'no'}"
-        )
-
-    for fi in range(total_frames):
-        if cancel_check_fn:
-            cancel_check_fn()
-        t = fi / fps_r
-        existing = _frame_path(out_frames, fi)
-        if settings.resume_existing_frames and existing.exists():
-            if progress_fn:
-                progress_fn("frames", fi + 1, total_units, f"Reusing proxy frame {fi+1}/{total_frames}")
-            emit_checkpoint(stage="frames", status="running", message=f"Reusing proxy frame {fi+1}/{total_frames}", frame_event="reused", reused_delta=1)
-            continue
-        scene = _proxy_scene_at_time(scenes, t)
-        img = _build_proxy_base_frame(width=out_w, height=out_h, t=t, duration_s=duration_s, scene=scene)
-        try:
-            img = apply_timeline_layers(img, project_dir=project_dir, timeline=(timeline or {}), t=float(t))
-        except Exception:
-            pass
-        img.save(existing)
-        if progress_fn:
-            progress_fn("frames", fi + 1, total_units, f"Rendered proxy frame {fi+1}/{total_frames}")
-        emit_checkpoint(stage="frames", status="running", message=f"Rendered proxy frame {fi+1}/{total_frames}", frame_event="rendered", rendered_delta=1)
-        if log_fn and fi % max(1, fps_r * 4) == 0:
-            log_fn(f"Rendered proxy frame {fi+1}/{total_frames}")
-
-    raw_mp4.parent.mkdir(parents=True, exist_ok=True)
-    if settings.resume_existing_frames and cache_info["frames_complete"] and raw_mp4.exists():
-        if progress_fn:
-            progress_fn("assembling", total_units - 2, total_units, f"Reusing proxy raw MP4 {raw_mp4.name}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Reusing proxy raw MP4 {raw_mp4.name}", extra_outputs={"raw_exists": True})
-    else:
-        if progress_fn:
-            progress_fn("assembling", total_units - 2, total_units, "Assembling proxy raw MP4")
-        emit_checkpoint(stage="assembling", status="running", force=True, message="Assembling proxy raw MP4")
-        assemble_image_sequence(
-            ffmpeg_path=ffmpeg_path,
-            frames_dir=out_frames,
-            out_mp4=raw_mp4,
-            fps=fps_r,
-            glob_pattern="frame_*.png",
-            audio_path=None,
-        )
-
-    if fps_out == fps_r:
-        if not interp_mp4.exists() or interp_mp4.stat().st_mtime < raw_mp4.stat().st_mtime:
-            interp_mp4.write_bytes(raw_mp4.read_bytes())
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Keeping proxy FPS at {fps_out}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Keeping proxy FPS at {fps_out}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": True})
-    elif settings.resume_existing_frames and interp_mp4.exists() and interp_mp4.stat().st_mtime >= raw_mp4.stat().st_mtime:
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Reusing interpolated proxy MP4 {interp_mp4.name}")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Reusing interpolated proxy MP4 {interp_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": True})
-    else:
-        if progress_fn:
-            progress_fn("assembling", total_units - 1, total_units, f"Interpolating proxy render to {fps_out} fps")
-        emit_checkpoint(stage="assembling", status="running", force=True, message=f"Interpolating proxy render to {fps_out} fps", extra_outputs={"raw_exists": raw_mp4.exists()})
-        interpolate_video_fps(
-            ffmpeg_path=ffmpeg_path,
-            in_mp4=raw_mp4,
-            out_mp4=interp_mp4,
-            fps_out=fps_out,
-            engine=settings.interpolation_engine,
-        )
-
-    if audio_path and audio_path.exists():
-        if progress_fn:
-            progress_fn("muxing", total_units, total_units, "Muxing proxy render audio")
-        emit_checkpoint(stage="muxing", status="running", force=True, message="Muxing proxy render audio", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists()})
-        mux_audio(ffmpeg_path=ffmpeg_path, video_mp4=interp_mp4, audio_path=audio_path, out_mp4=final_mp4)
-    else:
-        final_mp4.write_bytes(interp_mp4.read_bytes())
-        if progress_fn:
-            progress_fn("muxing", total_units, total_units, f"Saved proxy render {final_mp4.name}")
-        emit_checkpoint(stage="muxing", status="running", force=True, message=f"Saved proxy render {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists()})
-
-    meta = {
-        "work_tag": work_tag,
-        "completed_at": __import__("time").time(),
-        "variant_index": int(variant.get("index", 0)),
-        "render_mode": "proxy",
-        "settings": {
-            "fps_render": int(settings.fps_render),
-            "fps_output": int(settings.fps_output),
-            "width": int(settings.width),
-            "height": int(settings.height),
-            "interpolation_engine": str(settings.interpolation_engine),
-            "resume_existing_frames": bool(settings.resume_existing_frames),
-            "model_id": str(settings.model_id or "proxy_draft"),
-        },
-        "frames": {
-            "expected": int(total_frames),
-            "present": len(list(out_frames.glob("frame_*.png"))),
-            "dir": str(out_frames),
-        },
-        "outputs": {
-            "raw_mp4": str(raw_mp4),
-            "interp_mp4": str(interp_mp4),
-            "final_mp4": str(final_mp4),
-            "checkpoint_json": str(checkpoint_json),
-        },
-        "timeline_digest": _json_digest(_timeline_render_fingerprint(timeline)),
-        "scene_digest": _json_digest(scenes or []),
-    }
-    try:
-        meta_json.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-    emit_checkpoint(stage="complete", status="complete", force=True, final=True, message=f"Proxy render complete: {final_mp4.name}", extra_outputs={"raw_exists": raw_mp4.exists(), "interp_exists": interp_mp4.exists(), "final_exists": final_mp4.exists()})
-    if log_fn:
-        log_fn(f"Proxy render complete: {final_mp4.name}")
-
-    return final_mp4
-
 
 
 def render_internal_diffusion_preview_segment(

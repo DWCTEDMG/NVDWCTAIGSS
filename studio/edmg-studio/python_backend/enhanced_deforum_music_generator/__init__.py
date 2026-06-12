@@ -1,6 +1,6 @@
 """Enhanced Deforum Music Generator (EDMG) — embedded engine.
 
-This package is vendored into EDMG Studio and used as a backend library.
+This package is vendored into EDMG NVIDIA Workshop and used as a backend library.
 Standalone UI entrypoints are intentionally not shipped.
 """
 

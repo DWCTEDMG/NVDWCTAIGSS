@@ -70,10 +70,8 @@ from .services.internal_video import (
     InternalVideoSettings,
     _scene_keyframe_times,
     describe_internal_render_cache,
-    describe_proxy_render_cache,
     render_internal_still_image,
     render_internal_video_variant,
-    render_internal_proxy_video_variant,
     render_internal_diffusion_preview_segment,
 )
 from .services.compositor import apply_timeline_layers
@@ -84,12 +82,7 @@ from .utils.path import safe_join
 from .errors import UserFacingError, hint_from_exception
 from .services.model_manager import ModelManager
 from .services.secrets import SecretStore
-from .services.render_settings import (
-    RenderSettingsStore,
-    STABILITY_SD3_MODELS,
-    STABILITY_SERVICES,
-    STABILITY_STYLE_PRESETS,
-)
+from .services.render_settings import RenderSettingsStore
 from .services.nvidia_profile import nvidia_profile_status
 from .services.nvidia_diagnostics import nvidia_diagnostics, nvidia_host_gpu_status
 from .services.nvidia_optional_services import (
@@ -194,7 +187,7 @@ async def _app_lifespan(_app: FastAPI):
             pass
 
 
-app = FastAPI(title="EDMG Studio Backend", version="1.1.0", lifespan=_app_lifespan)
+app = FastAPI(title="EDMG NVIDIA Workshop Backend", version="1.1.0", lifespan=_app_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -228,7 +221,7 @@ def _require_multipart() -> None:
     if not HAS_MULTIPART:
         raise UserFacingError(
             "File upload support is unavailable because python-multipart is not installed.",
-            hint="Install backend dependencies with `pip install -e .` or add `python-multipart`, then restart EDMG Studio.",
+            hint="Install backend dependencies with `pip install -e .` or add `python-multipart`, then restart EDMG NVIDIA Workshop.",
             code="MISSING_MULTIPART",
             status_code=503,
         )
@@ -360,7 +353,7 @@ def _extract_comfy_checkpoint_names(object_info: dict[str, Any] | None) -> list[
 def _resolve_comfy_checkpoint_name(
     preferred: str | None,
     *,
-    allow_auto_fallback: bool,
+    allow_auto_selection: bool,
 ) -> tuple[str, str | None]:
     requested = str(preferred or settings.comfyui_checkpoint or "").strip()
     available: list[str] = []
@@ -374,11 +367,11 @@ def _resolve_comfy_checkpoint_name(
                 available.append(name)
     if requested and requested in available:
         return requested, None
-    if allow_auto_fallback and available:
-        fallback = available[0]
-        if fallback != requested:
-            return fallback, requested or None
-        return fallback, None
+    if allow_auto_selection and available:
+        selected = available[0]
+        if selected != requested:
+            return selected, requested or None
+        return selected, None
     return requested, None
 
 
@@ -423,9 +416,9 @@ def _resolve_comfy_still_selection(
         )
         if materialized_checkpoint:
             catalog_checkpoint = materialized_checkpoint
-    chosen_checkpoint, fallback_checkpoint = _resolve_comfy_checkpoint_name(
+    chosen_checkpoint, substituted_checkpoint = _resolve_comfy_checkpoint_name(
         explicit_checkpoint or catalog_checkpoint or settings.comfyui_checkpoint,
-        allow_auto_fallback=not explicit_checkpoint and not catalog_checkpoint,
+        allow_auto_selection=not explicit_checkpoint and not catalog_checkpoint,
     )
     family = str(workflow_family or "auto").strip().lower()
     supported_families = {"auto", "txt2img", "img2img", "inpaint", "outpaint", "controlnet"}
@@ -481,7 +474,7 @@ def _resolve_comfy_still_selection(
     return {
         "entry": entry,
         "checkpoint": chosen_checkpoint,
-        "checkpoint_fallback_from": fallback_checkpoint,
+        "checkpoint_substituted_from": substituted_checkpoint,
         "workflow_family": family,
         "controlnet_name": controlnet_name or None,
         "conditioning_mode": str(
@@ -513,9 +506,9 @@ def _resolve_comfy_motion_selection(
         )
         if materialized_checkpoint:
             catalog_checkpoint = materialized_checkpoint
-    base_checkpoint, fallback_checkpoint = _resolve_comfy_checkpoint_name(
+    base_checkpoint, substituted_checkpoint = _resolve_comfy_checkpoint_name(
         explicit_checkpoint or catalog_checkpoint or settings.comfyui_checkpoint,
-        allow_auto_fallback=not explicit_checkpoint and not catalog_checkpoint,
+        allow_auto_selection=not explicit_checkpoint and not catalog_checkpoint,
     )
 
     svd_entry = _catalog_entry(svd_model_id)
@@ -539,7 +532,7 @@ def _resolve_comfy_motion_selection(
         "entry": entry,
         "svd_entry": svd_entry,
         "checkpoint": base_checkpoint,
-        "checkpoint_fallback_from": fallback_checkpoint,
+        "checkpoint_substituted_from": substituted_checkpoint,
         "svd_checkpoint": resolved_svd,
     }
 
@@ -1354,7 +1347,7 @@ def _enqueue_internal_job_from_source(project_id: str, source_job: Any, *, resum
 
     preflight = _internal_render_preflight_data(project_id, payload)
     mode = str(preflight.get("mode") or payload.get("render_mode") or "auto")
-    model_id = str(preflight.get("model_id") or payload.get("model_id") or ("proxy_draft" if mode == "proxy" else "auto"))
+    model_id = str(preflight.get("model_id") or payload.get("model_id") or "auto")
     checkpoint = _runtime_checkpoint_from_job(project_id, source_job)
     total = max(1, int(preflight.get("estimated_frames", 1)) + 3)
     job = jobs.create(project_id, "internal_video", payload)
@@ -1370,7 +1363,7 @@ def _enqueue_internal_job_from_source(project_id: str, source_job: Any, *, resum
         "percent": 0.0,
         "message": message,
         **_job_checkpoint_extra(
-            "proxy" if mode == "proxy" else "internal",
+            "internal",
             model_id,
             checkpoint,
             queue_action=queue_action,
@@ -1561,20 +1554,6 @@ def _pick_windows_accel_gpu() -> dict[str, Any] | None:
     return ordered[0] if ordered else None
 
 
-def _directml_runtime_status() -> dict[str, Any]:
-    return {
-        "available": False,
-        "runtime_ready": False,
-        "provider": "DmlExecutionProvider",
-        "providers": [],
-        "device_name": None,
-        "vendor": None,
-        "vram_gb": 0.0,
-        "integrated": False,
-        "error": "DirectML is disabled by the NVIDIA-only profile.",
-    }
-
-
 def _backend_family_for(backend: str, *, integrated: bool = False) -> str:
     backend_l = str(backend or "nvidia_cuda_required").lower()
     if backend_l in {"cuda"}:
@@ -1623,7 +1602,7 @@ def _build_internal_render_plan(hw: dict[str, Any] | None = None, *, requested_t
         recommended = "draft"
         max_supported = "draft"
         device_preference = "cuda"
-        notes.append("NVIDIA CUDA runtime is required; CPU, MPS, and DirectML render paths are disabled.")
+        notes.append("NVIDIA CUDA runtime is required; non-CUDA render paths are disabled.")
 
     requested = str(requested_tier or "auto").strip().lower()
     if requested not in {"auto", "draft", "balanced", "quality"}:
@@ -1681,9 +1660,6 @@ def _hardware_profile() -> dict[str, Any]:
         "machine": platform.machine().lower(),
         "integrated_acceleration": False,
         "gpu_vendor": None,
-        "supports_directml": False,
-        "directml_runtime_ready": False,
-        "directml_device_name": None,
         "cuda_runtime_ready": False,
         "host_gpu_visible": False,
         "host_gpu_name": None,
@@ -1815,40 +1791,8 @@ def _render_provider_status(hw: dict[str, Any] | None = None) -> dict[str, Any]:
             or os.getenv("EDMG_AI_OPENAI_COMPAT_BASE_URL", "http://127.0.0.1:8001/v1"),
             "planner_model": os.getenv("EDMG_AI_OPENAI_COMPAT_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1.5"),
         },
-        "stability": {
-            "provider": "stability",
-            "configured": False,
-            "enabled": False,
-            "visible": False,
-            "has_api_key": False,
-            "allow_auto_fallback": False,
-            "service": "",
-            "model": "",
-            "style_preset": "none",
-            "output_format": "png",
-            "supports_video_api": False,
-            "note": "Disabled by the NVIDIA-only profile.",
-        },
-        "directml": {
-            "provider": "onnxruntime-directml",
-            "enabled": False,
-            "available": False,
-            "active": False,
-            "runtime_ready": False,
-            "device_name": None,
-            "preferred_model": "auto",
-            "allow_auto_selection": False,
-            "note": "Disabled by the NVIDIA-only profile.",
-        },
-        "stability_services": [],
-        "stability_models": [],
-        "style_presets": [],
         "hardware": hw,
     }
-
-
-def _hosted_stability_ready(payload: dict[str, Any] | None = None) -> bool:
-    return False
 
 
 @app.get("/v1/settings/render_providers")
@@ -2008,15 +1952,15 @@ def setup_status():
 
     # ComfyUI availability
     try:
-        resolved_checkpoint, fallback_from = _resolve_comfy_checkpoint_name(
+        resolved_checkpoint, substituted_from = _resolve_comfy_checkpoint_name(
             settings.comfyui_checkpoint,
-            allow_auto_fallback=True,
+            allow_auto_selection=True,
         )
         diag = comfy_pool.diagnose({"checkpoint": resolved_checkpoint})
         comfy_ok = bool(diag.get("compatible") or diag.get("busy_compatible"))
-        if comfy_ok and fallback_from:
+        if comfy_ok and substituted_from:
             comfy_hint = (
-                f"Configured checkpoint `{fallback_from}` is unavailable; Studio will use `{resolved_checkpoint}` until the configured checkpoint is installed."
+                f"Configured checkpoint `{substituted_from}` is unavailable; Workshop will use `{resolved_checkpoint}` until the configured checkpoint is installed."
             )
         else:
             comfy_hint = None if comfy_ok else (
@@ -2029,7 +1973,7 @@ def setup_status():
             "url": settings.resolved_comfyui_urls()[0] if settings.resolved_comfyui_urls() else settings.comfyui_url,
             "checkpoint": resolved_checkpoint,
             "requested_checkpoint": settings.comfyui_checkpoint,
-            "checkpoint_fallback_from": fallback_from,
+            "checkpoint_substituted_from": substituted_from,
             "diagnose": diag,
             "portable_installed": comfy_portable_installed(settings.external_dir, settings.data_dir),
             "hint": comfy_hint,
@@ -2095,40 +2039,6 @@ def setup_task_cancel(task_id: str):
         raise HTTPException(404, f"Setup task not found: {task_id}")
     return {"ok": True, "task": task.to_dict()}
 
-
-@app.post("/v1/setup/ollama/install_managed")
-def setup_ollama_install_managed():
-    raise UserFacingError(
-        "Ollama setup is disabled in the NVIDIA-only profile.",
-        hint="Use deployment/nvidia/start_nvidia_runtime_local.ps1 so planning goes through NVIDIA NIM.",
-        code="NVIDIA_ONLY_PROFILE",
-        status_code=400,
-    )
-
-
-@app.post("/v1/setup/ollama/download_and_run")
-def setup_ollama_download_and_run():
-    return setup_ollama_install_managed()
-
-
-@app.post("/v1/setup/ollama/start_managed")
-def setup_ollama_start_managed():
-    raise UserFacingError(
-        "Ollama startup is disabled in the NVIDIA-only profile.",
-        hint="Start the NVIDIA runtime profile instead.",
-        code="NVIDIA_ONLY_PROFILE",
-        status_code=400,
-    )
-
-
-@app.post("/v1/setup/ollama/pull")
-def setup_ollama_pull(payload: dict[str, Any]):
-    raise UserFacingError(
-        "Ollama model pulls are disabled in the NVIDIA-only profile.",
-        hint="Configure EDMG_NVIDIA_NIM_URL and EDMG_AI_OPENAI_COMPAT_MODEL for NVIDIA NIM.",
-        code="NVIDIA_ONLY_PROFILE",
-        status_code=400,
-    )
 
 @app.post("/v1/setup/7zip/install")
 def setup_7zip_install():
@@ -5375,6 +5285,11 @@ def _build_render_conductor_intent(project_id: str, proj: Any, req: RenderConduc
     quality_tier = str(req.quality_tier or _render_quality_tier_from_preset(req.preset))
     dna = _load_project_visual_dna(proj)
     continuity_default = 0.8 if list(dna.continuity.subject_anchors or []) else 0.72
+    nvidia_allowed_engines = [
+        engine
+        for engine in list(req.allowed_engines or [])
+        if engine in {"internal", "comfyui_still", "comfyui_motion", "deforum_export"}
+    ] or ["internal", "comfyui_still", "comfyui_motion", "deforum_export"]
     return RenderIntent.model_validate(
         {
             "project_id": project_id,
@@ -5385,7 +5300,7 @@ def _build_render_conductor_intent(project_id: str, proj: Any, req: RenderConduc
             "continuity_priority": continuity_default if req.continuity_priority is None else req.continuity_priority,
             "speed_priority": _default_speed_priority(quality_tier) if req.speed_priority is None else req.speed_priority,
             "style_lock_strength": 0.8 if req.style_lock_strength is None else req.style_lock_strength,
-            "allowed_engines": list(req.allowed_engines or []),
+            "allowed_engines": nvidia_allowed_engines,
             "fallback_policy": req.fallback_policy,
             "sections": [section.model_dump(mode="json") for section in list(req.sections or [])],
         }
@@ -5408,7 +5323,7 @@ def _build_render_conductor_environment() -> dict[str, Any]:
         internal_quality = 0.0
         internal_speed = 0.0
 
-    ckpt, _fallback = _resolve_comfy_checkpoint_name(settings.comfyui_checkpoint, allow_auto_fallback=True)
+    ckpt, _substituted_from = _resolve_comfy_checkpoint_name(settings.comfyui_checkpoint, allow_auto_selection=True)
     try:
         base_diag = comfy_pool.diagnose({"checkpoint": ckpt})
     except Exception:
@@ -5473,16 +5388,6 @@ def _build_render_conductor_environment() -> dict[str, Any]:
                 "available": bool(ad_ok or svd_ok),
                 "quality_score": 0.8 if ad_ok else 0.74,
                 "speed_score": 0.62 if ad_ok else 0.57,
-            },
-            "hosted_video": {
-                "available": False,
-                "quality_score": 0.78,
-                "speed_score": 0.82,
-            },
-            "proxy": {
-                "available": False,
-                "quality_score": 0.38,
-                "speed_score": 0.95,
             },
             "deforum_export": {
                 "available": deforum_ok,
@@ -5939,8 +5844,6 @@ def _storyboard_movie_payload_from_request(
         "refine_every_n_frames": int(defaults.get("refine_every_n_frames") or 1),
         "anchor_strength": float(defaults.get("anchor_strength") or 0.20),
         "prompt_blend": bool(defaults.get("prompt_blend", True)),
-        "allow_hosted_fallback": False,
-        "allow_proxy_fallback": False,
         "resume_existing_frames": bool(req.resume_existing_frames),
         "storyboard_movie": {
             "source": "ai_storyboard",
@@ -7174,283 +7077,6 @@ def _run_comfyui_motion_scene(project_id: str, job_id: str, payload: dict[str, A
 
 def _run_internal_video(project_id: str, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     preflight = _internal_render_preflight_data(project_id, payload)
-    if preflight.get("mode") in {"proxy", "hosted"}:
-        raise UserFacingError(
-            "Proxy and hosted render modes are disabled in the NVIDIA-only profile.",
-            hint="Use CUDA internal rendering or the NVIDIA RTX/OpenUSD render-job path.",
-            code="NVIDIA_ONLY_PROFILE",
-            status_code=400,
-        )
-        proj = store.get(project_id)
-        if not proj:
-            raise UserFacingError("Project not found", hint="Open Projects and select a valid project.")
-        plan = proj.meta.get("last_plan")
-        if not plan or not (plan.get("variants") or []):
-            raise UserFacingError("No plan generated", hint="Run Analyze + Plan first, then retry.")
-
-        variant_index = int(payload.get("variant_index", 0))
-        variants = plan["variants"]
-        if variant_index < 0 or variant_index >= len(variants):
-            raise UserFacingError("variant_index out of range", hint="Pick a valid variant index.")
-
-        variant = variants[variant_index]
-        scenes = variant.get("scenes") or []
-        pdir = store.project_dir(project_id)
-        audio_meta = proj.meta.get("audio")
-        audio_path: Path | None = None
-        if audio_meta and audio_meta.get("filename"):
-            audio_path = pdir / "assets" / "audio" / str(audio_meta["filename"])
-            if not audio_path.exists():
-                audio_path = None
-
-        settings_obj = _internal_settings_from_payload(
-            payload,
-            model_id="proxy_draft",
-            render_tier=str(payload.get("render_tier") or "auto"),
-            device_preference="cuda",
-            temporal_mode="off",
-        )
-
-        runtime_checkpoint: dict[str, Any] | None = None
-        chunk_plan = dict(((preflight.get("tier_plan") or {}).get("chunk_plan") or {}))
-        estimated_total = max(1, int(preflight.get("estimated_frames", 1)) + 3)
-
-        def _checkpoint(state: dict[str, Any]) -> None:
-            nonlocal runtime_checkpoint
-            runtime_checkpoint = dict(state or {})
-            latest = jobs.get(project_id, job_id)
-            latest_progress = latest.progress if latest and isinstance(latest.progress, dict) else {}
-            jobs.update_progress(
-                project_id,
-                job_id,
-                stage=str(latest_progress.get("stage") or runtime_checkpoint.get("stage") or "running"),
-                current=int(latest_progress.get("current", 0) or 0),
-                total=max(1, int(latest_progress.get("total", estimated_total) or estimated_total)),
-                message=str(latest_progress.get("message") or runtime_checkpoint.get("message") or ""),
-                extra=_job_checkpoint_extra("proxy", "proxy_draft", runtime_checkpoint),
-            )
-
-        def _check_canceled() -> None:
-            latest = jobs.get(project_id, job_id)
-            if latest and latest.status == "canceled":
-                jobs.update_progress(
-                    project_id,
-                    job_id,
-                    stage="canceled",
-                    current=int((latest.progress or {}).get("current", 0)),
-                    total=max(1, int((latest.progress or {}).get("total", estimated_total) or estimated_total)),
-                    message="Cancel requested — stopping after current step",
-                    extra=_job_checkpoint_extra("proxy", "proxy_draft", runtime_checkpoint),
-                )
-                raise JobCanceled("Proxy render canceled")
-
-        def _log(line: str) -> None:
-            _check_canceled()
-            jobs.append_log(project_id, job_id, line)
-
-        def _progress(stage: str, current: int, total: int, message: str | None = None) -> None:
-            _check_canceled()
-            jobs.update_progress(
-                project_id,
-                job_id,
-                stage=stage,
-                current=current,
-                total=total,
-                message=message,
-                extra=_job_checkpoint_extra("proxy", "proxy_draft", runtime_checkpoint),
-            )
-
-        _progress("starting", 0, estimated_total, "Starting proxy draft render")
-        variant2 = dict(variant)
-        variant2["index"] = variant_index
-        variant2["duration_s"] = _resolved_project_duration_s(proj, variant, scenes)
-
-        out = render_internal_proxy_video_variant(
-            ffmpeg_path=settings.ffmpeg_path,
-            project_dir=pdir,
-            variant=variant2,
-            scenes=scenes,
-            audio_path=audio_path,
-            settings=settings_obj,
-            timeline=(proj.meta.get("timeline") or None),
-            log_fn=_log,
-            progress_fn=_progress,
-            cancel_check_fn=_check_canceled,
-            chunk_plan=chunk_plan,
-            checkpoint_fn=_checkpoint,
-        )
-        checkpoint_summary = runtime_checkpoint or _load_render_checkpoint(out)
-
-        jobs.update_progress(
-            project_id,
-            job_id,
-            stage="complete",
-            current=estimated_total,
-            total=estimated_total,
-            message=f"Saved {out.name}",
-            extra=_job_checkpoint_extra("proxy", "proxy_draft", checkpoint_summary, video=str(out)),
-        )
-
-        rel_video = str(out.relative_to(pdir))
-        videos = proj.meta.setdefault("outputs", {}).setdefault("videos", [])
-        if rel_video not in videos:
-            videos.append(rel_video)
-        render_entry = {
-            "video": rel_video,
-            "model_id": "proxy_draft",
-            "mode": "proxy",
-            "fps_render": settings_obj.fps_render,
-            "fps_output": settings_obj.fps_output,
-            "temporal_mode": "off",
-            "resume_existing_frames": settings_obj.resume_existing_frames,
-            "variant_index": variant_index,
-            "completed_at": time.time(),
-            "preflight": preflight,
-            "runtime_checkpoint": checkpoint_summary,
-        }
-        proj.meta["last_internal_render"] = render_entry
-        hist = proj.meta.setdefault("internal_render_history", [])
-        hist.append(render_entry)
-        if isinstance(hist, list) and len(hist) > 20:
-            proj.meta["internal_render_history"] = hist[-20:]
-        store.save(proj)
-        return {"ok": True, "video": rel_video, "video_abs": str(out), "mode": "proxy", "preflight": preflight, "runtime_checkpoint": checkpoint_summary}
-
-    if preflight.get("mode") == "hosted":
-        provider_cfg = dict((render_settings.get().get("stability") or {}))
-        proj = store.get(project_id)
-        if not proj:
-            raise UserFacingError("Project not found", hint="Open Projects and select a valid project.")
-        plan = proj.meta.get("last_plan")
-        if not plan or not (plan.get("variants") or []):
-            raise UserFacingError("No plan generated", hint="Run Analyze + Plan first, then retry.")
-
-        variant_index = int(payload.get("variant_index", 0))
-        variants = plan["variants"]
-        if variant_index < 0 or variant_index >= len(variants):
-            raise UserFacingError("variant_index out of range", hint="Pick a valid variant index.")
-
-        variant = variants[variant_index]
-        scenes = variant.get("scenes") or []
-        pdir = store.project_dir(project_id)
-        audio_meta = proj.meta.get("audio")
-        audio_path: Path | None = None
-        if audio_meta and audio_meta.get("filename"):
-            audio_path = pdir / "assets" / "audio" / str(audio_meta["filename"])
-            if not audio_path.exists():
-                audio_path = None
-
-        hosted_payload = dict(payload)
-        hosted_payload.setdefault("cfg", provider_cfg.get("cfg_scale", 6.5))
-        hosted_payload.setdefault("temporal_strength", provider_cfg.get("strength", 0.55))
-        settings_obj = _internal_settings_from_payload(
-            hosted_payload,
-            model_id=str(preflight.get("model_id") or "stability:sd3:sd3.5-large-turbo"),
-            render_tier=str(payload.get("render_tier") or "auto"),
-            device_preference="cuda",
-            temporal_mode="keyframes" if str(payload.get("temporal_mode") or "frame_img2img") == "frame_img2img" else str(payload.get("temporal_mode") or "keyframes"),
-        )
-
-        runtime_checkpoint: dict[str, Any] | None = None
-        chunk_plan = dict(((preflight.get("tier_plan") or {}).get("chunk_plan") or {}))
-        estimated_total = max(1, int(preflight.get("estimated_frames", 1)) + 3)
-
-        def _checkpoint(state: dict[str, Any]) -> None:
-            nonlocal runtime_checkpoint
-            runtime_checkpoint = dict(state or {})
-            latest = jobs.get(project_id, job_id)
-            latest_progress = latest.progress if latest and isinstance(latest.progress, dict) else {}
-            jobs.update_progress(
-                project_id,
-                job_id,
-                stage=str(latest_progress.get("stage") or runtime_checkpoint.get("stage") or "running"),
-                current=int(latest_progress.get("current", 0) or 0),
-                total=max(1, int(latest_progress.get("total", estimated_total) or estimated_total)),
-                message=str(latest_progress.get("message") or runtime_checkpoint.get("message") or ""),
-                extra=_job_checkpoint_extra("hosted", settings_obj.model_id, runtime_checkpoint),
-            )
-
-        def _check_canceled() -> None:
-            latest = jobs.get(project_id, job_id)
-            if latest and latest.status == "canceled":
-                jobs.update_progress(
-                    project_id,
-                    job_id,
-                    stage="canceled",
-                    current=int((latest.progress or {}).get("current", 0)),
-                    total=max(1, int((latest.progress or {}).get("total", estimated_total) or estimated_total)),
-                    message="Cancel requested — stopping after current step",
-                    extra=_job_checkpoint_extra("hosted", settings_obj.model_id, runtime_checkpoint),
-                )
-                raise JobCanceled("Hosted render canceled")
-
-        def _log(line: str) -> None:
-            _check_canceled()
-            jobs.append_log(project_id, job_id, line)
-
-        def _progress(stage: str, current: int, total: int, message: str | None = None) -> None:
-            _check_canceled()
-            jobs.update_progress(
-                project_id,
-                job_id,
-                stage=stage,
-                current=current,
-                total=total,
-                message=message,
-                extra=_job_checkpoint_extra("hosted", settings_obj.model_id, runtime_checkpoint),
-            )
-
-        _log(
-            f"Hosted render: fps_render={settings_obj.fps_render} fps_output={settings_obj.fps_output} "
-            f"keyframe_interval_s={settings_obj.keyframe_interval_s} service={preflight.get('hosted_provider', {}).get('service')}"
-        )
-        if preflight.get("warnings"):
-            for warning in preflight["warnings"]:
-                _log(f"Warning: {warning}")
-
-        raise UserFacingError(
-            "Hosted Stability rendering is disabled in the NVIDIA-only profile.",
-            hint="Use NVIDIA RTX/OpenUSD render jobs or CUDA internal rendering.",
-            code="NVIDIA_ONLY_PROFILE",
-            status_code=400,
-        )
-        checkpoint_summary = runtime_checkpoint or _load_render_checkpoint(out)
-
-        jobs.update_progress(
-            project_id,
-            job_id,
-            stage="complete",
-            current=estimated_total,
-            total=estimated_total,
-            message=f"Saved {out.name}",
-            extra=_job_checkpoint_extra("hosted", settings_obj.model_id, checkpoint_summary, video=str(out)),
-        )
-
-        rel_video = str(out.relative_to(pdir))
-        videos = proj.meta.setdefault("outputs", {}).setdefault("videos", [])
-        if rel_video not in videos:
-            videos.append(rel_video)
-        render_entry = {
-            "video": rel_video,
-            "model_id": settings_obj.model_id,
-            "mode": "hosted",
-            "fps_render": settings_obj.fps_render,
-            "fps_output": settings_obj.fps_output,
-            "temporal_mode": settings_obj.temporal_mode,
-            "resume_existing_frames": settings_obj.resume_existing_frames,
-            "variant_index": variant_index,
-            "completed_at": time.time(),
-            "preflight": preflight,
-            "runtime_checkpoint": checkpoint_summary,
-            "hosted_provider": preflight.get("hosted_provider"),
-        }
-        proj.meta["last_internal_render"] = render_entry
-        hist = proj.meta.setdefault("internal_render_history", [])
-        hist.append(render_entry)
-        if isinstance(hist, list) and len(hist) > 20:
-            proj.meta["internal_render_history"] = hist[-20:]
-        store.save(proj)
-        return {"ok": True, "video": rel_video, "video_abs": str(out), "mode": "hosted", "preflight": preflight, "runtime_checkpoint": checkpoint_summary}
 
     proj, variant, model_id, model_path, settings_obj = _resolve_internal_render_request(project_id, payload)
     scenes = variant.get("scenes") or []
@@ -7869,7 +7495,7 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
     if requested_device not in {"auto", "cuda"}:
         raise UserFacingError(
             "Only NVIDIA CUDA device execution is supported by this profile.",
-            hint="Use device_preference='auto' or 'cuda'. CPU, MPS, and DirectML fallbacks are disabled.",
+            hint="Use device_preference='auto' or 'cuda'.",
             code="NVIDIA_ONLY_PROFILE",
             status_code=400,
         )
@@ -7950,225 +7576,6 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
         device_preference="cuda",
     )
     return proj, variant, model_id, model_path, settings_obj
-
-
-def _proxy_render_preflight_data(
-    project_id: str,
-    payload: dict[str, Any],
-    *,
-    reason: str | None = None,
-    requested_model_id: str | None = None,
-) -> dict[str, Any]:
-    proj = store.get(project_id)
-    if not proj:
-        raise UserFacingError("Project not found", hint="Open Projects and select a valid project.")
-    plan = proj.meta.get("last_plan")
-    if not plan or not (plan.get("variants") or []):
-        raise UserFacingError("No plan generated", hint="Run Analyze + Plan first, then retry.")
-
-    variant_index = int(payload.get("variant_index", 0))
-    variants = plan["variants"]
-    if variant_index < 0 or variant_index >= len(variants):
-        raise UserFacingError("variant_index out of range", hint="Pick a valid variant index.")
-
-    variant = variants[variant_index]
-    scenes = variant.get("scenes") or []
-    if not scenes:
-        raise UserFacingError("Selected variant has no scenes", hint="Re-run Plan with at least 1 scene.")
-
-    settings_obj = _internal_settings_from_payload(
-        payload,
-        model_id="proxy_draft",
-        render_tier=str(payload.get("render_tier") or "auto"),
-        device_preference="cuda",
-        temporal_mode="off",
-    )
-
-    duration_s = _resolved_project_duration_s(proj, variant, scenes)
-    total_frames = int(math.ceil(duration_s * max(1, int(settings_obj.fps_render))))
-    hw = _hardware_profile()
-    tier_plan = _build_internal_render_plan(hw, requested_tier=str(payload.get("render_tier") or "auto"), duration_s=duration_s)
-    tier_plan["chunk_plan"] = _build_render_chunk_plan(hw, applied_tier=str(tier_plan.get("applied_tier") or "draft"), duration_s=duration_s, total_frames=total_frames, fps_render=int(settings_obj.fps_render), render_mode="proxy")
-    cache = describe_proxy_render_cache(
-        project_dir=store.project_dir(project_id),
-        variant_index=variant_index,
-        scenes=scenes,
-        timeline=(proj.meta.get("timeline") or None),
-        settings=settings_obj,
-        total_frames=total_frames,
-    )
-    fallback_reason = (
-        "the requested internal diffusion model is unavailable for this render."
-        if reason
-        else "no internal diffusion model is installed."
-    )
-    warnings = [
-        f"Using proxy draft render because {fallback_reason}",
-        "Proxy mode renders pacing, prompts, and timeline overlays locally without ComfyUI or Diffusers.",
-    ]
-    if reason:
-        warnings.insert(0, reason)
-    return {
-        "ok": True,
-        "mode": "proxy",
-        "variant_index": variant_index,
-        "model_id": "proxy_draft",
-        "requested_model_id": str(requested_model_id or payload.get("model_id") or "auto"),
-        "model_path": None,
-        "duration_s": duration_s,
-        "estimated_frames": total_frames,
-        "estimated_keyframes": max(1, len(_scene_keyframe_times(scenes, settings_obj.keyframe_interval_s))),
-        "device": str(tier_plan.get("device_preference") or "cpu"),
-        "hardware": hw,
-        "tier_plan": tier_plan,
-        "resume_existing_frames": bool(settings_obj.resume_existing_frames),
-        "warnings": warnings,
-        "cache": cache,
-        "installed_internal_models": {
-            "hf_sd15_internal": bool(models.installed_path("hf_sd15_internal")),
-            "hf_sdxl_internal": bool(models.installed_path("hf_sdxl_internal")),
-            "hf_sd35_medium_internal": bool(models.installed_path("hf_sd35_medium_internal")),
-        },
-        "settings": {
-            "fps_render": settings_obj.fps_render,
-            "fps_output": settings_obj.fps_output,
-            "width": settings_obj.width,
-            "height": settings_obj.height,
-            "interpolation_engine": settings_obj.interpolation_engine,
-            "resume_existing_frames": settings_obj.resume_existing_frames,
-            "render_mode": "proxy",
-        },
-    }
-
-
-def _hosted_render_preflight_data(
-    project_id: str,
-    payload: dict[str, Any],
-    *,
-    reason: str | None = None,
-) -> dict[str, Any]:
-    raise UserFacingError(
-        "Hosted Stability rendering is disabled in the NVIDIA-only profile.",
-        hint="Use NVIDIA RTX/OpenUSD render jobs or NVIDIA service-backed rendering.",
-        code="NVIDIA_ONLY_PROFILE",
-        status_code=400,
-    )
-    provider_status = _render_provider_status()
-    stability = dict(provider_status.get("stability") or {})
-    provider_cfg = dict((provider_status.get("settings") or {}).get("stability") or {})
-    if not stability.get("configured"):
-        raise UserFacingError(
-            "Stability API key is not configured.",
-            hint="Open Settings and save a Stability API key, then retry the hosted render.",
-            code="STABILITY_API_KEY_MISSING",
-            status_code=400,
-        )
-    if not stability.get("enabled"):
-        raise UserFacingError(
-            "Hosted Stability fallback is disabled.",
-            hint="Open Settings and enable the Stability hosted fallback, then retry.",
-            code="STABILITY_HOSTED_DISABLED",
-            status_code=400,
-        )
-
-    proj = store.get(project_id)
-    if not proj:
-        raise UserFacingError("Project not found", hint="Open Projects and select a valid project.")
-    plan = proj.meta.get("last_plan")
-    if not plan or not (plan.get("variants") or []):
-        raise UserFacingError("No plan generated", hint="Run Analyze + Plan first, then retry.")
-
-    variant_index = int(payload.get("variant_index", 0))
-    variants = plan["variants"]
-    if variant_index < 0 or variant_index >= len(variants):
-        raise UserFacingError("variant_index out of range", hint="Pick a valid variant index.")
-
-    variant = variants[variant_index]
-    scenes = variant.get("scenes") or []
-    if not scenes:
-        raise UserFacingError("Selected variant has no scenes", hint="Re-run Plan with at least 1 scene.")
-
-    hosted_service = str(payload.get("hosted_service") or "default").strip().lower()
-    if hosted_service in {"", "default"}:
-        hosted_service = str(provider_cfg.get("service") or "sd3")
-    hosted_model = str(payload.get("hosted_model") or provider_cfg.get("model") or "sd3.5-large-turbo").strip().lower()
-    hosted_style = str(payload.get("hosted_style_preset") or provider_cfg.get("style_preset") or "none").strip().lower()
-    hosted_model_id = f"stability:{hosted_service}:{hosted_model if hosted_service == 'sd3' else 'default'}"
-
-    hosted_payload = dict(payload)
-    hosted_payload.setdefault("cfg", provider_cfg.get("cfg_scale", 6.5))
-    hosted_payload.setdefault("temporal_strength", provider_cfg.get("strength", 0.55))
-    settings_obj = _internal_settings_from_payload(
-        hosted_payload,
-        model_id=hosted_model_id,
-        render_tier=str(payload.get("render_tier") or "auto"),
-        device_preference="cuda",
-        temporal_mode="keyframes" if str(payload.get("temporal_mode") or "frame_img2img") == "frame_img2img" else str(payload.get("temporal_mode") or "keyframes"),
-    )
-
-    duration_s = _resolved_project_duration_s(proj, variant, scenes)
-    total_frames = int(math.ceil(duration_s * max(1, int(settings_obj.fps_render))))
-    keyframes = max(1, len(_scene_keyframe_times(scenes, settings_obj.keyframe_interval_s)))
-    hw = _hardware_profile()
-    tier_plan = _build_internal_render_plan(hw, requested_tier=str(payload.get("render_tier") or "auto"), duration_s=duration_s)
-    tier_plan["chunk_plan"] = _build_render_chunk_plan(hw, applied_tier=str(tier_plan.get("applied_tier") or "draft"), duration_s=duration_s, total_frames=total_frames, fps_render=int(settings_obj.fps_render), render_mode="hosted")
-    cache = describe_internal_render_cache(
-        project_dir=store.project_dir(project_id),
-        variant_index=variant_index,
-        variant=variant,
-        scenes=scenes,
-        timeline=(proj.meta.get("timeline") or None),
-        model_dir=Path(f"hosted_disabled/{hosted_service}/{hosted_model}"),
-        settings=settings_obj,
-        total_frames=total_frames,
-    )
-    warnings = [
-        "Hosted Stability mode generates keyframes through the public image API, then assembles and muxes the video locally.",
-        "Hosted mode does not call a public Stability video endpoint because one was not found in the current public API spec.",
-    ]
-    if reason:
-        warnings.insert(0, reason)
-    if str(payload.get("temporal_mode") or "frame_img2img") == "frame_img2img":
-        warnings.append("Frame img2img temporal mode is reduced to keyframe continuity in hosted mode to avoid per-frame API calls.")
-    return {
-        "ok": True,
-        "mode": "hosted",
-        "variant_index": variant_index,
-        "model_id": hosted_model_id,
-        "model_path": None,
-        "duration_s": duration_s,
-        "estimated_frames": total_frames,
-        "estimated_keyframes": keyframes,
-        "device": "hosted+local_ffmpeg",
-        "hardware": hw,
-        "tier_plan": tier_plan,
-        "resume_existing_frames": bool(settings_obj.resume_existing_frames),
-        "warnings": warnings,
-        "cache": cache,
-        "installed_internal_models": {
-            "hf_sd15_internal": bool(models.installed_path("hf_sd15_internal")),
-            "hf_sdxl_internal": bool(models.installed_path("hf_sdxl_internal")),
-            "hf_sd35_medium_internal": bool(models.installed_path("hf_sd35_medium_internal")),
-        },
-        "hosted_provider": {
-            "provider": "stability",
-            "service": hosted_service,
-            "model": hosted_model,
-            "style_preset": hosted_style,
-            "output_format": str(provider_cfg.get("output_format") or "png"),
-            "allow_auto_fallback": bool(provider_cfg.get("allow_auto_fallback", True)),
-        },
-        "settings": {
-            "fps_render": settings_obj.fps_render,
-            "fps_output": settings_obj.fps_output,
-            "width": settings_obj.width,
-            "height": settings_obj.height,
-            "interpolation_engine": settings_obj.interpolation_engine,
-            "resume_existing_frames": settings_obj.resume_existing_frames,
-            "render_mode": "hosted",
-            "render_tier": settings_obj.render_tier,
-        },
-    }
 
 
 def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -8449,7 +7856,7 @@ def _internal_diffusion_runtime_status() -> dict[str, Any]:
         return {"ok": False, "error": str(e), "diagnostics": ["internal_runtime=missing"]}
 
 
-def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> dict[str, Any]:
+def _recommend_cuda_internal_render(project_id: str, preset: str, *, reason: str) -> dict[str, Any]:
     hw = _hardware_profile()
     if str(hw.get("backend") or "").lower() != "cuda":
         raise UserFacingError(
@@ -8462,9 +7869,9 @@ def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> d
     requested_tier = "draft" if preset_l == "fast" else ("quality" if preset_l in ("quality", "ultra") else "auto")
     tier_plan = _build_internal_render_plan(hw, requested_tier=requested_tier)
     preferred = str(tier_plan.get("preferred_internal_model") or hw.get("preferred_internal_model") or "hf_sd15_internal")
-    fallbacks = [preferred, "hf_sd15_internal", "hf_sdxl_internal"]
+    candidate_model_ids = [preferred, "hf_sd15_internal", "hf_sdxl_internal"]
     runtime = _internal_diffusion_runtime_status()
-    picked = next((mid for mid in fallbacks if models.installed_path(mid)), None)
+    picked = next((mid for mid in candidate_model_ids if models.installed_path(mid)), None)
     if picked and runtime.get("ok"):
         return {
             "mode": "internal",
@@ -8491,19 +7898,19 @@ def _recommend_local_fallback(project_id: str, preset: str, *, reason: str) -> d
 
 
 def _recommend_pipeline(project_id: str, preset: str, mode: str = "auto", engine: str = "auto") -> dict[str, Any]:
-    ckpt, _fallback_from = _resolve_comfy_checkpoint_name(settings.comfyui_checkpoint, allow_auto_fallback=True)
+    ckpt, _substituted_from = _resolve_comfy_checkpoint_name(settings.comfyui_checkpoint, allow_auto_selection=True)
     mode_l = (mode or "auto").lower().strip()
     engine_l = (engine or "auto").lower().strip()
 
     if mode_l == "internal":
-        return _recommend_local_fallback(project_id, preset, reason="Internal mode requested.")
+        return _recommend_cuda_internal_render(project_id, preset, reason="Internal mode requested.")
 
     # Basic availability (any healthy node)
     base_diag = comfy_pool.diagnose({"checkpoint": ckpt})
     base_ok = bool(base_diag["compatible"] or base_diag["busy_compatible"])
     if not base_ok:
         if mode_l == "auto":
-            return _recommend_local_fallback(project_id, preset, reason="ComfyUI is not reachable.")
+            return _recommend_cuda_internal_render(project_id, preset, reason="ComfyUI is not reachable.")
         raise UserFacingError(
             message="ComfyUI is not reachable (no healthy nodes).",
             hint="Start ComfyUI, then confirm EDMG_COMFYUI_URL points to it (default http://127.0.0.1:8188).",
@@ -8652,7 +8059,6 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
             refine_every_n_frames=int(tier_defaults.get("refine_every_n_frames", 1)),
             anchor_strength=float(tier_defaults.get("anchor_strength", 0.20)),
             prompt_blend=bool(tier_defaults.get("prompt_blend", True)),
-            allow_proxy_fallback=False,
         )
         res = render_internal_video(project_id, internal_req)
         return {"ok": True, "mode": str(res.get("preflight", {}).get("mode") or "internal"), "job": res.get("job"), "preflight": res.get("preflight")}
@@ -8683,8 +8089,6 @@ def run_pipeline(project_id: str, variant_index: int = 0, preset: str = "balance
             refine_every_n_frames=int(tier_defaults.get("refine_every_n_frames", 1)),
             anchor_strength=float(tier_defaults.get("anchor_strength", 0.20)),
             prompt_blend=bool(tier_defaults.get("prompt_blend", True)),
-            allow_hosted_fallback=False,
-            allow_proxy_fallback=False,
         )
         res = render_internal_video(project_id, internal_req)
         effective_mode = str(res.get("preflight", {}).get("mode") or rec["mode"])

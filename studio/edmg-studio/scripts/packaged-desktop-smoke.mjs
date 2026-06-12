@@ -36,9 +36,9 @@ function bundledResourcePaths(appDir) {
 
 function resolveUnpackedApp(outputDir) {
   const candidates = [
-    path.join(outputDir, "win-unpacked", process.platform === "win32" ? "EDMG Studio.exe" : "EDMG Studio"),
-    path.join(outputDir, "linux-unpacked", "edmg-studio"),
-    path.join(outputDir, "mac", "EDMG Studio.app", "Contents", "MacOS", "EDMG Studio"),
+    path.join(outputDir, "win-unpacked", process.platform === "win32" ? "EDMG NVIDIA Workshop.exe" : "EDMG NVIDIA Workshop"),
+    path.join(outputDir, "linux-unpacked", "edmg-nvidia-workshop"),
+    path.join(outputDir, "mac", "EDMG NVIDIA Workshop.app", "Contents", "MacOS", "EDMG NVIDIA Workshop"),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {

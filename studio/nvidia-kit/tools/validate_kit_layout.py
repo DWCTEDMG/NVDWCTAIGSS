@@ -38,8 +38,8 @@ def validate_kit_layout(root: Path) -> list[str]:
         return errors
 
     package = app_config.get("package") if isinstance(app_config.get("package"), dict) else {}
-    if package.get("title") != "EDMG NVIDIA Studio":
-        errors.append("app package.title must be EDMG NVIDIA Studio")
+    if package.get("title") != "EDMG NVIDIA Workshop":
+        errors.append("app package.title must be EDMG NVIDIA Workshop")
 
     dependencies = app_config.get("dependencies") if isinstance(app_config.get("dependencies"), dict) else {}
     for ext_name in EXPECTED_EXTENSIONS:
@@ -91,7 +91,7 @@ def validate_kit_layout(root: Path) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate the EDMG NVIDIA Kit starter layout.")
+    parser = argparse.ArgumentParser(description="Validate the EDMG NVIDIA Workshop Kit layout.")
     parser.add_argument("root", nargs="?", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
 

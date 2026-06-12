@@ -48,7 +48,7 @@ def test_internal_preflight_rejects_proxy_fallback(tmp_path, monkeypatch):
     with pytest.raises(UserFacingError):
         studio_app._internal_render_preflight_data(
             proj.id,
-            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto", "allow_proxy_fallback": False},
+            {"variant_index": 0, "fps_render": 2, "fps_output": 24, "model_id": "auto"},
         )
 
 
@@ -71,7 +71,6 @@ def test_internal_preflight_rejects_proxy_for_incomplete_internal_model(tmp_path
                 "fps_render": 2,
                 "fps_output": 24,
                 "model_id": "hf_sd35_medium_internal",
-                "allow_proxy_fallback": False,
             },
         )
 
@@ -87,20 +86,9 @@ def test_run_pipeline_auto_rejects_proxy_when_comfy_and_models_missing(tmp_path,
         studio_app.run_pipeline(proj.id, variant_index=0, preset="balanced", mode="auto", engine="auto")
 
 
-def test_proxy_renderer_creates_video_and_metadata_without_ffmpeg(tmp_path, monkeypatch):
+def test_proxy_renderer_is_disabled_by_nvidia_profile(tmp_path):
     project_dir = tmp_path / "project"
     (project_dir / "outputs" / "videos").mkdir(parents=True, exist_ok=True)
-
-    def fake_assemble_image_sequence(*, frames_dir, out_mp4, fps, glob_pattern, audio_path=None, ffmpeg_path=None):
-        frames = sorted(frames_dir.glob(glob_pattern))
-        assert frames, "expected rendered frames"
-        out_mp4.write_bytes(b"raw-mp4")
-
-    def fake_interpolate_video_fps(*, in_mp4, out_mp4, fps_out, engine, ffmpeg_path=None):
-        out_mp4.write_bytes(in_mp4.read_bytes() + f"-fps{fps_out}".encode("utf-8"))
-
-    monkeypatch.setattr(internal_video_service, "assemble_image_sequence", fake_assemble_image_sequence)
-    monkeypatch.setattr(internal_video_service, "interpolate_video_fps", fake_interpolate_video_fps)
 
     settings = internal_video_service.InternalVideoSettings(
         fps_render=2,
@@ -108,35 +96,22 @@ def test_proxy_renderer_creates_video_and_metadata_without_ffmpeg(tmp_path, monk
         width=320,
         height=180,
         interpolation_engine="fps",
-        model_id="proxy_draft",
+        model_id="auto",
         resume_existing_frames=False,
     )
     variant = {"index": 0, "duration_s": 2.0}
     scenes = [{"start_s": 0.0, "end_s": 2.0, "prompt": "glowing tunnel"}]
 
-    out = internal_video_service.render_internal_proxy_video_variant(
-        ffmpeg_path="ffmpeg",
-        project_dir=project_dir,
-        variant=variant,
-        scenes=scenes,
-        audio_path=None,
-        settings=settings,
-        timeline={"layers": []},
-    )
-
-    assert out.exists()
-    assert out.read_bytes().startswith(b"raw-mp4")
-    meta_path = out.with_suffix(".render.json")
-    assert meta_path.exists()
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert meta["render_mode"] == "proxy"
-    assert meta["frames"]["expected"] == 4
-    checkpoint_path = out.with_suffix(".checkpoint.json")
-    assert checkpoint_path.exists()
-    checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-    assert checkpoint["status"] == "complete"
-    assert checkpoint["completed_frames"] == 4
-    assert checkpoint["outputs"]["final_exists"] is True
+    with pytest.raises(RuntimeError, match="Proxy rendering is disabled"):
+        internal_video_service.render_internal_proxy_video_variant(
+            ffmpeg_path="ffmpeg",
+            project_dir=project_dir,
+            variant=variant,
+            scenes=scenes,
+            audio_path=None,
+            settings=settings,
+            timeline={"layers": []},
+        )
 
 
 def test_resume_and_restart_routes_clone_internal_job_with_checkpoint(tmp_path, monkeypatch):
@@ -168,7 +143,6 @@ def test_resume_and_restart_routes_clone_internal_job_with_checkpoint(tmp_path, 
             "fps_output": 24,
             "render_mode": "auto",
             "model_id": "auto",
-            "allow_proxy_fallback": False,
             "resume_existing_frames": True,
         },
     )
@@ -222,8 +196,7 @@ def test_resume_route_rejects_running_internal_job(tmp_path, monkeypatch):
             "variant_index": 0,
             "fps_render": 2,
             "fps_output": 24,
-            "render_mode": "proxy",
-            "allow_proxy_fallback": False,
+            "render_mode": "internal",
         },
     )
     source.status = "running"
@@ -271,7 +244,7 @@ def test_job_detail_endpoint_returns_checkpoint_and_log_metadata(tmp_path, monke
         "frames": {"dir": "frames_dir"},
     }), encoding="utf-8")
 
-    job = jobs.create(proj.id, "internal_video", {"variant_index": 0, "render_mode": "proxy"})
+    job = jobs.create(proj.id, "internal_video", {"variant_index": 0, "render_mode": "internal"})
     job.status = "failed"
     job.result = {"video": video_rel}
     job.progress = {

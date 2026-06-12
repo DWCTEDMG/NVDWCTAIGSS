@@ -194,7 +194,7 @@ def _user_appdata_dir() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
 
 def _bootstrap_config_path() -> Path:
-    return _user_appdata_dir() / "EDMG Studio" / BOOTSTRAP_CONFIG_BASENAME
+    return _user_appdata_dir() / "EDMG NVIDIA Workshop" / BOOTSTRAP_CONFIG_BASENAME
 
 def _saved_path_if_usable(raw_value: str | None) -> Path | None:
     value = str(raw_value or "").strip()
@@ -248,7 +248,6 @@ def _default_nvidia_env() -> dict[str, str]:
         "EDMG_NVIDIA_RIVA_URL": DEFAULT_NVIDIA_RIVA_URL,
         "EDMG_NVIDIA_RIVA_ASR": "1",
         "EDMG_NVIDIA_RIVA_LANGUAGE_CODE": "en-US",
-        "EDMG_NVIDIA_RIVA_ASR_FALLBACK": "0",
         "EDMG_NVIDIA_TRITON_URL": DEFAULT_NVIDIA_TRITON_URL,
         "EDMG_NVIDIA_OMNIVERSE_URL": DEFAULT_NVIDIA_OMNIVERSE_URL,
     }
@@ -817,7 +816,7 @@ def _tail_file(path: Path, max_bytes: int = 200_000) -> str:
 
 
 def _parse_backend_url_from_logs(text: str) -> tuple[str, int] | None:
-    """Parse EDMG_BACKEND_URL marker from legacy Electron dev logs."""
+    """Parse EDMG_BACKEND_URL marker from desktop dev logs."""
     for pattern in (
         r"EDMG_BACKEND_URL=(https?://[^\s]+)",
         r"\[backend\][^\n]*?(https?://(?:127\.0\.0\.1|localhost):\d{4,5})",
@@ -833,18 +832,18 @@ def _parse_backend_url_from_logs(text: str) -> tuple[str, int] | None:
 
 
 class Launcher(tk.Tk):
-    """Installer-style launcher for EDMG NVIDIA Studio.
+    """Installer-style launcher for EDMG NVIDIA Workshop.
 
     Features:
-    - Migrates legacy .edmg_work and data/ into the canonical Studio data dir.
+    - Migrates legacy .edmg_work and data/ into the canonical Workshop data dir.
     - Port doctor + attach/switch/optional safe terminate.
     - Silent fix mode (attach/switch only; never kills processes).
-    - Launches the NVIDIA Kit runtime; legacy Electron dev UI remains optional.
+    - Launches the merged NVIDIA Workshop runtime.
     """
 
     def __init__(self):
         super().__init__()
-        self.title("EDMG NVIDIA Studio Launcher")
+        self.title("EDMG NVIDIA Workshop Launcher")
         self.geometry("920x620")
         self.minsize(920, 620)
 
@@ -977,11 +976,11 @@ class Launcher(tk.Tk):
             self.var_data_dir.set(str(self.data_dir))
 
         if hasattr(self, "txt"):
-            self._log(f"Studio home set ({reason}): {self.studio_home}")
+            self._log(f"Workshop home set ({reason}): {self.studio_home}")
             if migration_queued:
-                self._log("Existing Studio data will migrate into the new home on the next Studio launch.")
+                self._log("Existing Workshop data will migrate into the new home on the next Workshop launch.")
             if (self.backend_proc and self.backend_proc.poll() is None) or (self.studio_proc and self.studio_proc.poll() is None):
-                self._log("Restart the running backend/Studio to apply the new storage location.")
+                self._log("Restart the running backend/Workshop to apply the new storage location.")
 
     def _build_ui(self) -> None:
         frm = ttk.Frame(self, padding=12)
@@ -989,8 +988,8 @@ class Launcher(tk.Tk):
 
         top = ttk.Frame(frm)
         top.pack(fill="x")
-        ttk.Label(top, text="EDMG NVIDIA Studio", font=("Segoe UI", 16, "bold")).pack(side="left")
-        ttk.Label(top, text="Kit + NVIDIA services launcher (no CLI typing)", foreground="#555").pack(side="left", padx=12)
+        ttk.Label(top, text="EDMG NVIDIA Workshop", font=("Segoe UI", 16, "bold")).pack(side="left")
+        ttk.Label(top, text="NVIDIA services launcher (no CLI typing)", foreground="#555").pack(side="left", padx=12)
 
         # Paths
         path_row = ttk.LabelFrame(frm, text="Paths", padding=10)
@@ -1028,22 +1027,22 @@ class Launcher(tk.Tk):
             self._set_backend_host_port(host, port, reason="manual")
         ttk.Button(row, text="Apply", command=_apply_backend_host_port).pack(side="left", padx=8)
 
-        # Studio home
+        # Workshop home
         row = ttk.Frame(path_row)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="Studio home", width=12).pack(side="left")
+        ttk.Label(row, text="Workshop home", width=12).pack(side="left")
         ttk.Entry(row, textvariable=self.var_studio_home).pack(side="left", fill="x", expand=True)
 
         def _apply_studio_home():
             raw = self.var_studio_home.get().strip()
             if not raw:
-                messagebox.showerror("Studio home", "Pick a valid Studio home folder first.")
+                messagebox.showerror("Workshop home", "Pick a valid Workshop home folder first.")
                 return
             self._apply_studio_home(Path(raw), reason="manual")
             self._refresh_status()
 
         def _browse_studio_home():
-            d = filedialog.askdirectory(title="Select EDMG Studio home folder", initialdir=str(self.studio_home))
+            d = filedialog.askdirectory(title="Select EDMG NVIDIA Workshop home folder", initialdir=str(self.studio_home))
             if not d:
                 return
             self._apply_studio_home(Path(d), reason="browse")
@@ -1086,22 +1085,18 @@ class Launcher(tk.Tk):
         btn_row = ttk.Frame(actions)
         btn_row.pack(fill="x")
 
-        ttk.Button(btn_row, text="Start NVIDIA Runtime (Kit + backend)", command=self.start_nvidia_runtime).pack(side="left")
+        ttk.Button(btn_row, text="Start NVIDIA Workshop Runtime", command=self.start_nvidia_runtime).pack(side="left")
         ttk.Button(btn_row, text="Install/Update Backend (venv + deps)", command=self.install_backend).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Start Backend Only", command=self.start_backend).pack(side="left", padx=8)
         ttk.Button(btn_row, text="Stop Backend", command=self.stop_backend).pack(side="left")
         ttk.Button(btn_row, text="Run Health Test", command=self.health_test).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Install Legacy React UI Deps", command=self.install_ui).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Start Legacy Electron UI", command=self.start_studio).pack(side="left", padx=8)
-        ttk.Button(btn_row, text="Stop Legacy Electron UI", command=self.stop_studio).pack(side="left")
 
         # Packaging (Windows)
         pkg_row = ttk.Frame(actions)
         pkg_row.pack(fill="x", pady=(8, 0))
-        ttk.Button(pkg_row, text="Get FFmpeg (for Kit render assembly)", command=self.get_ffmpeg).pack(side="left")
-        ttk.Button(pkg_row, text="Stage NVIDIA Kit Bundle", command=self.stage_nvidia_kit_bundle).pack(side="left", padx=8)
-        ttk.Button(pkg_row, text="Build Legacy Electron Installer", command=self.build_installer).pack(side="left", padx=8)
-        ttk.Button(pkg_row, text="Build Legacy Inno Installer", command=self.build_inno_installer).pack(side="left")
+        ttk.Button(pkg_row, text="Get FFmpeg (for NVIDIA assembly)", command=self.get_ffmpeg).pack(side="left")
+        ttk.Button(pkg_row, text="Stage NVIDIA Workshop Bundle", command=self.stage_nvidia_kit_bundle).pack(side="left", padx=8)
+        ttk.Button(pkg_row, text="Build Workshop Installer", command=self.build_installer).pack(side="left", padx=8)
+        ttk.Button(pkg_row, text="Build Workshop Inno Installer", command=self.build_inno_installer).pack(side="left")
         ttk.Button(pkg_row, text="Open Release Folder", command=self.open_release_folder).pack(side="left")
         ttk.Button(pkg_row, text="Open Inno Folder", command=self.open_inno_folder).pack(side="left", padx=8)
 
@@ -1115,7 +1110,7 @@ class Launcher(tk.Tk):
         tab_launcher = ttk.Frame(nb)
         tab_studio = ttk.Frame(nb)
         nb.add(tab_launcher, text="Launcher Log")
-        nb.add(tab_studio, text="Studio Dev Log (live)")
+        nb.add(tab_studio, text="Workshop Dev Log (live)")
 
         # Launcher log
         self.txt = tk.Text(tab_launcher, height=18, wrap="word")
@@ -1184,7 +1179,7 @@ class Launcher(tk.Tk):
         return None
 
     def _sync_backend_from_studio_logs(self) -> bool:
-        """If legacy Electron dev logs show a backend URL, sync launcher to it."""
+        """If desktop dev logs show a backend URL, sync launcher to it."""
         parsed = _parse_backend_url_from_logs(_tail_file(self.studio_log_path))
         if not parsed:
             return False
@@ -1277,7 +1272,7 @@ class Launcher(tk.Tk):
         if self._refresh_in_progress:
             return
 
-        # Prefer legacy UI logs when that dev client picked a different port.
+        # Prefer desktop UI logs when that dev client picked a different port.
         if self._sync_backend_from_studio_logs():
             self._refresh_status()
             return
@@ -1311,7 +1306,7 @@ class Launcher(tk.Tk):
             return False
         allow = [
             "python", "python.exe", "pythonw.exe", "uvicorn",
-            "node", "node.exe", "ollama", "ollama.exe",
+            "node", "node.exe",
             "comfy", "comfyui", "edmg", "electron",
             "kit", "kit.exe", "tritonserver", "riva", "nim"
         ]
@@ -1698,27 +1693,27 @@ class Launcher(tk.Tk):
     def stage_nvidia_kit_bundle(self) -> None:
         def work():
             ps1 = ROOT / "deployment" / "nvidia" / "stage_nvidia_kit_app.ps1"
-            self._log("Staging the NVIDIA Kit app bundle under dist/nvidia-kit-app.")
+            self._log("Staging the NVIDIA Workshop app bundle under dist/nvidia-workshop-app.")
             self._run_powershell(ps1, ["-PackageMode", "thin"], cwd=ROOT)
-            self._log("NVIDIA Kit staging finished. Use the staged Start-EDMG-NVIDIA-Kit.ps1 launcher.")
+            self._log("NVIDIA Workshop staging finished. Use the staged Start-EDMG-NVIDIA-Workshop.ps1 launcher.")
 
         self._run_bg("Stage NVIDIA Kit Bundle", work)
 
     def build_installer(self) -> None:
         def work():
             ps1 = STUDIO_DIR / "packaging" / "windows" / "build_all.ps1"
-            self._log("Building legacy Electron installer (backend EXE + Electron shell)…")
+            self._log("Building Workshop installer (backend EXE + Electron shell)...")
             self._run_powershell(ps1)
-            self._log("Legacy Electron build finished. Use 'Open Release Folder' to find the installer.")
+            self._log("Workshop build finished. Use 'Open Release Folder' to find the installer.")
 
         self._run_bg("Build installer", work)
 
     def build_inno_installer(self) -> None:
         def work():
             ps1 = STUDIO_DIR / "packaging" / "windows" / "build_inno_external.ps1"
-            self._log("Building legacy Inno external-payload installer (setup EXE + payload archive)…")
+            self._log("Building Workshop Inno external-payload installer (setup EXE + payload archive)...")
             self._run_powershell(ps1)
-            self._log("Legacy Inno build finished. Use 'Open Inno Folder' and ship the setup EXE with the payload folder.")
+            self._log("Workshop Inno build finished. Use 'Open Inno Folder' and ship the setup EXE with the payload folder.")
 
         self._run_bg("Build Inno installer", work)
 
@@ -1757,7 +1752,7 @@ class Launcher(tk.Tk):
         package_manager = _resolve_package_manager_command(package_manager_name)
         if not package_manager:
             raise RuntimeError(f"{package_manager_name} not found. Install Node.js LTS, enable Corepack if needed, then retry.")
-        self._log(f"Starting legacy Electron UI ({package_manager_name} run dev)…")
+        self._log(f"Starting Workshop desktop dev UI ({package_manager_name} run dev)...")
 
         # Align backend first.
         self._auto_attach_backend_if_found()
@@ -1780,7 +1775,7 @@ class Launcher(tk.Tk):
             pass
 
         self._studio_log_fp = open(self.studio_log_path, "a", encoding="utf-8", errors="ignore")
-        self._studio_log_fp.write(f"\n=== launcher start_legacy_electron_ui {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        self._studio_log_fp.write(f"\n=== launcher start_workshop_desktop_ui {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
         self._studio_log_fp.flush()
 
         self.studio_proc = subprocess.Popen(
@@ -1804,9 +1799,9 @@ class Launcher(tk.Tk):
 
     def _stop_studio_impl(self) -> None:
         if not self.studio_proc or self.studio_proc.poll() is not None:
-            self._log("Legacy Electron UI not running.")
+            self._log("Workshop desktop UI not running.")
             return
-        self._log("Stopping legacy Electron UI…")
+        self._log("Stopping Workshop desktop UI...")
         try:
             self.studio_proc.terminate()
         except Exception:
@@ -1825,20 +1820,20 @@ class Launcher(tk.Tk):
             pass
 
     def start_studio(self) -> None:
-        self._run_bg("Start Legacy Electron UI", self._start_studio_impl)
+        self._run_bg("Start Workshop Desktop UI", self._start_studio_impl)
 
     def restart_studio(self) -> None:
         def work():
-            self._log("Restarting legacy Electron UI…")
+            self._log("Restarting Workshop desktop UI...")
             try:
                 self._stop_studio_impl()
             except Exception:
                 pass
             self._start_studio_impl()
-        self._run_bg("Restart Legacy Electron UI", work)
+        self._run_bg("Restart Workshop Desktop UI", work)
 
     def stop_studio(self) -> None:
-        self._run_bg("Stop Legacy Electron UI", self._stop_studio_impl)
+        self._run_bg("Stop Workshop Desktop UI", self._stop_studio_impl)
 
 
 if __name__ == "__main__":
