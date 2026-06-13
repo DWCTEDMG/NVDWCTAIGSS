@@ -55,12 +55,14 @@ services:
   nvidia-riva:
     profiles: ["nvidia-local", "riva"]
     image: ${EDMG_RIVA_IMAGE:-nvcr.io/nvidia/riva/set-edmg-riva-image}
+    command: ["/opt/riva/bin/start-riva"]
     restart: unless-stopped
     ports:
       - "${EDMG_RIVA_GRPC_PORT:-50051}:50051"
       - "${EDMG_RIVA_HTTP_PORT:-9000}:9000"
     environment:
       NGC_API_KEY: ${NGC_API_KEY:-}
+      TRITON_TIMEOUT_SEC: ${EDMG_RIVA_TRITON_TIMEOUT_SEC:-1200}
     volumes:
       - ./starlift-data/nvidia/riva-models:/data
     deploy:
