@@ -218,6 +218,60 @@ function Invoke-NvidiaCompose {
   }
 }
 
+function Get-DirectoryFileCount {
+  param([string]$Path)
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return 0
+  }
+
+  $files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -ErrorAction SilentlyContinue)
+  return $files.Count
+}
+
+function Restore-RivaModelsFromS3IfNeeded {
+  param([string]$EnvPath)
+
+  $repository = [Environment]::GetEnvironmentVariable("EDMG_RIVA_MODEL_REPOSITORY", "Process")
+  if ([string]::IsNullOrWhiteSpace($repository)) {
+    if (Test-Path -LiteralPath "D:\Nvidia\NVDWCTAIGSS\riva-models") {
+      $repository = "D:\Nvidia\NVDWCTAIGSS\riva-models"
+    } else {
+      $repository = Join-Path $PSScriptRoot "..\..\starlift-data\nvidia\riva-models"
+    }
+  }
+  $repository = [System.IO.Path]::GetFullPath($repository)
+
+  $existingFiles = Get-DirectoryFileCount -Path $repository
+  if ($existingFiles -gt 0) {
+    Write-Step "Riva model repository has $existingFiles file(s); skipped S3 restore."
+    return
+  }
+
+  $bucket = [Environment]::GetEnvironmentVariable("EDMG_RIVA_S3_BUCKET", "Process")
+  if ([string]::IsNullOrWhiteSpace($bucket)) {
+    Write-Step "Riva model repository is empty and EDMG_RIVA_S3_BUCKET is not configured; skipped S3 restore."
+    return
+  }
+
+  $syncScript = Join-Path $PSScriptRoot "sync_riva_models_s3.ps1"
+  if (-not (Test-Path -LiteralPath $syncScript)) {
+    throw "Riva S3 sync script not found: $syncScript"
+  }
+
+  Write-Step "Riva model repository is empty; restoring from S3 cache before launch."
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -Action Download -EnvFile $EnvPath -ModelRepositoryPath $repository
+  if ($LASTEXITCODE -ne 0) {
+    throw "Riva S3 restore failed with exit code $LASTEXITCODE"
+  }
+
+  $restoredFiles = Get-DirectoryFileCount -Path $repository
+  if ($restoredFiles -le 0) {
+    throw "Riva S3 restore completed but no model files were found in $repository"
+  }
+  Write-Step "Riva S3 restore completed with $restoredFiles file(s)."
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $repoRoot
 $envPath = if ([System.IO.Path]::IsPathRooted($EnvFile)) {
@@ -360,6 +414,9 @@ foreach ($name in $requested) {
   if (Test-DefinitionPortOpen -Definition $definition) {
     Write-Step "$name probe port is already bound; skipped compose up and waiting for the existing service."
   } else {
+    if ($name -eq "riva") {
+      Restore-RivaModelsFromS3IfNeeded -EnvPath $envPath
+    }
     Invoke-NvidiaCompose -Profile $definition.Profile -ComposeService $definition.ComposeService -EnvPath $envPath
   }
 

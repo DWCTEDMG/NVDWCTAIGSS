@@ -195,6 +195,10 @@ endpoint. Use normal AWS credentials through environment variables,
 `AWS_PROFILE`, or files under `%USERPROFILE%\.aws`. The helper uses local
 `aws` when available, otherwise it runs the official AWS CLI container through
 Docker.
+When `start_nvidia_optional_service.ps1 -Service riva` starts a local Riva
+container, it checks the configured Riva model repository first. If the
+repository is empty and `EDMG_RIVA_S3_BUCKET` is set, it restores the repository
+from S3 before running Docker Compose.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `

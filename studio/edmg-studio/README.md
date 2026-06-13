@@ -160,13 +160,13 @@ For local Studio use, the native Director page does not require ChatGPT. If you 
 - `EDMG_FFMPEG_PATH` (optional override; packaged Studio prefers its bundled FFmpeg, dev falls back to `ffmpeg` on PATH)
 - `EDMG_AWS_MODEL_CACHE` (`1` enables S3-backed model cache/hosting)
 - `EDMG_AWS_MODEL_CACHE_BUCKET` and `EDMG_AWS_MODEL_CACHE_PREFIX` (S3 bucket/prefix for model objects)
-- `EDMG_MODEL_STORAGE_MODE` (`local_cache` keeps local files and mirrors them to S3; `cloud_only` stores supported single-file models in S3 and restores them on demand)
+- `EDMG_MODEL_STORAGE_MODE` (`local_cache` keeps local files and mirrors them to S3; `cloud_only` stores supported model files and Diffusers snapshot directories in S3 and restores them on demand)
 - `EDMG_S3_ENDPOINT_URL` (optional S3-compatible endpoint)
 
 If your NIM/OpenAI-compatible gateway exposes a different model alias, override
 `EDMG_AI_OPENAI_COMPAT_MODEL` to match that server.
 
-S3-hosted model entries can use `source: "s3"` with either `s3_uri: "s3://bucket/key"` or `s3_key: "prefix/model.safetensors"` plus the configured model-cache bucket. Runtime resolution materializes supported single-file ComfyUI assets into the Studio models directory before rendering.
+S3-hosted model entries can use `source: "s3"` with either `s3_uri: "s3://bucket/key-or-prefix"` or `s3_key: "prefix/model-or-snapshot"` plus the configured model-cache bucket. Runtime resolution materializes supported ComfyUI files and internal Diffusers snapshots into the Studio models directory before rendering.
 
 ## Recommended local model stack
 

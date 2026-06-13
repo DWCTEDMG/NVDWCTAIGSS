@@ -174,6 +174,19 @@ models = ModelManager(
 
 comfy_portable = ComfyPortableProcess()
 
+
+def _resolve_model_runtime_path(model_id: str, *, materialize_remote: bool = True) -> Path | None:
+    resolver = getattr(models, "resolve_installed_path", None)
+    if callable(resolver):
+        resolved = resolver(model_id, materialize_remote=materialize_remote)
+        if resolved is not None:
+            return resolved
+    legacy = getattr(models, "installed_path", None)
+    if callable(legacy):
+        return legacy(model_id)
+    return None
+
+
 @asynccontextmanager
 async def _app_lifespan(_app: FastAPI):
     if settings.worker_autostart:
@@ -593,11 +606,11 @@ def _resolve_still_scene_selection(
         )
 
     if engine == "internal":
-        model_path = models.installed_path(str(entry.get("id") or ""))
+        model_path = _resolve_model_runtime_path(str(entry.get("id") or ""), materialize_remote=True)
         if model_path is None:
             raise UserFacingError(
                 "Internal still model is not installed",
-                hint="Install the selected internal diffusers model in Models, then retry.",
+                hint="Install the selected internal diffusers model in Models, or enable the S3 model cache so Studio can restore it on demand.",
                 code="MODEL_NOT_INSTALLED",
                 status_code=400,
             )
@@ -3211,14 +3224,14 @@ def preview_diffusion_segment(
     if mid == "auto":
         preferred = _hardware_profile().get("preferred_internal_model") or "hf_sd15_internal"
         mid = preferred
-        if models.installed_path(mid) is None:
+        if _resolve_model_runtime_path(mid, materialize_remote=True) is None:
             # fallback
             mid = "hf_sd15_internal" if preferred != "hf_sd15_internal" else "hf_sdxl_internal"
-    model_dir = models.installed_path(mid)
+    model_dir = _resolve_model_runtime_path(mid, materialize_remote=True)
     if not model_dir or not model_dir.exists():
         raise UserFacingError(
             "Internal model is not installed.",
-            hint="Go to Models and install an internal model such as SD 1.5, SDXL, or SD3.5 Medium, then retry.",
+            hint="Go to Models and install an internal model such as SD 1.5, SDXL, or SD3.5 Medium, or enable the S3 model cache so Studio can restore it.",
             code="MODEL_MISSING",
             status_code=400,
         )
@@ -5312,7 +5325,7 @@ def _build_render_conductor_environment() -> dict[str, Any]:
     provider_status = _render_provider_status(hw)
     runtime = _internal_diffusion_runtime_status()
     installed_internal = any(
-        bool(models.installed_path(model_id))
+        bool(models.model_resolvable(model_id))
         for model_id in ("hf_sd15_internal", "hf_sdxl_internal", "hf_sd35_medium_internal")
     )
     backend_family = str(hw.get("backend_family") or "nvidia_cuda_required").lower()
@@ -6383,11 +6396,11 @@ def _run_internal_still_scene(project_id: str, job_id: str, payload: dict[str, A
     raw_model_path = str(payload.get("model_path") or "").strip()
     model_path = Path(raw_model_path) if raw_model_path else None
     if model_path is None or not model_path.exists():
-        installed = models.installed_path(model_id)
+        installed = _resolve_model_runtime_path(model_id, materialize_remote=True)
         if installed is None:
             raise UserFacingError(
                 "Internal still model is not installed",
-                hint="Install the selected internal diffusers model in Models, then retry.",
+                hint="Install the selected internal diffusers model in Models, or enable the S3 model cache so Studio can restore it on demand.",
                 code="MODEL_NOT_INSTALLED",
                 status_code=400,
             )
@@ -7512,7 +7525,7 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
             if mid in seen:
                 continue
             seen.add(mid)
-            installed = models.installed_path(mid)
+            installed = _resolve_model_runtime_path(mid, materialize_remote=True)
             if not installed:
                 continue
             family = _internal_model_family_for_request(mid, installed)
@@ -7542,7 +7555,7 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
             )
         model_id = picked
 
-    model_path = models.installed_path(model_id)
+    model_path = _resolve_model_runtime_path(model_id, materialize_remote=True)
     if not model_path:
         issue = getattr(models, "internal_asset_issue", lambda _model_id: None)(model_id)
         if issue == "incomplete":
@@ -7554,7 +7567,7 @@ def _resolve_internal_render_request(project_id: str, payload: dict[str, Any]) -
             )
         raise UserFacingError(
             "Internal model not installed",
-            hint="Open Models and install the requested internal model, then retry.",
+            hint="Open Models and install the requested internal model, or enable the S3 model cache so Studio can restore it on demand.",
             code="MODEL_NOT_INSTALLED",
             status_code=400,
         )
@@ -7623,9 +7636,9 @@ def _internal_render_preflight_data(project_id: str, payload: dict[str, Any]) ->
         total_frames=total_frames,
     )
     installed_internal = {
-        "hf_sd15_internal": bool(models.installed_path("hf_sd15_internal")),
-        "hf_sdxl_internal": bool(models.installed_path("hf_sdxl_internal")),
-        "hf_sd35_medium_internal": bool(models.installed_path("hf_sd35_medium_internal")),
+        "hf_sd15_internal": bool(models.model_resolvable("hf_sd15_internal")),
+        "hf_sdxl_internal": bool(models.model_resolvable("hf_sdxl_internal")),
+        "hf_sd35_medium_internal": bool(models.model_resolvable("hf_sd35_medium_internal")),
     }
     return {
         "ok": True,
@@ -7871,7 +7884,7 @@ def _recommend_cuda_internal_render(project_id: str, preset: str, *, reason: str
     preferred = str(tier_plan.get("preferred_internal_model") or hw.get("preferred_internal_model") or "hf_sd15_internal")
     candidate_model_ids = [preferred, "hf_sd15_internal", "hf_sdxl_internal"]
     runtime = _internal_diffusion_runtime_status()
-    picked = next((mid for mid in candidate_model_ids if models.installed_path(mid)), None)
+    picked = next((mid for mid in candidate_model_ids if models.model_resolvable(mid)), None)
     if picked and runtime.get("ok"):
         return {
             "mode": "internal",

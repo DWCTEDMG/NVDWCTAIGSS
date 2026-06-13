@@ -1,16 +1,16 @@
 # AWS S3 Model Cache
 
-EDMG NVIDIA Workshop keeps large model weights out of the repo and installer. This AWS path adds an optional private S3 cache for single-file model artifacts such as SD3.5 `.safetensors` checkpoints and ControlNets.
+EDMG NVIDIA Workshop keeps large model weights out of the repo and installer. This AWS path adds an optional private S3 cache for single-file model artifacts such as SD3.5 `.safetensors` checkpoints and directory model snapshots such as internal Diffusers models.
 
 S3 is used as object storage for model files. Keep the bucket private and use IAM credentials only for machines that should install or restore Workshop models.
 
 ## What It Does
 
-- Checks S3 before downloading a single-file Hugging Face or Civitai model.
-- Restores the file into the normal Workshop-managed model folder when the object exists.
-- Uploads newly downloaded/copied single-file model artifacts back to S3 when the cache is enabled.
-- Supports `EDMG_MODEL_STORAGE_MODE=cloud_only` for single-file assets, which uploads to S3 and removes the temporary transfer file instead of keeping a local Workshop model copy.
-- Leaves diffusers snapshot directories on the normal Hugging Face/on-demand path for now.
+- Checks S3 before downloading supported Hugging Face, Civitai, local-import, or S3-sourced models.
+- Restores model files and supported directory snapshots into the normal Workshop-managed model folder when the object or prefix exists.
+- Uploads newly downloaded/copied model artifacts back to S3 when the cache is enabled.
+- Supports `EDMG_MODEL_STORAGE_MODE=cloud_only`, which uploads to S3 and removes the temporary transfer copy instead of keeping a local Workshop model copy.
+- Materializes cloud-only files and internal Diffusers snapshot directories on demand when a render needs a filesystem path.
 
 ## Local Prerequisites
 
@@ -86,9 +86,9 @@ $env:EDMG_S3_ENDPOINT_URL='https://your-s3-compatible-endpoint'
 4. Click **Test credentials**.
 5. Open **Models** and install the model weights you want hosted in the cache.
 
-On the first machine, the Workshop downloads from the model source and uploads the file to S3. On the next machine with the same env vars, the Workshop restores from S3 instead of downloading from the public source again.
+On the first machine, the Workshop downloads from the model source and uploads the model to S3. On the next machine with the same env vars, the Workshop restores from S3 instead of downloading from the public source again.
 
-In `cloud_only` mode, Studio uses a temporary transfer file during upload and deletes it after the S3 object is written. Local ComfyUI and internal Diffusers render paths still need a filesystem model path at runtime. Use **Restore local** in Model Manager when you want to run those local paths, or use a remote worker that mounts/downloads the S3 cache near the GPU.
+In `cloud_only` mode, Studio uses a temporary transfer path during upload and deletes it after the S3 object or prefix is written. When a local render needs the model, Studio materializes the S3-backed asset into the configured models directory. You can still use **Restore local** in Model Manager to prefetch a model before rendering.
 
 ## Mount S3 As The Workshop Model Root
 
@@ -108,7 +108,7 @@ $env:EDMG_MODEL_STORAGE_MODE='local_cache'
 
 This sets `EDMG_STUDIO_MODELS_DIR=X:\` only for the Workshop session and uses `EDMG_MODEL_STORAGE_MODE=local_cache`. In this mode, `local_cache` means "write to the mounted model filesystem"; because the model filesystem is `X:\`, the files live under the S3-backed rclone mount instead of the normal Workshop model folder.
 
-Do not combine `EDMG_STUDIO_MODELS_DIR=X:\` with `EDMG_MODEL_STORAGE_MODE=cloud_only`. `cloud_only` is upload-only storage and blocks directory-based Diffusers snapshots; the mounted-S3 runtime path needs normal filesystem writes to `X:\`.
+Do not combine `EDMG_STUDIO_MODELS_DIR=X:\` with `EDMG_MODEL_STORAGE_MODE=cloud_only`. `cloud_only` assumes Studio owns a local materialization directory; the mounted-S3 runtime path needs normal filesystem writes to `X:\` and should use `local_cache`.
 
 Do not set `EDMG_STUDIO_MODELS_DIR=X:\` globally unless the rclone mount is always started before the backend, because the Workshop expects the configured model root to exist at startup.
 

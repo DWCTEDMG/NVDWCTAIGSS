@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -285,6 +286,10 @@ class ModelManager:
         cache = getattr(self, "model_cache", None)
         label = getattr(cache, "label", "")
         return str(label or "model cache")
+
+    def _model_cache_supports_directories(self) -> bool:
+        cache = getattr(self, "model_cache", None)
+        return bool(getattr(cache, "supports_directories", False)) if cache is not None else False
 
     def _model_storage_mode(self) -> str:
         raw = (
@@ -647,7 +652,7 @@ class ModelManager:
                 return legacy
         return None
 
-    def _materialize_file_from_model_cache(self, entry: dict[str, Any], dest: Path) -> Path | None:
+    def _materialize_from_model_cache(self, entry: dict[str, Any], dest: Path) -> Path | None:
         cache = getattr(self, "model_cache", None)
         if cache is None:
             return None
@@ -984,10 +989,10 @@ class ModelManager:
 
     def _restore_cloud_model(self, task: ModelTask, entry: dict[str, Any]) -> None:
         mode, dest = self._models_dest(entry)
-        if mode != "file":
+        if mode != "file" and not self._model_cache_supports_directories():
             raise UserFacingError(
-                "Only single-file model assets can be restored from the model cache here",
-                hint="Diffusers snapshots need a local install or a remote worker materialization path.",
+                "Directory model restore requires the S3 model cache",
+                hint="Enable EDMG_AWS_MODEL_CACHE with an S3 bucket/prefix, then restart Studio.",
                 code="CACHE_RESTORE_UNSUPPORTED_MODEL",
             )
         if self.model_cache is None:
@@ -1016,27 +1021,27 @@ class ModelManager:
         mode, dest = self._models_dest(entry)
         storage_mode = self._model_storage_mode()
         cloud_only = storage_mode == "cloud_only"
-        if cloud_only and mode != "file":
-            raise UserFacingError(
-                "Cloud-only install is only available for single-file model assets",
-                hint="Diffusers snapshots and runtime bundles need a local filesystem path, or a remote worker that materializes them near the GPU.",
-                code="CLOUD_ONLY_UNSUPPORTED_MODEL",
-            )
-        if mode == "file":
-            if cloud_only:
-                if self.model_cache is None:
-                    raise UserFacingError(
-                        "Cloud-only model storage requires an enabled model cache",
-                        hint="Set EDMG_AWS_MODEL_CACHE=1 and EDMG_AWS_MODEL_CACHE_BUCKET, then restart Studio.",
-                        code="MODEL_CACHE_REQUIRED",
-                    )
-                object_name = self._cache_model_exists(entry, dest)
-                if object_name:
-                    self._record_cloud_model(entry, object_name, mode="cloud_only")
-                    ModelTaskManager.set_progress(task, 1.0)
-                    ModelTaskManager.log(task, f"Already stored in {self._model_cache_label()}: {object_name}")
-                    return
-            elif src != "s3" and self._restore_from_model_cache(task, entry, dest):
+        if cloud_only:
+            if self.model_cache is None:
+                raise UserFacingError(
+                    "Cloud-only model storage requires an enabled model cache",
+                    hint="Set EDMG_AWS_MODEL_CACHE=1 and EDMG_AWS_MODEL_CACHE_BUCKET, then restart Studio.",
+                    code="MODEL_CACHE_REQUIRED",
+                )
+            if mode != "file" and not self._model_cache_supports_directories():
+                raise UserFacingError(
+                    "Cloud-only directory model storage requires the S3 model cache",
+                    hint="Enable EDMG_AWS_MODEL_CACHE with an S3 bucket/prefix, then restart Studio.",
+                    code="CLOUD_ONLY_UNSUPPORTED_MODEL",
+                )
+            object_name = self._cache_model_exists(entry, dest)
+            if object_name:
+                self._record_cloud_model(entry, object_name, mode="cloud_only")
+                ModelTaskManager.set_progress(task, 1.0)
+                ModelTaskManager.log(task, f"Already stored in {self._model_cache_label()}: {object_name}")
+                return
+        elif src != "s3" and (mode == "file" or self._model_cache_supports_directories()):
+            if self._restore_from_model_cache(task, entry, dest):
                 return
 
         headers: dict[str, str] = {}
@@ -1063,17 +1068,33 @@ class ModelManager:
                     raise RuntimeError("Missing hf_repo_id for snapshot install")
                 if snapshot_download is None:
                     raise RuntimeError("huggingface_hub is not installed (required for snapshot downloads)")
-                dest.mkdir(parents=True, exist_ok=True)
+                target_path = self._cloud_temp_path(dest) if cloud_only else dest
+                target_path.mkdir(parents=True, exist_ok=True)
                 ModelTaskManager.log(task, f"Downloading HF snapshot: {repo_id}")
-                snapshot_download(
-                    repo_id=repo_id,
-                    local_dir=str(dest),
-                    local_dir_use_symlinks=False,
-                    revision=str(entry.get("hf_revision") or "") or None,
-                    token=(hf_token or None),
-                    resume_download=True,
-                )
-                ModelTaskManager.set_progress(task, 1.0)
+                try:
+                    snapshot_download(
+                        repo_id=repo_id,
+                        local_dir=str(target_path),
+                        local_dir_use_symlinks=False,
+                        revision=str(entry.get("hf_revision") or "") or None,
+                        token=(hf_token or None),
+                        resume_download=True,
+                    )
+                    if cloud_only:
+                        object_name = self._upload_to_model_cache(task, entry, target_path, mode="cloud_only")
+                        if not object_name:
+                            raise RuntimeError("Cloud-only upload failed")
+                        ModelTaskManager.set_progress(task, 1.0)
+                        self._append_task_log(task, f"Cloud-only install complete; no local model directory kept: {object_name}")
+                    else:
+                        self._upload_to_model_cache(task, entry, dest)
+                        ModelTaskManager.set_progress(task, 1.0)
+                finally:
+                    if cloud_only:
+                        try:
+                            shutil.rmtree(target_path.parent, ignore_errors=True)
+                        except Exception:
+                            pass
                 return
             # file mode
             if not url:
@@ -1105,10 +1126,10 @@ class ModelManager:
                     hint="Set EDMG_AWS_MODEL_CACHE=1 and EDMG_AWS_MODEL_CACHE_BUCKET, then restart Studio.",
                     code="MODEL_CACHE_REQUIRED",
                 )
-            if mode != "file":
+            if mode != "file" and not self._model_cache_supports_directories():
                 raise UserFacingError(
-                    "S3 model source is only available for single-file model assets",
-                    hint="Use S3-hosted checkpoint, LoRA, ControlNet, VAE, or similar single-file assets.",
+                    "S3 directory model source requires the S3 model cache",
+                    hint="Enable the AWS S3 model cache backend before installing S3-hosted directory models.",
                     code="S3_SOURCE_UNSUPPORTED_MODEL",
                 )
             object_name = self._cache_model_exists(entry, dest)
@@ -1199,10 +1220,36 @@ class ModelManager:
             return local
 
         mode, dest = self._models_dest(entry)
-        if mode != "file":
+        if mode != "file" and not self._model_cache_supports_directories():
             return None
-        return self._materialize_file_from_model_cache(entry, dest)
+        return self._materialize_from_model_cache(entry, dest)
 
+    def model_resolvable(self, model_id: str) -> bool:
+        """Return whether a model can be used locally or restored from the model cache."""
+        entry = self._find_entry(model_id)
+        if not entry:
+            return False
+        if self._local_installed_path(entry) is not None:
+            return True
+        cache = getattr(self, "model_cache", None)
+        if cache is None:
+            return False
+        mode, dest = self._models_dest(entry)
+        if mode != "file" and not self._model_cache_supports_directories():
+            return False
+
+        record = self._cloud_model_record(str(entry.get("id") or "").strip())
+        candidates: list[dict[str, Any]] = []
+        if record is not None:
+            candidates.append(self._cache_entry_from_cloud_record(entry, record))
+        candidates.append(entry)
+        for candidate in candidates:
+            try:
+                if self._cache_model_exists(candidate, dest):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def import_local(self, file_path: str, name: str | None = None, folder: str = "checkpoints") -> dict[str, Any]:
         """Register a local model file and copy it into the configured ComfyUI models folder.

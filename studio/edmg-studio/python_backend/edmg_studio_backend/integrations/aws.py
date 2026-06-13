@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Any
@@ -144,6 +145,7 @@ def upload_file_s3(bucket: str, key: str, path: str) -> dict[str, Any]:
 
 class S3ModelCache:
     label = "AWS S3 model cache"
+    supports_directories = True
 
     def __init__(self, settings: S3ModelCacheSettings):
         self.settings = settings
@@ -204,6 +206,19 @@ class S3ModelCache:
         prefix = self.settings.prefix.strip("/")
         return "/".join(part for part in (prefix, folder, model_id, filename) if part)
 
+    def _default_object_prefix_for(self, entry: dict[str, Any], path: Path) -> str:
+        target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
+        folder = _clean_part(str(target.get("folder") or "models"), "models")
+        model_id = _clean_part(str(entry.get("id") or path.name or path.stem), path.name or path.stem)
+        prefix = self.settings.prefix.strip("/")
+        return "/".join(part for part in (prefix, folder, model_id) if part).strip("/")
+
+    def _is_directory_asset(self, entry: dict[str, Any], path: Path) -> bool:
+        target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
+        engine = str(target.get("engine") or entry.get("engine") or "").strip().lower()
+        kind = str(entry.get("kind") or "").strip().lower()
+        return path.is_dir() or engine in {"internal", "runtime_bundle"} or kind in {"diffusers"}
+
     def object_location_for(self, entry: dict[str, Any], path: Path) -> tuple[str, str]:
         explicit = self._explicit_object_location(entry)
         if explicit is not None:
@@ -213,6 +228,13 @@ class S3ModelCache:
     def object_key_for(self, entry: dict[str, Any], path: Path) -> str:
         return self.object_location_for(entry, path)[1]
 
+    def object_prefix_for(self, entry: dict[str, Any], path: Path) -> tuple[str, str]:
+        explicit = self._explicit_object_location(entry)
+        if explicit is not None:
+            bucket, key = explicit
+            return bucket, key.strip("/")
+        return self.settings.bucket, self._default_object_prefix_for(entry, path)
+
     def _is_missing_object(self, exc: Exception) -> bool:
         response = getattr(exc, "response", {})
         error = response.get("Error", {}) if isinstance(response, dict) else {}
@@ -220,6 +242,9 @@ class S3ModelCache:
         return code in {"404", "NoSuchKey", "NotFound"}
 
     def download_model(self, entry: dict[str, Any], dest: Path) -> bool:
+        if self._is_directory_asset(entry, dest):
+            return self._download_directory(entry, dest)
+
         bucket, key = self.object_location_for(entry, dest)
         ClientError = _require_client_error()
         try:
@@ -235,6 +260,13 @@ class S3ModelCache:
         return True
 
     def model_exists(self, entry: dict[str, Any], path: Path) -> str | None:
+        if self._is_directory_asset(entry, path):
+            bucket, prefix = self.object_prefix_for(entry, path)
+            response = self._client.list_objects_v2(Bucket=bucket, Prefix=f"{prefix.rstrip('/')}/", MaxKeys=1)
+            if int(response.get("KeyCount") or 0) <= 0:
+                return None
+            return prefix
+
         bucket, key = self.object_location_for(entry, path)
         ClientError = _require_client_error()
         try:
@@ -246,6 +278,8 @@ class S3ModelCache:
         return key
 
     def upload_model(self, entry: dict[str, Any], path: Path) -> str:
+        if path.exists() and path.is_dir():
+            return self._upload_directory(entry, path)
         if not path.exists() or not path.is_file():
             raise RuntimeError(f"Model cache upload source is not a file: {path}")
         bucket, key = self.object_location_for(entry, path)
@@ -259,3 +293,59 @@ class S3ModelCache:
             extra_args["StorageClass"] = self.settings.storage_class
         self._client.upload_file(str(path), bucket, key, ExtraArgs=extra_args)
         return key
+
+    def _upload_directory(self, entry: dict[str, Any], path: Path) -> str:
+        bucket, prefix = self.object_prefix_for(entry, path)
+        if not path.exists() or not path.is_dir():
+            raise RuntimeError(f"Model cache upload source is not a directory: {path}")
+
+        metadata = {
+            "model_id": _clean_part(str(entry.get("id") or path.name), path.name)[:128],
+            "source": _clean_part(str(entry.get("source") or "unknown"), "unknown")[:128],
+            "kind": _clean_part(str(entry.get("kind") or "model"), "model")[:128],
+        }
+        extra_args: dict[str, Any] = {"Metadata": metadata}
+        if self.settings.storage_class:
+            extra_args["StorageClass"] = self.settings.storage_class
+
+        uploaded = 0
+        for item in path.rglob("*"):
+            if not item.is_file():
+                continue
+            rel = item.relative_to(path).as_posix()
+            key = f"{prefix.rstrip('/')}/{rel}"
+            self._client.upload_file(str(item), bucket, key, ExtraArgs=extra_args)
+            uploaded += 1
+        if uploaded <= 0:
+            raise RuntimeError(f"Model cache upload directory is empty: {path}")
+        return prefix
+
+    def _download_directory(self, entry: dict[str, Any], dest: Path) -> bool:
+        bucket, prefix = self.object_prefix_for(entry, dest)
+        prefix = prefix.rstrip("/")
+        paginator = self._client.get_paginator("list_objects_v2")
+        objects: list[str] = []
+        for page in paginator.paginate(Bucket=bucket, Prefix=f"{prefix}/"):
+            for item in page.get("Contents") or []:
+                key = str(item.get("Key") or "")
+                if key and not key.endswith("/"):
+                    objects.append(key)
+        if not objects:
+            return False
+
+        tmp = dest.parent / f".{dest.name}.s3.tmp"
+        if tmp.exists():
+            shutil.rmtree(tmp)
+        tmp.mkdir(parents=True, exist_ok=True)
+        for key in objects:
+            rel = key[len(prefix) :].lstrip("/")
+            if not rel:
+                continue
+            target = tmp / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            self._client.download_file(bucket, key, str(target))
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.exists():
+            shutil.rmtree(dest)
+        tmp.replace(dest)
+        return True

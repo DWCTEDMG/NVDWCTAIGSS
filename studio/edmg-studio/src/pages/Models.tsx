@@ -133,11 +133,11 @@ function ModelCard({
   const canInstall = installable && !needsAccept;
   const cloudStored = !!cloudRecord;
   const cloudOnly = storageMode === "cloud_only";
-  const statusLabel = installed ? "Installed locally" : cloudStored ? "Stored in S3" : installable ? "Not installed" : "Browser only";
+  const statusLabel = installed ? "Installed locally" : cloudStored ? "S3-hosted" : installable ? "Not installed" : "Browser only";
   const installLabel = installed
     ? "Installed"
     : cloudStored
-      ? "Stored in S3"
+      ? "S3-hosted"
       : !installable
         ? "Install unavailable"
         : cloudOnly
@@ -176,7 +176,7 @@ function ModelCard({
           </div>
           {cloudStored ? (
             <div className="small" style={{ maxWidth: 260, textAlign: "right", opacity: 0.82 }}>
-              {String(cloudRecord.object || cloudRecord.key || "")}
+              Restores on demand: {String(cloudRecord.object || cloudRecord.key || "")}
             </div>
           ) : null}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
